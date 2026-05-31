@@ -53,6 +53,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(9, 12, 17, 0.9);
@@ -94,9 +95,10 @@ button {
 
 .job-select-row {
   display: grid;
-  grid-template-columns: auto minmax(170px, 250px) minmax(170px, 280px) 38px;
+  grid-template-columns: auto minmax(150px, 250px) minmax(150px, 280px) 38px;
   align-items: center;
   gap: 9px;
+  flex: 1 1 480px;
   min-width: 0;
 }
 
@@ -104,6 +106,39 @@ button {
   color: #b9c4c1;
   font-size: 13px;
   white-space: nowrap;
+}
+
+.panel-visibility-row {
+  min-width: 0;
+  display: flex;
+  flex: 1 1 360px;
+  justify-content: center;
+  gap: 7px;
+}
+
+.panel-visibility-button {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #9aa7a3;
+  background: #0b1016;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  white-space: nowrap;
+}
+
+.panel-visibility-button.active {
+  color: #f5f8f5;
+  background: rgba(217, 249, 157, 0.1);
+  border-color: rgba(217, 249, 157, 0.4);
+}
+
+.panel-visibility-button:hover {
+  border-color: rgba(217, 249, 157, 0.45);
 }
 
 .job-select-row select,
@@ -147,27 +182,97 @@ button {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(240px, 292px) minmax(420px, 1fr) minmax(270px, 360px);
+  grid-template-columns:
+    minmax(200px, var(--left-panel-width, 292px))
+    8px
+    minmax(360px, 1fr)
+    8px
+    minmax(220px, var(--right-panel-width, 360px));
   grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "left left-resizer viewer right-resizer right";
   overflow: hidden;
+}
+
+.workspace.hide-left {
+  grid-template-columns:
+    minmax(360px, 1fr)
+    8px
+    minmax(220px, var(--right-panel-width, 360px));
+  grid-template-areas: "viewer right-resizer right";
+}
+
+.workspace.hide-right {
+  grid-template-columns:
+    minmax(200px, var(--left-panel-width, 292px))
+    8px
+    minmax(360px, 1fr);
+  grid-template-areas: "left left-resizer viewer";
+}
+
+.workspace.hide-left.hide-right {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "viewer";
 }
 
 .side-panel {
   min-height: 0;
+  min-width: 0;
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   overflow: auto;
   background: rgba(9, 12, 17, 0.82);
+  container-type: inline-size;
 }
 
 .left-panel {
+  grid-area: left;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .right-panel {
+  grid-area: right;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.panel-resizer {
+  position: relative;
+  z-index: 8;
+  min-width: 8px;
+  display: grid;
+  place-items: center;
+  cursor: col-resize;
+  touch-action: none;
+  background: rgba(7, 10, 15, 0.7);
+  border-inline: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.left-resizer {
+  grid-area: left-resizer;
+}
+
+.right-resizer {
+  grid-area: right-resizer;
+}
+
+.panel-resizer span {
+  width: 2px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(217, 249, 157, 0.22);
+  transition: background 120ms ease, height 120ms ease;
+}
+
+.panel-resizer:hover span,
+.panel-resizer:focus-visible span {
+  height: 78px;
+  background: rgba(217, 249, 157, 0.72);
+}
+
+.panel-resizer:focus-visible {
+  outline: 2px solid rgba(217, 249, 157, 0.65);
+  outline-offset: -2px;
 }
 
 .tool-panel {
@@ -251,7 +356,7 @@ button {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: 9px;
   margin: 0;
 }
@@ -288,7 +393,30 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(92px, 112px);
   gap: 8px;
-  margin-bottom: 9px;
+  margin-bottom: 8px;
+}
+
+.layer-control-group {
+  min-inline-size: 0;
+  margin: 0 0 12px;
+  padding: 12px 10px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(217, 249, 157, 0.22);
+  background: rgba(7, 10, 15, 0.42);
+}
+
+.layer-control-group legend {
+  padding: 0 7px;
+  color: #a7f3d0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.layer-control-group:focus-within {
+  border-color: rgba(217, 249, 157, 0.56);
+  box-shadow: 0 0 0 3px rgba(217, 249, 157, 0.08);
 }
 
 .toggle-button,
@@ -330,6 +458,10 @@ button {
   grid-column: 1 / -1;
 }
 
+.layer-opacity-row {
+  margin: 8px 0 0;
+}
+
 .number-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 82px auto;
@@ -340,7 +472,8 @@ button {
   font-size: 13px;
 }
 
-.number-row input {
+.number-row input,
+.number-row select {
   min-width: 0;
   height: 34px;
   padding: 0 9px;
@@ -351,7 +484,12 @@ button {
   outline: none;
 }
 
-.number-row input:focus {
+.number-row select {
+  width: 72px;
+}
+
+.number-row input:focus,
+.number-row select:focus {
   border-color: rgba(217, 249, 157, 0.62);
   box-shadow: 0 0 0 3px rgba(217, 249, 157, 0.1);
 }
@@ -362,18 +500,20 @@ input[type="range"] {
 }
 
 .viewer-column {
+  grid-area: viewer;
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto auto 1fr;
   background: #070a0f;
+  container-type: inline-size;
 }
 
 .viewer-toolbar {
   min-height: 62px;
   padding: 12px 14px;
   display: grid;
-  grid-template-columns: auto minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  grid-template-columns: auto minmax(220px, 1fr) minmax(220px, 1fr) auto;
   gap: 14px;
   align-items: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -381,7 +521,7 @@ input[type="range"] {
 }
 
 .viewer-toolbar.volume-mode {
-  grid-template-columns: auto minmax(220px, 1fr) auto;
+  grid-template-columns: auto minmax(260px, 1fr) auto;
 }
 
 .segmented {
@@ -409,7 +549,7 @@ input[type="range"] {
 .range-control {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(78px, auto) 32px minmax(90px, 1fr) 32px;
+  grid-template-columns: minmax(70px, auto) 32px minmax(80px, 1fr) 32px;
   gap: 8px;
   align-items: center;
   color: #cbd5d1;
@@ -742,6 +882,51 @@ input[type="range"] {
   overflow-wrap: anywhere;
 }
 
+@container (max-width: 270px) {
+  .tool-panel {
+    padding: 12px;
+  }
+
+  .metric-grid,
+  .layer-row {
+    grid-template-columns: 1fr;
+  }
+
+  .number-row {
+    grid-template-columns: minmax(0, 1fr) 72px auto;
+  }
+
+  .toggle-button,
+  .segmented button {
+    min-width: 0;
+  }
+}
+
+@container (max-width: 760px) {
+  .viewer-toolbar,
+  .viewer-toolbar.volume-mode {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .volume-meta {
+    display: none;
+  }
+
+  .range-control {
+    grid-template-columns: minmax(72px, auto) 32px minmax(0, 1fr) 32px;
+  }
+
+  .preload-copy {
+    grid-template-columns: 1fr auto;
+  }
+
+  .preload-copy span:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
 @media (max-width: 1120px) {
   body {
     overflow: auto;
@@ -760,10 +945,45 @@ input[type="range"] {
     grid-template-columns: auto minmax(140px, 1fr) minmax(140px, 1fr) 38px;
   }
 
+  .panel-visibility-row {
+    justify-content: flex-start;
+    order: 3;
+    flex-basis: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
   .workspace {
     min-height: 980px;
     grid-template-columns: minmax(220px, 270px) minmax(360px, 1fr);
     grid-template-rows: minmax(620px, 1fr) 360px;
+    grid-template-areas:
+      "left viewer"
+      "right right";
+  }
+
+  .workspace.hide-left {
+    grid-template-columns: minmax(360px, 1fr);
+    grid-template-rows: minmax(620px, 1fr) 360px;
+    grid-template-areas:
+      "viewer"
+      "right";
+  }
+
+  .workspace.hide-right {
+    grid-template-columns: minmax(220px, 270px) minmax(360px, 1fr);
+    grid-template-rows: minmax(620px, 1fr);
+    grid-template-areas: "left viewer";
+  }
+
+  .workspace.hide-left.hide-right {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(620px, 1fr);
+    grid-template-areas: "viewer";
+  }
+
+  .panel-resizer {
+    display: none;
   }
 
   .right-panel {
@@ -773,7 +993,7 @@ input[type="range"] {
   }
 
   .viewer-toolbar {
-    grid-template-columns: auto minmax(150px, 1fr) minmax(150px, 1fr);
+    grid-template-columns: auto minmax(170px, 1fr) minmax(170px, 1fr);
   }
 
   .volume-meta {
@@ -784,6 +1004,10 @@ input[type="range"] {
 @media (max-width: 760px) {
   .job-select-row {
     grid-template-columns: 1fr 38px;
+  }
+
+  .panel-visibility-button {
+    flex: 0 0 auto;
   }
 
   .job-select-row label,

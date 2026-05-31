@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -20,7 +28,7 @@ import {
 import { getFrameCells, getJob, getLogs, getManifest, listJobs, toApiUrl } from "./api";
 import { previewConfigSignature, useViewerConfig, type PreviewConfig } from "./config";
 import { useJobEvents } from "./hooks";
-import { useViewerStore } from "./store";
+import { useViewerStore, type RefreshUnit } from "./store";
 import type { CellRecord, JobManifest, JobStatus, LayerEntry } from "./types";
 import { colorMaps, type ColorMapId } from "./viewer/colorMaps";
 import CanvasSliceViewer from "./viewer/CanvasSliceViewer";
@@ -37,6 +45,19 @@ type FrameUpdateNotice = {
 };
 
 const EMPTY_CELLS: CellRecord[] = [];
+const PANEL_LAYOUT_STORAGE_KEY = "celluniverse-viewer-panel-layout";
+const PANEL_VISIBILITY_STORAGE_KEY = "celluniverse-viewer-panel-visibility";
+const DEFAULT_PANEL_LAYOUT = { left: 292, right: 360 };
+const DEFAULT_PANEL_VISIBILITY = {
+  status: true,
+  layers: true,
+  update: true,
+  logs: true,
+};
+const MIN_PANEL_WIDTH = 200;
+const MAX_PANEL_WIDTH = 520;
+type PanelVisibility = typeof DEFAULT_PANEL_VISIBILITY;
+type PanelVisibilityKey = keyof PanelVisibility;
 
 function App() {
   const queryClient = useQueryClient();
@@ -57,14 +78,18 @@ function App() {
     synthMap,
     setRealMap,
     setSynthMap,
+    realOpacity,
+    setRealOpacity,
     synthOpacity,
     setSynthOpacity,
     logStream,
     setLogStream,
     autoRefreshEnabled,
     autoRefreshSeconds,
+    autoRefreshUnit,
     setAutoRefreshEnabled,
     setAutoRefreshSeconds,
+    setAutoRefreshUnit,
   } = useViewerStore();
   const configQuery = useViewerConfig();
   const previewConfig = configQuery.data?.preview;
@@ -76,7 +101,10 @@ function App() {
   const [frameNotice, setFrameNotice] = useState<FrameUpdateNotice | null>(null);
   const [manualSliceOverride, setManualSliceOverride] = useState(false);
   const [sliceRenderPending, setSliceRenderPending] = useState(false);
+  const [panelLayout, setPanelLayout] = useState(readPanelLayout);
+  const [panelVisibility, setPanelVisibility] = useState(readPanelVisibility);
   const frameHistoryRef = useRef<{ jobId: string; frames: Set<number> } | null>(null);
+  const workspaceRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (selectedJobId || !sortedJobs.length) {
@@ -230,6 +258,7 @@ function App() {
       cellsEnabled,
       realMap,
       synthMap,
+      realOpacity,
       synthOpacity,
       configQuery.data?.rendering.maxPixelRatio ?? 1,
       JSON.stringify(configQuery.data?.pointCloud ?? {}),
@@ -241,6 +270,7 @@ function App() {
     mode,
     realEnabled,
     realMap,
+    realOpacity,
     realUrl,
     realVolume,
     realPointCloudQuery.data,
@@ -333,6 +363,77 @@ function App() {
       ? activeSliceWaiting || slicePreviewLoading || sliceRenderPending
       : preload.isLoading || pointCloudLoading || volumeRenderPending || activeVolumeWaiting
   );
+  const workspaceStyle = {
+    "--left-panel-width": `${panelLayout.left}px`,
+    "--right-panel-width": `${panelLayout.right}px`,
+  } as CSSProperties;
+  const leftPanelVisible = panelVisibility.status || panelVisibility.layers || panelVisibility.update;
+  const rightPanelVisible = panelVisibility.logs;
+  const workspaceClassName = [
+    "workspace",
+    leftPanelVisible ? "" : "hide-left",
+    rightPanelVisible ? "" : "hide-right",
+  ].filter(Boolean).join(" ");
+  const togglePanelVisibility = useCallback((panel: PanelVisibilityKey) => {
+    setPanelVisibility((current) => ({
+      ...current,
+      [panel]: !current[panel],
+    }));
+  }, []);
+  const resizePanel = useCallback((panel: "left" | "right", nextWidth: number) => {
+    const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width ?? window.innerWidth;
+    const maxByViewport = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, workspaceWidth * 0.42));
+    setPanelLayout((current) => ({
+      ...current,
+      [panel]: Math.round(clampNumber(nextWidth, MIN_PANEL_WIDTH, maxByViewport)),
+    }));
+  }, []);
+  const beginPanelResize = useCallback((panel: "left" | "right", event: ReactPointerEvent<HTMLDivElement>) => {
+    const workspace = workspaceRef.current;
+    if (!workspace) {
+      return;
+    }
+    event.preventDefault();
+    const rect = workspace.getBoundingClientRect();
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const nextWidth = panel === "left"
+        ? moveEvent.clientX - rect.left
+        : rect.right - moveEvent.clientX;
+      resizePanel(panel, nextWidth);
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }, [resizePanel]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, JSON.stringify(panelLayout));
+  }, [panelLayout]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PANEL_VISIBILITY_STORAGE_KEY, JSON.stringify(panelVisibility));
+  }, [panelVisibility]);
+
+  useEffect(() => {
+    const workspace = workspaceRef.current;
+    if (!workspace) {
+      return undefined;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? workspace.clientWidth;
+      const maxByViewport = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, width * 0.42));
+      setPanelLayout((current) => {
+        const left = Math.round(clampNumber(current.left, MIN_PANEL_WIDTH, maxByViewport));
+        const right = Math.round(clampNumber(current.right, MIN_PANEL_WIDTH, maxByViewport));
+        return left === current.left && right === current.right ? current : { left, right };
+      });
+    });
+    observer.observe(workspace);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <main className="app-shell">
@@ -341,31 +442,50 @@ function App() {
         selectedJobId={selectedJobId}
         onSelect={setSelectedJobId}
         onRefresh={refreshAll}
+        panelVisibility={panelVisibility}
+        onTogglePanel={togglePanelVisibility}
       />
 
-      <section className="workspace">
-        <aside className="side-panel left-panel">
-          <StatusPanel job={jobQuery.data} loading={jobQuery.isLoading} />
-          <LayerPanel
-            realEnabled={realEnabled}
-            synthEnabled={synthEnabled}
-            cellsEnabled={cellsEnabled}
-            setLayer={setLayer}
-            realMap={realMap}
-            synthMap={synthMap}
-            setRealMap={setRealMap}
-            setSynthMap={setSynthMap}
-            synthOpacity={synthOpacity}
-            setSynthOpacity={setSynthOpacity}
-          />
-          <SchedulePanel
-            enabled={autoRefreshEnabled}
-            seconds={autoRefreshSeconds}
-            setEnabled={setAutoRefreshEnabled}
-            setSeconds={setAutoRefreshSeconds}
-            onRefresh={refreshAll}
-          />
-        </aside>
+      <section className={workspaceClassName} ref={workspaceRef} style={workspaceStyle}>
+        {leftPanelVisible ? (
+          <>
+            <aside className="side-panel left-panel">
+              {panelVisibility.status ? <StatusPanel job={jobQuery.data} loading={jobQuery.isLoading} /> : null}
+              {panelVisibility.layers ? (
+                <LayerPanel
+                  realEnabled={realEnabled}
+                  synthEnabled={synthEnabled}
+                  cellsEnabled={cellsEnabled}
+                  setLayer={setLayer}
+                  realMap={realMap}
+                  synthMap={synthMap}
+                  setRealMap={setRealMap}
+                  setSynthMap={setSynthMap}
+                  realOpacity={realOpacity}
+                  setRealOpacity={setRealOpacity}
+                  synthOpacity={synthOpacity}
+                  setSynthOpacity={setSynthOpacity}
+                />
+              ) : null}
+              {panelVisibility.update ? (
+                <SchedulePanel
+                  enabled={autoRefreshEnabled}
+                  seconds={autoRefreshSeconds}
+                  unit={autoRefreshUnit}
+                  setEnabled={setAutoRefreshEnabled}
+                  setSeconds={setAutoRefreshSeconds}
+                  setUnit={setAutoRefreshUnit}
+                  onRefresh={refreshAll}
+                />
+              ) : null}
+            </aside>
+            <PanelResizer
+              side="left"
+              onPointerDown={(event) => beginPanelResize("left", event)}
+              onKeyboardResize={(delta) => resizePanel("left", panelLayout.left + delta)}
+            />
+          </>
+        ) : null}
 
         <section className="viewer-column">
           <ViewerToolbar
@@ -404,6 +524,7 @@ function App() {
                 cellsEnabled={cellsEnabled}
                 realMap={realMap}
                 synthMap={synthMap}
+                realOpacity={realOpacity}
                 synthOpacity={synthOpacity}
                 onRenderStart={handleSliceRenderStart}
                 onRenderComplete={handleSliceRenderComplete}
@@ -420,6 +541,7 @@ function App() {
                 cellsEnabled={cellsEnabled}
                 realMap={realMap}
                 synthMap={synthMap}
+                realOpacity={realOpacity}
                 synthOpacity={synthOpacity}
                 maxPixelRatio={configQuery.data?.rendering.maxPixelRatio ?? 1}
                 pointCloudConfig={configQuery.data?.pointCloud}
@@ -469,16 +591,57 @@ function App() {
           </div>
         </section>
 
-        <aside className="side-panel right-panel">
-          <LogPanel
-            stream={logStream}
-            setStream={setLogStream}
-            lines={logsQuery.data?.lines ?? []}
-            loading={logsQuery.isFetching}
-          />
-        </aside>
+        {rightPanelVisible ? (
+          <>
+            <PanelResizer
+              side="right"
+              onPointerDown={(event) => beginPanelResize("right", event)}
+              onKeyboardResize={(delta) => resizePanel("right", panelLayout.right - delta)}
+            />
+            <aside className="side-panel right-panel">
+              <LogPanel
+                stream={logStream}
+                setStream={setLogStream}
+                lines={logsQuery.data?.lines ?? []}
+                loading={logsQuery.isFetching}
+              />
+            </aside>
+          </>
+        ) : null}
       </section>
     </main>
+  );
+}
+
+function PanelResizer({
+  side,
+  onPointerDown,
+  onKeyboardResize,
+}: {
+  side: "left" | "right";
+  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onKeyboardResize: (delta: number) => void;
+}) {
+  return (
+    <div
+      className={`panel-resizer ${side}-resizer`}
+      role="separator"
+      aria-label={`Resize ${side} panel`}
+      aria-orientation="vertical"
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          onKeyboardResize(-18);
+        } else if (event.key === "ArrowRight") {
+          event.preventDefault();
+          onKeyboardResize(18);
+        }
+      }}
+    >
+      <span />
+    </div>
   );
 }
 
@@ -487,9 +650,11 @@ type TopBarProps = {
   selectedJobId: string;
   onSelect: (jobId: string) => void;
   onRefresh: () => void;
+  panelVisibility: PanelVisibility;
+  onTogglePanel: (panel: PanelVisibilityKey) => void;
 };
 
-function TopBar({ jobs, selectedJobId, onSelect, onRefresh }: TopBarProps) {
+function TopBar({ jobs, selectedJobId, onSelect, onRefresh, panelVisibility, onTogglePanel }: TopBarProps) {
   return (
     <header className="top-bar">
       <div className="brand-block">
@@ -500,6 +665,28 @@ function TopBar({ jobs, selectedJobId, onSelect, onRefresh }: TopBarProps) {
           <h1>CellUniverse Live Viewer</h1>
           <p>3D TIFF preview with synthetic overlay and cell geometry</p>
         </div>
+      </div>
+      <div className="panel-visibility-row" aria-label="Panel visibility">
+        <PanelVisibilityButton
+          label="Status"
+          visible={panelVisibility.status}
+          onClick={() => onTogglePanel("status")}
+        />
+        <PanelVisibilityButton
+          label="Layers"
+          visible={panelVisibility.layers}
+          onClick={() => onTogglePanel("layers")}
+        />
+        <PanelVisibilityButton
+          label="Update"
+          visible={panelVisibility.update}
+          onClick={() => onTogglePanel("update")}
+        />
+        <PanelVisibilityButton
+          label="Logs"
+          visible={panelVisibility.logs}
+          onClick={() => onTogglePanel("logs")}
+        />
       </div>
       <div className="job-select-row">
         <label htmlFor="job-select">Job</label>
@@ -522,6 +709,29 @@ function TopBar({ jobs, selectedJobId, onSelect, onRefresh }: TopBarProps) {
         </button>
       </div>
     </header>
+  );
+}
+
+function PanelVisibilityButton({
+  label,
+  visible,
+  onClick,
+}: {
+  label: string;
+  visible: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`panel-visibility-button ${visible ? "active" : ""}`}
+      type="button"
+      onClick={onClick}
+      aria-pressed={visible}
+      title={`${visible ? "Hide" : "Show"} ${label} panel`}
+    >
+      {visible ? <Eye size={14} /> : <EyeOff size={14} />}
+      {label}
+    </button>
   );
 }
 
@@ -582,6 +792,8 @@ type LayerPanelProps = {
   synthMap: ColorMapId;
   setRealMap: (map: ColorMapId) => void;
   setSynthMap: (map: ColorMapId) => void;
+  realOpacity: number;
+  setRealOpacity: (opacity: number) => void;
   synthOpacity: number;
   setSynthOpacity: (opacity: number) => void;
 };
@@ -595,6 +807,8 @@ function LayerPanel({
   synthMap,
   setRealMap,
   setSynthMap,
+  realOpacity,
+  setRealOpacity,
   synthOpacity,
   setSynthOpacity,
 }: LayerPanelProps) {
@@ -604,39 +818,31 @@ function LayerPanel({
         <span>Layers</span>
         <Eye size={17} />
       </div>
-      <ToggleRow
+      <LayerControlGroup
         label="Real"
         enabled={realEnabled}
         onToggle={(value) => setLayer("realEnabled", value)}
         colorMap={realMap}
         onMapChange={setRealMap}
+        opacity={realOpacity}
+        onOpacityChange={setRealOpacity}
       />
-      <ToggleRow
+      <LayerControlGroup
         label="Synthetic"
         enabled={synthEnabled}
         onToggle={(value) => setLayer("synthEnabled", value)}
         colorMap={synthMap}
         onMapChange={setSynthMap}
+        opacity={synthOpacity}
+        onOpacityChange={setSynthOpacity}
       />
-      <label className="slider-row">
-        <span>Synth opacity</span>
-        <output>{Math.round(synthOpacity * 100)}%</output>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={synthOpacity}
-          onChange={(event) => setSynthOpacity(Number(event.target.value))}
-        />
-      </label>
       <button
         type="button"
         className={`toggle-button ${cellsEnabled ? "active" : ""}`}
         onClick={() => setLayer("cellsEnabled", !cellsEnabled)}
       >
         {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
-        Cell ellipsoids
+        Cell outlines
       </button>
     </section>
   );
@@ -645,16 +851,30 @@ function LayerPanel({
 function SchedulePanel({
   enabled,
   seconds,
+  unit,
   setEnabled,
   setSeconds,
+  setUnit,
   onRefresh,
 }: {
   enabled: boolean;
   seconds: number;
+  unit: RefreshUnit;
   setEnabled: (enabled: boolean) => void;
   setSeconds: (seconds: number) => void;
+  setUnit: (unit: RefreshUnit) => void;
   onRefresh: () => void;
 }) {
+  const unitConfig = refreshUnitConfig(unit);
+  const amount = secondsToRefreshAmount(seconds, unit);
+  const updateAmount = (nextAmount: number) => {
+    setSeconds(nextAmount * unitConfig.multiplier);
+  };
+  const updateUnit = (nextUnit: RefreshUnit) => {
+    setUnit(nextUnit);
+    setSeconds(amount * refreshUnitConfig(nextUnit).multiplier);
+  };
+
   return (
     <section className="tool-panel">
       <div className="panel-heading">
@@ -673,13 +893,21 @@ function SchedulePanel({
         <span>Period</span>
         <input
           type="number"
-          min={2}
-          max={300}
+          min={unitConfig.min}
+          max={unitConfig.max}
           step={1}
-          value={seconds}
-          onChange={(event) => setSeconds(Number(event.target.value))}
+          value={amount}
+          onChange={(event) => updateAmount(Number(event.target.value))}
         />
-        <span>sec</span>
+        <select
+          aria-label="Refresh interval unit"
+          value={unit}
+          onChange={(event) => updateUnit(event.target.value as RefreshUnit)}
+        >
+          <option value="seconds">sec</option>
+          <option value="minutes">min</option>
+          <option value="hours">hr</option>
+        </select>
       </label>
       <button type="button" className="toggle-button" onClick={onRefresh}>
         <RefreshCcw size={16} />
@@ -689,33 +917,69 @@ function SchedulePanel({
   );
 }
 
-function ToggleRow({
+function refreshUnitConfig(unit: RefreshUnit): { multiplier: number; min: number; max: number } {
+  switch (unit) {
+    case "hours":
+      return { multiplier: 3600, min: 1, max: 24 };
+    case "minutes":
+      return { multiplier: 60, min: 1, max: 1440 };
+    case "seconds":
+    default:
+      return { multiplier: 1, min: 2, max: 3600 };
+  }
+}
+
+function secondsToRefreshAmount(seconds: number, unit: RefreshUnit): number {
+  const config = refreshUnitConfig(unit);
+  return Math.max(config.min, Math.min(config.max, Math.round(seconds / config.multiplier)));
+}
+
+function LayerControlGroup({
   label,
   enabled,
   onToggle,
   colorMap,
   onMapChange,
+  opacity,
+  onOpacityChange,
 }: {
   label: string;
   enabled: boolean;
   onToggle: (value: boolean) => void;
   colorMap: ColorMapId;
   onMapChange: (map: ColorMapId) => void;
+  opacity: number;
+  onOpacityChange: (opacity: number) => void;
 }) {
   return (
-    <div className="layer-row">
-      <button type="button" className={`toggle-button ${enabled ? "active" : ""}`} onClick={() => onToggle(!enabled)}>
-        {enabled ? <Eye size={16} /> : <EyeOff size={16} />}
-        {label}
-      </button>
-      <select value={colorMap} onChange={(event) => onMapChange(event.target.value as ColorMapId)}>
-        {colorMaps.map((map) => (
-          <option key={map.id} value={map.id}>
-            {map.label}
-          </option>
-        ))}
-      </select>
-    </div>
+    <fieldset className="layer-control-group">
+      <legend>{label}</legend>
+      <div className="layer-row">
+        <button type="button" className={`toggle-button ${enabled ? "active" : ""}`} onClick={() => onToggle(!enabled)}>
+          {enabled ? <Eye size={16} /> : <EyeOff size={16} />}
+          {label}
+        </button>
+        <select value={colorMap} onChange={(event) => onMapChange(event.target.value as ColorMapId)}>
+          {colorMaps.map((map) => (
+            <option key={map.id} value={map.id}>
+              {map.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <label className="slider-row layer-opacity-row">
+        <span>Opacity</span>
+        <output>{Math.round(opacity * 100)}%</output>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={opacity}
+          onChange={(event) => onOpacityChange(Number(event.target.value))}
+        />
+      </label>
+    </fieldset>
   );
 }
 
@@ -1219,6 +1483,53 @@ function clampSlice(slice: number, maxDepth: number): number {
     return Math.max(0, slice);
   }
   return Math.max(0, Math.min(Math.max(0, maxDepth - 1), slice));
+}
+
+function readPanelLayout(): { left: number; right: number } {
+  if (typeof window === "undefined") {
+    return DEFAULT_PANEL_LAYOUT;
+  }
+  try {
+    const raw = window.localStorage.getItem(PANEL_LAYOUT_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_PANEL_LAYOUT;
+    }
+    const parsed = JSON.parse(raw) as Partial<{ left: number; right: number }>;
+    return {
+      left: clampNumber(Number(parsed.left), MIN_PANEL_WIDTH, MAX_PANEL_WIDTH),
+      right: clampNumber(Number(parsed.right), MIN_PANEL_WIDTH, MAX_PANEL_WIDTH),
+    };
+  } catch {
+    return DEFAULT_PANEL_LAYOUT;
+  }
+}
+
+function readPanelVisibility(): PanelVisibility {
+  if (typeof window === "undefined") {
+    return DEFAULT_PANEL_VISIBILITY;
+  }
+  try {
+    const raw = window.localStorage.getItem(PANEL_VISIBILITY_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_PANEL_VISIBILITY;
+    }
+    const parsed = JSON.parse(raw) as Partial<PanelVisibility>;
+    return {
+      status: typeof parsed.status === "boolean" ? parsed.status : DEFAULT_PANEL_VISIBILITY.status,
+      layers: typeof parsed.layers === "boolean" ? parsed.layers : DEFAULT_PANEL_VISIBILITY.layers,
+      update: typeof parsed.update === "boolean" ? parsed.update : DEFAULT_PANEL_VISIBILITY.update,
+      logs: typeof parsed.logs === "boolean" ? parsed.logs : DEFAULT_PANEL_VISIBILITY.logs,
+    };
+  } catch {
+    return DEFAULT_PANEL_VISIBILITY;
+  }
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, value));
 }
 
 function buildPreloadTargets(

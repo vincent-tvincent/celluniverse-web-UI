@@ -8,6 +8,7 @@ export type LayerRenderOptions = {
   synthEnabled: boolean;
   realMap: ColorMapId;
   synthMap: ColorMapId;
+  realOpacity: number;
   synthOpacity: number;
 };
 
@@ -27,7 +28,7 @@ export function composeSliceImage(
   }
 
   if (options.realEnabled && real) {
-    applyBottomLayer(pixels, real, slice, options.realMap);
+    applyBottomLayer(pixels, real, slice, options.realMap, options.realOpacity);
   }
   if (options.synthEnabled && synth) {
     applyOverlayLayer(pixels, synth, slice, options.synthMap, options.synthOpacity);
@@ -51,7 +52,7 @@ export function composeSlicePreviewImage(
   }
 
   if (options.realEnabled && real) {
-    applySliceBottomLayer(pixels, real, options.realMap);
+    applySliceBottomLayer(pixels, real, options.realMap, options.realOpacity);
   }
   if (options.synthEnabled && synth) {
     applySliceOverlayLayer(pixels, synth, options.synthMap, options.synthOpacity);
@@ -140,6 +141,7 @@ function applyBottomLayer(
   volume: VolumeData,
   slice: number,
   mapId: ColorMapId,
+  opacity: number,
 ): void {
   const source = getNearestSlice(volume, slice);
   const map = getColorMap(mapId);
@@ -147,9 +149,9 @@ function applyBottomLayer(
     const value = normalizedIntensity(volume, source[i]);
     const [r, g, b] = map.sample(value);
     const offset = i * 4;
-    target[offset] = Math.round(r * value);
-    target[offset + 1] = Math.round(g * value);
-    target[offset + 2] = Math.round(b * value);
+    target[offset] = Math.round(r * value * opacity);
+    target[offset + 1] = Math.round(g * value * opacity);
+    target[offset + 2] = Math.round(b * value * opacity);
   }
 }
 
@@ -157,15 +159,16 @@ function applySliceBottomLayer(
   target: Uint8ClampedArray,
   slice: SlicePreviewData,
   mapId: ColorMapId,
+  opacity: number,
 ): void {
   const map = getColorMap(mapId);
   for (let i = 0; i < slice.pixels.length; i += 1) {
     const value = normalizedSliceIntensity(slice, slice.pixels[i]);
     const [r, g, b] = map.sample(value);
     const offset = i * 4;
-    target[offset] = Math.round(r * value);
-    target[offset + 1] = Math.round(g * value);
-    target[offset + 2] = Math.round(b * value);
+    target[offset] = Math.round(r * value * opacity);
+    target[offset + 1] = Math.round(g * value * opacity);
+    target[offset + 2] = Math.round(b * value * opacity);
   }
 }
 

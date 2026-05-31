@@ -17,6 +17,7 @@ type Props = {
   cellsEnabled: boolean;
   realMap: ColorMapId;
   synthMap: ColorMapId;
+  realOpacity: number;
   synthOpacity: number;
   onRenderStart?: () => void;
   onRenderComplete?: () => void;
@@ -34,6 +35,7 @@ export default function CanvasSliceViewer({
   cellsEnabled,
   realMap,
   synthMap,
+  realOpacity,
   synthOpacity,
   onRenderStart,
   onRenderComplete,
@@ -71,6 +73,7 @@ export default function CanvasSliceViewer({
             synthEnabled,
             realMap,
             synthMap,
+            realOpacity,
             synthOpacity,
           })
         : composeSliceImage(real, synth, slice, {
@@ -78,6 +81,7 @@ export default function CanvasSliceViewer({
             synthEnabled,
             realMap,
             synthMap,
+            realOpacity,
             synthOpacity,
           });
       if (!image) {
@@ -130,6 +134,7 @@ export default function CanvasSliceViewer({
     synthEnabled,
     realMap,
     synthMap,
+    realOpacity,
     synthOpacity,
     cells,
     cellsEnabled,

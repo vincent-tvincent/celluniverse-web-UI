@@ -18,6 +18,7 @@ type Props = {
   cellsEnabled: boolean;
   realMap: ColorMapId;
   synthMap: ColorMapId;
+  realOpacity: number;
   synthOpacity: number;
   maxPixelRatio: number;
   pointCloudConfig?: ViewerRuntimeConfig["pointCloud"];
@@ -56,6 +57,7 @@ export default function ThreeVolumeViewer({
   cellsEnabled,
   realMap,
   synthMap,
+  realOpacity,
   synthOpacity,
   maxPixelRatio,
   pointCloudConfig,
@@ -112,7 +114,7 @@ export default function ThreeVolumeViewer({
         group,
         realPointCloud,
         realMap,
-        cloudConfig.realOpacity,
+        realOpacity,
         worldWidth,
         worldHeight,
         worldDepth,
@@ -120,14 +122,14 @@ export default function ThreeVolumeViewer({
         interleavePreviewLayers ? "real" : "none",
       );
     } else if (realEnabled && real) {
-      addVolumePointCloud(group, real, realMap, cloudConfig.realOpacity, worldWidth, worldHeight, worldDepth, cloudConfig);
+      addVolumePointCloud(group, real, realMap, realOpacity, worldWidth, worldHeight, worldDepth, cloudConfig);
     }
     if (synthEnabled && synthPointCloud) {
       addPreviewPointCloud(
         group,
         synthPointCloud,
         synthMap,
-        Math.min(synthOpacity * cloudConfig.synthOpacityScale, 0.45),
+        synthOpacity,
         worldWidth,
         worldHeight,
         worldDepth,
@@ -139,7 +141,7 @@ export default function ThreeVolumeViewer({
         group,
         synth,
         synthMap,
-        Math.min(synthOpacity * cloudConfig.synthOpacityScale, 0.45),
+        synthOpacity,
         worldWidth,
         worldHeight,
         worldDepth,
@@ -212,6 +214,7 @@ export default function ThreeVolumeViewer({
     cellsEnabled,
     realMap,
     synthMap,
+    realOpacity,
     synthOpacity,
     maxPixelRatio,
     pointCloudConfig,
@@ -274,10 +277,10 @@ function createCamera(
   worldHeight: number,
   worldDepth: number,
 ): THREE.PerspectiveCamera {
-  const camera = new THREE.PerspectiveCamera(38, aspect, 0.01, 200);
+  const camera = new THREE.PerspectiveCamera(42, aspect, 0.01, 200);
   const radius = Math.sqrt(worldWidth * worldWidth + worldHeight * worldHeight + worldDepth * worldDepth) / 2;
-  const distance = Math.max(3.2, radius / Math.sin(THREE.MathUtils.degToRad(camera.fov) / 2) * 1.08);
-  const viewDirection = new THREE.Vector3(0, -0.48, 0.88).normalize();
+  const distance = Math.max(1.65, radius / Math.sin(THREE.MathUtils.degToRad(camera.fov) / 2) * 0.54);
+  const viewDirection = new THREE.Vector3(0.02, -0.62, 0.78).normalize();
   camera.position.copy(viewDirection.multiplyScalar(distance));
   camera.lookAt(0, 0, 0);
   camera.near = Math.max(0.01, distance / 100);
