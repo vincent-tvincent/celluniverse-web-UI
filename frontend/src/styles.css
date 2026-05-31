@@ -314,6 +314,32 @@ button {
   color: var(--color-accent-soft);
 }
 
+.status-heading-icon {
+  display: inline-grid;
+  color: var(--color-status-idle);
+}
+
+.status-heading-icon svg {
+  color: currentColor;
+}
+
+.status-heading-icon.queued {
+  color: var(--color-warn);
+}
+
+.status-heading-icon.running {
+  color: var(--color-status-running);
+}
+
+.status-heading-icon.completed {
+  color: var(--color-accent);
+}
+
+.status-heading-icon.failed,
+.status-heading-icon.cancelled {
+  color: var(--color-danger);
+}
+
 .panel-hide-button {
   width: 26px;
   height: 24px;

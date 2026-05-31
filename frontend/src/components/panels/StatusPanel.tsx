@@ -1,4 +1,4 @@
-import { Activity, PauseCircle, PlayCircle } from "lucide-react";
+import { Activity, CircleAlert, CircleCheck, CircleX, Clock3, LoaderCircle } from "lucide-react";
 import type { JobStatus } from "../../types";
 import PanelHeading from "./PanelHeading";
 
@@ -10,10 +10,24 @@ type StatusPanelProps = {
 
 export default function StatusPanel({ job, loading, onHide }: StatusPanelProps) {
   const progress = Math.round((job?.progress ?? 0) * 100);
-  const stateIcon = job?.state === "running" ? <PlayCircle size={17} /> : job?.state === "cancelled" ? <PauseCircle size={17} /> : <Activity size={17} />;
+  const stateClass = job?.state ?? "idle";
+  const stateIcon =
+    job?.state === "running" ? (
+      <LoaderCircle size={17} />
+    ) : job?.state === "queued" ? (
+      <Clock3 size={17} />
+    ) : job?.state === "completed" ? (
+      <CircleCheck size={17} />
+    ) : job?.state === "failed" ? (
+      <CircleAlert size={17} />
+    ) : job?.state === "cancelled" ? (
+      <CircleX size={17} />
+    ) : (
+      <Activity size={17} />
+    );
   return (
     <section className="tool-panel">
-      <PanelHeading title="Status" icon={stateIcon} onHide={onHide} />
+      <PanelHeading title="Status" icon={<span className={`status-heading-icon ${stateClass}`}>{stateIcon}</span>} onHide={onHide} />
       {loading && !job ? (
         <p className="muted">Loading job status</p>
       ) : job ? (
@@ -28,7 +42,7 @@ export default function StatusPanel({ job, loading, onHide }: StatusPanelProps) 
           </div>
           <dl className="metric-grid">
             <div>
-              <dt>Current</dt>
+              <dt>Current Frame</dt>
               <dd>{job.currentFrame ?? "-"}</dd>
             </div>
             <div>
@@ -38,10 +52,6 @@ export default function StatusPanel({ job, loading, onHide }: StatusPanelProps) 
             <div>
               <dt>Range</dt>
               <dd>{job.firstFrame}-{job.lastFrame}</dd>
-            </div>
-            <div>
-              <dt>TIFF</dt>
-              <dd>{job.outputReady.tiffFrames.length}</dd>
             </div>
           </dl>
           {job.error ? <p className="error-text">{job.error}</p> : null}
