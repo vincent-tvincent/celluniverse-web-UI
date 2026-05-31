@@ -1,62 +1,51 @@
-import { useEffect, useRef, useState } from "react";
-import { Box, Braces, ChevronLeft, ChevronRight, ScanLine } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ViewMode } from "../../store";
-import type { JobManifest } from "../../types";
-import type { PointCloudPreviewData } from "../../viewer/pointCloud";
-import type { SlicePreviewData } from "../../viewer/slicePreview";
-import type { VolumeData } from "../../viewer/tiff";
+
+const MAX_FRAME_OFFSET_BUTTONS = 100;
 
 type ViewerToolbarProps = {
   mode: ViewMode;
-  setMode: (mode: ViewMode) => void;
   frame: number;
   frames: number[];
   setFrame: (frame: number) => void;
   slice: number;
   maxDepth: number;
   setSlice: (slice: number) => void;
-  realVolume?: VolumeData;
-  synthVolume?: VolumeData;
-  realSlice?: SlicePreviewData;
-  synthSlice?: SlicePreviewData;
-  realPointCloud?: PointCloudPreviewData;
-  synthPointCloud?: PointCloudPreviewData;
-  manifest?: JobManifest;
   frameControlsDisabled: boolean;
 };
 
 export default function ViewerToolbar({
   mode,
-  setMode,
   frame,
   frames,
   setFrame,
   slice,
   maxDepth,
   setSlice,
-  realVolume,
-  synthVolume,
-  realSlice,
-  synthSlice,
-  realPointCloud,
-  synthPointCloud,
-  manifest,
   frameControlsDisabled,
 }: ViewerToolbarProps) {
   const frameIndex = Math.max(0, frames.indexOf(frame));
   const maxFrameIndex = Math.max(0, frames.length - 1);
-  const previewWidth = realSlice?.width ?? synthSlice?.width ?? realVolume?.width ?? synthVolume?.width ?? realPointCloud?.sourceWidth ?? synthPointCloud?.sourceWidth ?? 0;
-  const previewHeight = realSlice?.height ?? synthSlice?.height ?? realVolume?.height ?? synthVolume?.height ?? realPointCloud?.sourceHeight ?? synthPointCloud?.sourceHeight ?? 0;
   const [draftFrameIndex, setDraftFrameIndex] = useState(frameIndex);
+  const [frameOffsetBaseIndex, setFrameOffsetBaseIndex] = useState(frameIndex);
+  const [selectedFrameOffset, setSelectedFrameOffset] = useState(0);
   const [draftSlice, setDraftSlice] = useState(slice);
   const sliceInputRef = useRef<HTMLInputElement | null>(null);
   const sliceCommitTimerRef = useRef(0);
   const pendingSliceRef = useRef(slice);
   const draftFrame = frames[draftFrameIndex] ?? frame;
+  const frameOffsets = useMemo(
+    () => buildFrameOffsets(frameOffsetBaseIndex, maxFrameIndex),
+    [frameOffsetBaseIndex, maxFrameIndex],
+  );
 
   useEffect(() => {
     setDraftFrameIndex(frameIndex);
-  }, [frameIndex]);
+    if (selectedFrameOffset === 0) {
+      setFrameOffsetBaseIndex(frameIndex);
+    }
+  }, [frameIndex, selectedFrameOffset]);
 
   useEffect(() => {
     setDraftSlice(slice);
@@ -72,7 +61,11 @@ export default function ViewerToolbar({
     if (draftFrameIndex > maxFrameIndex) {
       setDraftFrameIndex(maxFrameIndex);
     }
-  }, [draftFrameIndex, maxFrameIndex]);
+    if (frameOffsetBaseIndex > maxFrameIndex) {
+      setFrameOffsetBaseIndex(maxFrameIndex);
+      setSelectedFrameOffset(0);
+    }
+  }, [draftFrameIndex, frameOffsetBaseIndex, maxFrameIndex]);
 
   useEffect(() => {
     const maxSlice = Math.max(0, maxDepth - 1);
@@ -81,16 +74,37 @@ export default function ViewerToolbar({
     }
   }, [draftSlice, maxDepth]);
 
-  const setFrameFromIndex = (index: number) => {
-    const nextFrame = frames[Math.max(0, Math.min(frames.length - 1, Math.round(index)))];
+  const setFrameFromIndex = (index: number, preserveOffset = false) => {
+    const nextIndex = Math.max(0, Math.min(frames.length - 1, Math.round(index)));
+    const nextFrame = frames[nextIndex];
     if (nextFrame != null) {
+      setDraftFrameIndex(nextIndex);
+      if (!preserveOffset) {
+        setFrameOffsetBaseIndex(nextIndex);
+        setSelectedFrameOffset(0);
+      }
       setFrame(nextFrame);
     }
   };
   const stepFrame = (delta: number) => {
     const nextIndex = Math.max(0, Math.min(maxFrameIndex, draftFrameIndex + delta));
-    setDraftFrameIndex(nextIndex);
     setFrameFromIndex(nextIndex);
+  };
+  const selectFrameOffset = (offset: number) => {
+    const targetIndex = frameOffsetBaseIndex + offset;
+    if (targetIndex < 0 || targetIndex > maxFrameIndex || frameControlsDisabled) {
+      return;
+    }
+    setSelectedFrameOffset(offset);
+    setFrameFromIndex(targetIndex, true);
+  };
+  const resetFrameOffsetForSlider = () => {
+    if (selectedFrameOffset === 0) {
+      return;
+    }
+    setSelectedFrameOffset(0);
+    setDraftFrameIndex(frameOffsetBaseIndex);
+    setFrameFromIndex(frameOffsetBaseIndex);
   };
   const stepSlice = (delta: number) => {
     const maxSlice = Math.max(0, maxDepth - 1);
@@ -124,18 +138,8 @@ export default function ViewerToolbar({
   };
 
   return (
-    <div className={`viewer-toolbar ${mode === "volume" ? "volume-mode" : ""}`}>
-      <div className="segmented">
-        <button type="button" className={mode === "slice" ? "active" : ""} onClick={() => setMode("slice")}>
-          <ScanLine size={16} />
-          2D
-        </button>
-        <button type="button" className={mode === "volume" ? "active" : ""} onClick={() => setMode("volume")}>
-          <Box size={16} />
-          3D
-        </button>
-      </div>
-      <fieldset className="range-control slider-field">
+    <div className={`viewer-toolbar ${mode === "volume" ? "volume-mode" : "slice-mode"}`}>
+      <fieldset className="range-control slider-field frame-control">
         <legend>Time frame</legend>
         <span>Frame {draftFrame}</span>
         <button
@@ -156,7 +160,11 @@ export default function ViewerToolbar({
           step={1}
           value={draftFrameIndex}
           disabled={frames.length <= 1 || frameControlsDisabled}
-          onInput={(event) => setDraftFrameIndex(Number(event.currentTarget.value))}
+          onPointerDown={resetFrameOffsetForSlider}
+          onInput={(event) => {
+            setSelectedFrameOffset(0);
+            setDraftFrameIndex(Number(event.currentTarget.value));
+          }}
           onPointerUp={commitDraftFrame}
           onKeyUp={commitDraftFrame}
           onBlur={commitDraftFrame}
@@ -171,9 +179,33 @@ export default function ViewerToolbar({
         >
           <ChevronRight size={16} />
         </button>
+        <div
+          className="frame-offset-strip"
+          aria-label="Frame offset shortcuts"
+          style={{ "--frame-offset-count": frameOffsets.length } as CSSProperties}
+        >
+          {frameOffsets.map((offset) => {
+            const targetIndex = frameOffsetBaseIndex + offset;
+            const unavailable = targetIndex < 0 || targetIndex > maxFrameIndex;
+            const label = offset > 0 ? `+${offset}` : String(offset);
+            return (
+              <button
+                key={offset}
+                type="button"
+                className={`frame-offset-button ${selectedFrameOffset === offset ? "active" : ""}`}
+                disabled={frames.length <= 1 || frameControlsDisabled || unavailable}
+                onClick={() => selectFrameOffset(offset)}
+                title={offset === 0 ? "Current frame" : `Frame offset ${label}`}
+                aria-label={offset === 0 ? "Current frame" : `Frame offset ${label}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </fieldset>
       {mode === "slice" ? (
-        <fieldset className="range-control slider-field">
+        <fieldset className="range-control slider-field slice-control">
           <legend>Z slice</legend>
           <span>Slice {draftSlice}/{Math.max(0, maxDepth - 1)}</span>
           <button
@@ -214,12 +246,35 @@ export default function ViewerToolbar({
           </button>
         </fieldset>
       ) : null}
-      <div className="volume-meta">
-        <Braces size={15} />
-        <span>{manifest?.frames.length ?? 0} t</span>
-        <span>{realSlice?.depth ?? synthSlice?.depth ?? realVolume?.depth ?? synthVolume?.depth ?? 0} z</span>
-        <span>{previewWidth && previewHeight ? `${previewWidth}x${previewHeight}` : "0 xy"}</span>
-      </div>
     </div>
   );
+}
+
+function buildFrameOffsets(baseIndex: number, maxFrameIndex: number): number[] {
+  if (maxFrameIndex <= 0) {
+    return [0];
+  }
+  const minOffset = -Math.max(0, baseIndex);
+  const maxOffset = Math.max(0, maxFrameIndex - baseIndex);
+  const total = maxOffset - minOffset + 1;
+  if (total <= MAX_FRAME_OFFSET_BUTTONS) {
+    return range(minOffset, maxOffset);
+  }
+
+  const left = Math.floor((MAX_FRAME_OFFSET_BUTTONS - 1) / 2);
+  let start = Math.max(minOffset, -left);
+  let end = start + MAX_FRAME_OFFSET_BUTTONS - 1;
+  if (end > maxOffset) {
+    end = maxOffset;
+    start = end - MAX_FRAME_OFFSET_BUTTONS + 1;
+  }
+  return range(start, end);
+}
+
+function range(start: number, end: number): number[] {
+  const values: number[] = [];
+  for (let value = start; value <= end; value += 1) {
+    values.push(value);
+  }
+  return values;
 }

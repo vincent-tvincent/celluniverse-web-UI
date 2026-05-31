@@ -6,6 +6,7 @@ import { uiPalette } from "../theme/palette";
 import type { CellRecord } from "../types";
 import { getColorMap, type ColorMapId } from "./colorMaps";
 import { applyContrastLimits, type ContrastLimits } from "./contrast";
+import type { ViewerHoverSample } from "./hover";
 import type { PointCloudPreviewData } from "./pointCloud";
 import type { VolumeData } from "./tiff";
 
@@ -27,11 +28,16 @@ type Props = {
   maxPixelRatio: number;
   pointCloudConfig?: ViewerRuntimeConfig["pointCloud"];
   onFirstRender?: () => void;
+  onHoverSample?: (sample: ViewerHoverSample | null) => void;
 };
 
 type PointCloudData = {
   positions: Float32Array;
   colors: Float32Array;
+  sourceX: Float32Array;
+  sourceY: Float32Array;
+  sourceZ: Float32Array;
+  brightness: Float32Array;
   pointCount: number;
 };
 
@@ -68,6 +74,7 @@ export default function ThreeVolumeViewer({
   maxPixelRatio,
   pointCloudConfig,
   onFirstRender,
+  onHoverSample,
 }: Props) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const cameraViewRef = useRef<CameraViewState | null>(null);
@@ -100,6 +107,9 @@ export default function ThreeVolumeViewer({
     const worldDepth = getRawScaleWorldDepth(base, worldWidth, worldHeight) * cloudConfig.zCompression;
     const aspect = Math.max(1, mount.clientWidth) / Math.max(1, mount.clientHeight);
     const camera = createCamera(aspect, worldWidth, worldHeight, worldDepth);
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Points = { threshold: Math.max(worldWidth, worldHeight, worldDepth) * 0.012 };
+    const pointer = new THREE.Vector2();
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -115,8 +125,9 @@ export default function ThreeVolumeViewer({
     controls.addEventListener("change", saveCameraView);
 
     const interleavePreviewLayers = Boolean(realEnabled && synthEnabled && realPointCloud && synthPointCloud);
+    const realHoverTargets: THREE.Points[] = [];
     if (realEnabled && realPointCloud) {
-      addPreviewPointCloud(
+      const points = addPreviewPointCloud(
         group,
         realPointCloud,
         realMap,
@@ -128,8 +139,14 @@ export default function ThreeVolumeViewer({
         cloudConfig,
         interleavePreviewLayers ? "real" : "none",
       );
+      if (points) {
+        realHoverTargets.push(points);
+      }
     } else if (realEnabled && real) {
-      addVolumePointCloud(group, real, realMap, realOpacity, realContrastLimits, worldWidth, worldHeight, worldDepth, cloudConfig);
+      const points = addVolumePointCloud(group, real, realMap, realOpacity, realContrastLimits, worldWidth, worldHeight, worldDepth, cloudConfig);
+      if (points) {
+        realHoverTargets.push(points);
+      }
     }
     if (synthEnabled && synthPointCloud) {
       addPreviewPointCloud(
@@ -177,6 +194,36 @@ export default function ThreeVolumeViewer({
     });
     resizeObserver.observe(mount);
 
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!onHoverSample || !realHoverTargets.length) {
+        return;
+      }
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+      pointer.y = -(((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1);
+      raycaster.setFromCamera(pointer, camera);
+      const [hit] = raycaster.intersectObjects(realHoverTargets, false);
+      if (!hit || hit.index == null) {
+        const boxHit = new THREE.Vector3();
+        if (raycaster.ray.intersectBox(box, boxHit)) {
+          onHoverSample(makeEmptyBoxHoverSample(boxHit, base, worldWidth, worldHeight, worldDepth));
+        } else {
+          onHoverSample(null);
+        }
+        return;
+      }
+      const data = hit.object.userData as PointCloudHoverData;
+      onHoverSample({
+        x: Math.round(data.sourceX[hit.index] ?? 0),
+        y: Math.round(data.sourceY[hit.index] ?? 0),
+        z: Math.round(data.sourceZ[hit.index] ?? 0),
+        brightness: data.brightness[hit.index] ?? null,
+      });
+    };
+    const handlePointerLeave = () => onHoverSample?.(null);
+    renderer.domElement.addEventListener("pointermove", handlePointerMove);
+    renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
+
     let animationId = 0;
     let reportedFirstRender = false;
     const animate = () => {
@@ -195,6 +242,8 @@ export default function ThreeVolumeViewer({
       window.cancelAnimationFrame(animationId);
       resizeObserver.disconnect();
       controls.removeEventListener("change", saveCameraView);
+      renderer.domElement.removeEventListener("pointermove", handlePointerMove);
+      renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
       controls.dispose();
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.Points) {
@@ -230,6 +279,7 @@ export default function ThreeVolumeViewer({
     maxPixelRatio,
     pointCloudConfig,
     onFirstRender,
+    onHoverSample,
   ]);
 
   return (
@@ -239,6 +289,38 @@ export default function ThreeVolumeViewer({
       ) : null}
     </div>
   );
+}
+
+type PointCloudHoverData = {
+  sourceX: Float32Array;
+  sourceY: Float32Array;
+  sourceZ: Float32Array;
+  brightness: Float32Array;
+};
+
+function makeEmptyBoxHoverSample(
+  point: THREE.Vector3,
+  base: VolumeDimensions,
+  worldWidth: number,
+  worldHeight: number,
+  worldDepth: number,
+): ViewerHoverSample {
+  const x = Math.round(((point.x / worldWidth) + 0.5) * Math.max(0, base.sourceWidth - 1));
+  const y = Math.round((0.5 - point.y / worldHeight) * Math.max(0, base.sourceHeight - 1));
+  const z = Math.round(((point.z / worldDepth) + 0.5) * Math.max(0, base.depth - 1));
+  return {
+    x: clampInteger(x, 0, Math.max(0, base.sourceWidth - 1)),
+    y: clampInteger(y, 0, Math.max(0, base.sourceHeight - 1)),
+    z: clampInteger(z, 0, Math.max(0, base.depth - 1)),
+    brightness: 0,
+  };
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, value));
 }
 
 type VolumeDimensions = {
@@ -325,7 +407,7 @@ function restoreCameraView(
   worldWidth: number,
   worldHeight: number,
   worldDepth: number,
-) {
+): void {
   if (!state || !isCompatibleCameraView(state, worldWidth, worldHeight, worldDepth)) {
     return;
   }
@@ -363,10 +445,10 @@ function addVolumePointCloud(
   worldHeight: number,
   worldDepth: number,
   config: ViewerRuntimeConfig["pointCloud"],
-) {
+): THREE.Points | undefined {
   const cloud = getCachedPointCloud(volume, colorMap, contrastLimits, worldWidth, worldHeight, worldDepth, config);
   if (!cloud.pointCount) {
-    return;
+    return undefined;
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -374,7 +456,9 @@ function addVolumePointCloud(
   geometry.setAttribute("pointColor", new THREE.BufferAttribute(cloud.colors, 3));
   const material = createPointCloudMaterial(config.pointSize, opacity);
   const points = new THREE.Points(geometry, material);
+  points.userData = getPointCloudHoverData(cloud);
   group.add(points);
+  return points;
 }
 
 function addPreviewPointCloud(
@@ -388,10 +472,10 @@ function addPreviewPointCloud(
   worldDepth: number,
   config: ViewerRuntimeConfig["pointCloud"],
   interleaveRole: InterleaveRole,
-) {
+): THREE.Points | undefined {
   const cloud = getCachedPreviewPointCloud(preview, colorMap, contrastLimits, worldWidth, worldHeight, worldDepth, config, interleaveRole);
   if (!cloud.pointCount) {
-    return;
+    return undefined;
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -399,7 +483,18 @@ function addPreviewPointCloud(
   geometry.setAttribute("pointColor", new THREE.BufferAttribute(cloud.colors, 3));
   const material = createPointCloudMaterial(config.pointSize, opacity);
   const points = new THREE.Points(geometry, material);
+  points.userData = getPointCloudHoverData(cloud);
   group.add(points);
+  return points;
+}
+
+function getPointCloudHoverData(cloud: PointCloudData): PointCloudHoverData {
+  return {
+    sourceX: cloud.sourceX,
+    sourceY: cloud.sourceY,
+    sourceZ: cloud.sourceZ,
+    brightness: cloud.brightness,
+  };
 }
 
 function getCachedPointCloud(
@@ -525,6 +620,10 @@ function buildPointCloud(
   const threshold = computeIntensityThreshold(volume, config.intensityPercentile, Math.max(1, xyStep * 2));
   const positions = new Float32Array(maxPoints * 3);
   const colors = new Float32Array(maxPoints * 3);
+  const sourceX = new Float32Array(maxPoints);
+  const sourceY = new Float32Array(maxPoints);
+  const sourceZ = new Float32Array(maxPoints);
+  const brightnessValues = new Float32Array(maxPoints);
   const map = getColorMap(colorMap);
   const widthDenominator = Math.max(1, volume.width - 1);
   const heightDenominator = Math.max(1, volume.height - 1);
@@ -554,6 +653,10 @@ function buildPointCloud(
         positions[target] = (x / widthDenominator - 0.5) * worldWidth;
         positions[target + 1] = (0.5 - y / heightDenominator) * worldHeight;
         positions[target + 2] = worldZ;
+        sourceX[pointIndex] = (x / widthDenominator) * Math.max(0, volume.sourceWidth - 1);
+        sourceY[pointIndex] = (y / heightDenominator) * Math.max(0, volume.sourceHeight - 1);
+        sourceZ[pointIndex] = z;
+        brightnessValues[pointIndex] = value;
         const brightness = Math.max(0.58, Math.sqrt(intensity));
         colors[target] = (r / 255) * brightness;
         colors[target + 1] = (g / 255) * brightness;
@@ -566,6 +669,10 @@ function buildPointCloud(
   return {
     positions: positions.slice(0, pointIndex * 3),
     colors: colors.slice(0, pointIndex * 3),
+    sourceX: sourceX.slice(0, pointIndex),
+    sourceY: sourceY.slice(0, pointIndex),
+    sourceZ: sourceZ.slice(0, pointIndex),
+    brightness: brightnessValues.slice(0, pointIndex),
     pointCount: pointIndex,
   };
 }
@@ -582,6 +689,10 @@ function buildPreviewPointCloud(
 ): PointCloudData {
   const positions = new Float32Array(preview.pointCount * 3);
   const colors = new Float32Array(preview.pointCount * 3);
+  const sourceX = new Float32Array(preview.pointCount);
+  const sourceY = new Float32Array(preview.pointCount);
+  const sourceZ = new Float32Array(preview.pointCount);
+  const brightnessValues = new Float32Array(preview.pointCount);
   const map = getColorMap(colorMap);
   const widthDenominator = Math.max(1, preview.sourceWidth - 1);
   const heightDenominator = Math.max(1, preview.sourceHeight - 1);
@@ -608,6 +719,10 @@ function buildPreviewPointCloud(
     positions[target] = (x / widthDenominator - 0.5) * worldWidth;
     positions[target + 1] = (0.5 - y / heightDenominator) * worldHeight;
     positions[target + 2] = preview.depth <= 1 ? 0 : (preview.z[pointIndex] / depthDenominator - 0.5) * worldDepth;
+    sourceX[outputPointIndex] = preview.x[pointIndex] ?? 0;
+    sourceY[outputPointIndex] = preview.y[pointIndex] ?? 0;
+    sourceZ[outputPointIndex] = preview.z[pointIndex] ?? 0;
+    brightnessValues[outputPointIndex] = Math.max(0, Math.min(255, (preview.intensity[pointIndex] ?? 0) * 255));
     const brightness = Math.max(0.58, Math.sqrt(intensity));
     colors[target] = (r / 255) * brightness;
     colors[target + 1] = (g / 255) * brightness;
@@ -618,6 +733,10 @@ function buildPreviewPointCloud(
   return {
     positions: positions.slice(0, outputPointIndex * 3),
     colors: colors.slice(0, outputPointIndex * 3),
+    sourceX: sourceX.slice(0, outputPointIndex),
+    sourceY: sourceY.slice(0, outputPointIndex),
+    sourceZ: sourceZ.slice(0, outputPointIndex),
+    brightness: brightnessValues.slice(0, outputPointIndex),
     pointCount: outputPointIndex,
   };
 }

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Braces } from "lucide-react";
 import { getFrameCells, getJob, getLogs, getManifest, listJobs, toApiUrl } from "./api";
 import FrameUpdateToast from "./components/layout/FrameUpdateToast";
 import LoadBadge from "./components/layout/LoadBadge";
@@ -20,7 +21,6 @@ import ViewerToolbar from "./components/layout/ViewerToolbar";
 import {
   DEFAULT_PANEL_VISIBILITY,
   LEFT_PANEL_KEYS,
-  RIGHT_PANEL_KEYS,
   type FrameUpdateNotice,
   type PanelVisibility,
   type PanelVisibilityKey,
@@ -29,14 +29,15 @@ import CollapsedPanel from "./components/panels/CollapsedPanel";
 import LayerPanel from "./components/panels/LayerPanel";
 import LogPanel from "./components/panels/LogPanel";
 import SchedulePanel from "./components/panels/SchedulePanel";
-import SidePanelCollapseButton from "./components/panels/SidePanelCollapseButton";
 import StatusPanel from "./components/panels/StatusPanel";
+import ViewModePanel from "./components/panels/ViewModePanel";
 import { previewConfigSignature, useViewerConfig, type PreviewConfig } from "./config";
 import { useJobEvents } from "./hooks";
 import { useViewerStore } from "./store";
 import type { CellRecord, JobManifest, JobStatus, LayerEntry } from "./types";
 import CanvasSliceViewer from "./viewer/CanvasSliceViewer";
 import ThreeVolumeViewer from "./viewer/ThreeVolumeViewer";
+import type { ViewerHoverSample } from "./viewer/hover";
 import { loadPointCloudPreview } from "./viewer/pointCloud";
 import { loadSlicePreview } from "./viewer/slicePreview";
 import type { VolumeData } from "./viewer/tiff";
@@ -44,10 +45,12 @@ import { useVolumePreload, type VolumePreloadTarget } from "./viewer/useVolumePr
 
 const EMPTY_CELLS: CellRecord[] = [];
 const PANEL_LAYOUT_STORAGE_KEY = "celluniverse-viewer-panel-layout";
-const PANEL_VISIBILITY_STORAGE_KEY = "celluniverse-viewer-panel-visibility";
-const DEFAULT_PANEL_LAYOUT = { left: 292, right: 360 };
+const PANEL_VISIBILITY_STORAGE_KEY = "celluniverse-viewer-panel-visibility-v2";
+const DEFAULT_PANEL_LAYOUT = { left: 292, right: 360, log: 260 };
 const MIN_PANEL_WIDTH = 200;
 const MAX_PANEL_WIDTH = 520;
+const MIN_LOG_HEIGHT = 150;
+const MAX_LOG_HEIGHT = 520;
 const RENDER_LOADING_DELAY_MS = 2500;
 
 function App() {
@@ -99,6 +102,7 @@ function App() {
   const [delayedRenderPending, setDelayedRenderPending] = useState(false);
   const [panelLayout, setPanelLayout] = useState(readPanelLayout);
   const [panelVisibility, setPanelVisibility] = useState(readPanelVisibility);
+  const [hoverSample, setHoverSample] = useState<ViewerHoverSample | null>(null);
   const frameHistoryRef = useRef<{ jobId: string; frames: Set<number> } | null>(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
 
@@ -339,6 +343,8 @@ function App() {
     synthPointCloudQuery.data?.depth ?? 0,
     1,
   );
+  const readoutWidth = realSliceQuery.data?.sourceWidth ?? synthSliceQuery.data?.sourceWidth ?? realVolume?.sourceWidth ?? synthVolume?.sourceWidth ?? realPointCloudQuery.data?.sourceWidth ?? synthPointCloudQuery.data?.sourceWidth ?? 0;
+  const readoutHeight = realSliceQuery.data?.sourceHeight ?? synthSliceQuery.data?.sourceHeight ?? realVolume?.sourceHeight ?? synthVolume?.sourceHeight ?? realPointCloudQuery.data?.sourceHeight ?? synthPointCloudQuery.data?.sourceHeight ?? 0;
   useEffect(() => {
     if (maxDepth > 1 && slice > maxDepth - 1) {
       setSlice(Math.max(0, maxDepth - 1));
@@ -363,6 +369,10 @@ function App() {
   useEffect(() => {
     setManualSliceOverride(false);
   }, [selectedJobId, activeFrameNumber]);
+
+  useEffect(() => {
+    setHoverSample(null);
+  }, [selectedJobId, activeFrameNumber, mode, slice]);
 
   useEffect(() => {
     if (mode !== "slice" || manualSliceOverride) {
@@ -399,13 +409,13 @@ function App() {
   const workspaceStyle = {
     "--left-panel-width": `${panelLayout.left}px`,
     "--right-panel-width": `${panelLayout.right}px`,
+    "--log-panel-height": `${panelLayout.log}px`,
   } as CSSProperties;
   const leftPanelVisible = panelVisibility.status || panelVisibility.layers || panelVisibility.update;
-  const rightPanelVisible = panelVisibility.logs;
+  const logPanelVisible = panelVisibility.logs;
   const workspaceClassName = [
     "workspace",
     leftPanelVisible ? "" : "hide-left",
-    rightPanelVisible ? "" : "hide-right",
   ].filter(Boolean).join(" ");
   const setPanelVisible = useCallback((panel: PanelVisibilityKey, visible: boolean) => {
     setPanelVisibility((current) => ({
@@ -434,7 +444,6 @@ function App() {
     });
   }, []);
   const showLeftPanels = useCallback(() => showPanels(LEFT_PANEL_KEYS), [showPanels]);
-  const showRightPanels = useCallback(() => showPanels(RIGHT_PANEL_KEYS), [showPanels]);
   const hideLeftPanels = useCallback(() => hidePanels(LEFT_PANEL_KEYS), [hidePanels]);
   const resizePanel = useCallback((panel: "left" | "right", nextWidth: number) => {
     const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width ?? window.innerWidth;
@@ -464,6 +473,28 @@ function App() {
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
   }, [resizePanel]);
+  const resizeLogDock = useCallback((nextHeight: number) => {
+    const workspaceHeight = workspaceRef.current?.getBoundingClientRect().height ?? window.innerHeight;
+    const maxByViewport = Math.max(MIN_LOG_HEIGHT, Math.min(MAX_LOG_HEIGHT, workspaceHeight * 0.46));
+    setPanelLayout((current) => ({
+      ...current,
+      log: Math.round(clampNumber(nextHeight, MIN_LOG_HEIGHT, maxByViewport)),
+    }));
+  }, []);
+  const beginLogResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = panelLayout.log;
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      resizeLogDock(startHeight - (moveEvent.clientY - startY));
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }, [panelLayout.log, resizeLogDock]);
 
   useEffect(() => {
     window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, JSON.stringify(panelLayout));
@@ -484,7 +515,9 @@ function App() {
       setPanelLayout((current) => {
         const left = Math.round(clampNumber(current.left, MIN_PANEL_WIDTH, maxByViewport));
         const right = Math.round(clampNumber(current.right, MIN_PANEL_WIDTH, maxByViewport));
-        return left === current.left && right === current.right ? current : { left, right };
+        const logMax = Math.max(MIN_LOG_HEIGHT, Math.min(MAX_LOG_HEIGHT, (entries[0]?.contentRect.height ?? workspace.clientHeight) * 0.46));
+        const log = Math.round(clampNumber(current.log, MIN_LOG_HEIGHT, logMax));
+        return left === current.left && right === current.right && log === current.log ? current : { left, right, log };
       });
     });
     observer.observe(workspace);
@@ -503,18 +536,32 @@ function App() {
       <section className={workspaceClassName} ref={workspaceRef} style={workspaceStyle}>
         <PanelRestoreRail
           leftHidden={!leftPanelVisible}
-          rightHidden={!rightPanelVisible}
+          logHidden={!logPanelVisible}
           onShowLeft={showLeftPanels}
-          onShowRight={showRightPanels}
+          onShowLog={() => showPanel("logs")}
         />
         {leftPanelVisible ? (
           <>
             <aside className="side-panel left-panel">
-              <SidePanelCollapseButton onClick={hideLeftPanels} />
+              <ViewModePanel mode={mode} setMode={setMode} onHide={hideLeftPanels} />
               {panelVisibility.status ? (
                 <StatusPanel job={jobQuery.data} loading={jobQuery.isLoading} onHide={() => hidePanel("status")} />
               ) : (
                 <CollapsedPanel panel="status" title="Status" onShow={() => showPanel("status")} />
+              )}
+              {panelVisibility.update ? (
+                <SchedulePanel
+                  enabled={autoRefreshEnabled}
+                  seconds={autoRefreshSeconds}
+                  unit={autoRefreshUnit}
+                  setEnabled={setAutoRefreshEnabled}
+                  setSeconds={setAutoRefreshSeconds}
+                  setUnit={setAutoRefreshUnit}
+                  onRefresh={refreshAll}
+                  onHide={() => hidePanel("update")}
+                />
+              ) : (
+                <CollapsedPanel panel="update" title="Update Scheduler" onShow={() => showPanel("update")} />
               )}
               {panelVisibility.layers ? (
                 <LayerPanel
@@ -539,20 +586,6 @@ function App() {
               ) : (
                 <CollapsedPanel panel="layers" title="Layers" onShow={() => showPanel("layers")} />
               )}
-              {panelVisibility.update ? (
-                <SchedulePanel
-                  enabled={autoRefreshEnabled}
-                  seconds={autoRefreshSeconds}
-                  unit={autoRefreshUnit}
-                  setEnabled={setAutoRefreshEnabled}
-                  setSeconds={setAutoRefreshSeconds}
-                  setUnit={setAutoRefreshUnit}
-                  onRefresh={refreshAll}
-                  onHide={() => hidePanel("update")}
-                />
-              ) : (
-                <CollapsedPanel panel="update" title="Update" onShow={() => showPanel("update")} />
-              )}
             </aside>
             <PanelResizer
               side="left"
@@ -562,10 +595,9 @@ function App() {
           </>
         ) : null}
 
-        <section className="viewer-column">
+        <section className={`viewer-column ${logPanelVisible ? "with-log-panel" : ""}`}>
           <ViewerToolbar
             mode={mode}
-            setMode={setMode}
             frame={activeFrame?.t ?? frame}
             frames={availableFrameNumbers}
             setFrame={setFrame}
@@ -575,13 +607,6 @@ function App() {
               setManualSliceOverride(true);
               setSlice(nextSlice);
             }}
-            realVolume={realVolume}
-            synthVolume={synthVolume}
-            realSlice={realSliceQuery.data}
-            synthSlice={synthSliceQuery.data}
-            realPointCloud={realPointCloudQuery.data}
-            synthPointCloud={synthPointCloudQuery.data}
-            manifest={manifestQuery.data}
             frameControlsDisabled={pointCloudLoading}
           />
           <PreloadProgress preload={preload} />
@@ -605,6 +630,7 @@ function App() {
                 synthContrastLimits={synthContrastLimits}
                 onRenderStart={handleSliceRenderStart}
                 onRenderComplete={handleSliceRenderComplete}
+                onHoverSample={setHoverSample}
               />
             ) : (
               <ThreeVolumeViewer
@@ -625,8 +651,16 @@ function App() {
                 maxPixelRatio={configQuery.data?.rendering.maxPixelRatio ?? 1}
                 pointCloudConfig={configQuery.data?.pointCloud}
                 onFirstRender={handleVolumeFirstRender}
+                onHoverSample={setHoverSample}
               />
             )}
+            <ViewerReadout
+              frames={manifestQuery.data?.frames.length ?? 0}
+              depth={maxDepth}
+              width={readoutWidth}
+              height={readoutHeight}
+              hoverSample={hoverSample}
+            />
             <LoadBadge
               manifestLoading={viewerMetadataLoading}
               preload={preload}
@@ -668,17 +702,28 @@ function App() {
               onDismiss={() => setFrameNotice(null)}
             />
           </div>
-        </section>
-
-        {rightPanelVisible ? (
-          <>
-            <PanelResizer
-              side="right"
-              onPointerDown={(event) => beginPanelResize("right", event)}
-              onKeyboardResize={(delta) => resizePanel("right", panelLayout.right - delta)}
-            />
-            <aside className="side-panel right-panel">
-              {panelVisibility.logs ? (
+          {logPanelVisible ? (
+            <>
+              <div
+                className="log-dock-resizer"
+                role="separator"
+                aria-label="Resize log panel"
+                aria-orientation="horizontal"
+                tabIndex={0}
+                onPointerDown={beginLogResize}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    resizeLogDock(panelLayout.log + 18);
+                  } else if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    resizeLogDock(panelLayout.log - 18);
+                  }
+                }}
+              >
+                <span />
+              </div>
+            <div className="viewer-log-dock">
                 <LogPanel
                   stream={logStream}
                   setStream={setLogStream}
@@ -686,12 +731,10 @@ function App() {
                   loading={logsQuery.isFetching}
                   onHide={() => hidePanel("logs")}
                 />
-              ) : (
-                <CollapsedPanel panel="logs" title="Runtime Log" onShow={() => showPanel("logs")} />
-              )}
-            </aside>
-          </>
-        ) : null}
+            </div>
+            </>
+          ) : null}
+        </section>
       </section>
     </main>
   );
@@ -781,7 +824,40 @@ function clampSlice(slice: number, maxDepth: number): number {
   return Math.max(0, Math.min(Math.max(0, maxDepth - 1), slice));
 }
 
-function readPanelLayout(): { left: number; right: number } {
+function ViewerReadout({
+  frames,
+  depth,
+  width,
+  height,
+  hoverSample,
+}: {
+  frames: number;
+  depth: number;
+  width: number;
+  height: number;
+  hoverSample: ViewerHoverSample | null;
+}) {
+  return (
+    <div className="viewer-readout" aria-live="polite">
+      <div className="viewer-readout-line">
+        <Braces size={15} />
+        <span>{frames} t</span>
+        <span>{depth} z</span>
+        <span>{width && height ? `${width}x${height}` : "0 xy"}</span>
+      </div>
+      {hoverSample ? (
+        <div className="viewer-readout-line hover">
+          <span>x {hoverSample.x}</span>
+          <span>y {hoverSample.y}</span>
+          <span>z {hoverSample.z}</span>
+          <span>brightness {Math.round(hoverSample.brightness ?? 0)}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function readPanelLayout(): { left: number; right: number; log: number } {
   if (typeof window === "undefined") {
     return DEFAULT_PANEL_LAYOUT;
   }
@@ -790,10 +866,11 @@ function readPanelLayout(): { left: number; right: number } {
     if (!raw) {
       return DEFAULT_PANEL_LAYOUT;
     }
-    const parsed = JSON.parse(raw) as Partial<{ left: number; right: number }>;
+    const parsed = JSON.parse(raw) as Partial<{ left: number; right: number; log: number }>;
     return {
-      left: clampNumber(Number(parsed.left), MIN_PANEL_WIDTH, MAX_PANEL_WIDTH),
-      right: clampNumber(Number(parsed.right), MIN_PANEL_WIDTH, MAX_PANEL_WIDTH),
+      left: clampNumber(Number(parsed.left ?? DEFAULT_PANEL_LAYOUT.left), MIN_PANEL_WIDTH, MAX_PANEL_WIDTH),
+      right: clampNumber(Number(parsed.right ?? DEFAULT_PANEL_LAYOUT.right), MIN_PANEL_WIDTH, MAX_PANEL_WIDTH),
+      log: clampNumber(Number(parsed.log ?? DEFAULT_PANEL_LAYOUT.log), MIN_LOG_HEIGHT, MAX_LOG_HEIGHT),
     };
   } catch {
     return DEFAULT_PANEL_LAYOUT;

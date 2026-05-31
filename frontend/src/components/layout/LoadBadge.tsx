@@ -28,7 +28,10 @@ export default function LoadBadge({
       ? `Caching TIFF ${preload.readyFiles}/${preload.totalFiles}`
     : activeFrameWaiting
       ? "Waiting for frame"
-      : "Live";
+      : "";
+  if (!text) {
+    return null;
+  }
   return (
     <div className={`load-badge ${error ? "error" : ""}`}>
       {error ? <CircleOff size={14} /> : <Activity size={14} />}

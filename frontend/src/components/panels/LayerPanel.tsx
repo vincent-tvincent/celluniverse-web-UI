@@ -1,6 +1,6 @@
-import { useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Eye, EyeOff } from "lucide-react";
-import { colorMaps, type ColorMapId } from "../../viewer/colorMaps";
+import { useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Check, ChevronDown, Eye, EyeOff } from "lucide-react";
+import { colorMaps, getColorMap, type ColorMap, type ColorMapId } from "../../viewer/colorMaps";
 import { clampContrastLimits, type ContrastLimits } from "../../viewer/contrast";
 import PanelHeading from "./PanelHeading";
 
@@ -46,6 +46,14 @@ export default function LayerPanel({
   return (
     <section className="tool-panel">
       <PanelHeading title="Layers" icon={<Eye size={17} />} onHide={onHide} />
+      <button
+        type="button"
+        className={`toggle-button ${cellsEnabled ? "active" : ""}`}
+        onClick={() => setLayer("cellsEnabled", !cellsEnabled)}
+      >
+        {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
+        Cell outlines
+      </button>
       <LayerControlGroup
         label="Real"
         enabled={realEnabled}
@@ -68,14 +76,6 @@ export default function LayerPanel({
         contrastLimits={synthContrastLimits}
         onContrastLimitsChange={setSynthContrastLimits}
       />
-      <button
-        type="button"
-        className={`toggle-button ${cellsEnabled ? "active" : ""}`}
-        onClick={() => setLayer("cellsEnabled", !cellsEnabled)}
-      >
-        {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
-        Cell outlines
-      </button>
     </section>
   );
 }
@@ -101,26 +101,27 @@ function LayerControlGroup({
   contrastLimits: ContrastLimits;
   onContrastLimitsChange: (limits: ContrastLimits) => void;
 }) {
+  const selectedColorMap = getColorMap(colorMap);
+  const layerStyle = {
+    "--layer-gradient": colorMapGradient(selectedColorMap),
+    "--layer-accent": selectedColorMap.stops[selectedColorMap.stops.length - 1]?.[1] ?? "var(--color-accent)",
+  } as CSSProperties;
+
   return (
-    <fieldset className="layer-control-group">
+    <fieldset className="layer-control-group" style={layerStyle}>
       <legend>{label}</legend>
       <div className="layer-row">
         <button type="button" className={`toggle-button ${enabled ? "active" : ""}`} onClick={() => onToggle(!enabled)}>
           {enabled ? <Eye size={16} /> : <EyeOff size={16} />}
           {label}
         </button>
-        <select value={colorMap} onChange={(event) => onMapChange(event.target.value as ColorMapId)}>
-          {colorMaps.map((map) => (
-            <option key={map.id} value={map.id}>
-              {map.label}
-            </option>
-          ))}
-        </select>
+        <ColorMapSelect value={colorMap} onChange={onMapChange} />
       </div>
       <label className="slider-row layer-opacity-row">
         <span>Opacity</span>
         <output>{Math.round(opacity * 100)}%</output>
         <input
+          className="color-map-range"
           type="range"
           min={0}
           max={1}
@@ -129,7 +130,7 @@ function LayerControlGroup({
           onChange={(event) => onOpacityChange(Number(event.target.value))}
         />
       </label>
-      <ContrastLimitSlider value={contrastLimits} onChange={onContrastLimitsChange} />
+      <ContrastLimitSlider value={contrastLimits} onChange={onContrastLimitsChange} gradient={colorMapGradient(selectedColorMap)} />
     </fieldset>
   );
 }
@@ -137,9 +138,11 @@ function LayerControlGroup({
 function ContrastLimitSlider({
   value,
   onChange,
+  gradient,
 }: {
   value: ContrastLimits;
   onChange: (limits: ContrastLimits) => void;
+  gradient: string;
 }) {
   const low = value[0];
   const high = value[1];
@@ -205,6 +208,7 @@ function ContrastLimitSlider({
       <div
         ref={sliderRef}
         className="contrast-limit-slider"
+        style={{ "--layer-gradient": gradient } as CSSProperties}
         onPointerDown={(event) => {
           if (event.target !== event.currentTarget) {
             return;
@@ -252,6 +256,57 @@ function ContrastLimitSlider({
       </div>
     </div>
   );
+}
+
+function ColorMapSelect({
+  value,
+  onChange,
+}: {
+  value: ColorMapId;
+  onChange: (map: ColorMapId) => void;
+}) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const selectedColorMap = getColorMap(value);
+
+  const chooseColorMap = (nextValue: ColorMapId) => {
+    onChange(nextValue);
+    if (detailsRef.current) {
+      detailsRef.current.open = false;
+    }
+  };
+
+  return (
+    <details ref={detailsRef} className="color-map-select">
+      <summary aria-label={`Color map: ${selectedColorMap.label}`}>
+        <span className="color-map-preview" style={{ background: colorMapGradient(selectedColorMap) }} />
+        <span>{selectedColorMap.label}</span>
+        <ChevronDown size={16} />
+      </summary>
+      <div className="color-map-menu" role="listbox" aria-label="Color map options">
+        {colorMaps.map((map) => {
+          const selected = map.id === value;
+          return (
+            <button
+              key={map.id}
+              type="button"
+              className={`color-map-option ${selected ? "selected" : ""}`}
+              role="option"
+              aria-selected={selected}
+              onClick={() => chooseColorMap(map.id)}
+            >
+              <span className="color-map-preview" style={{ background: colorMapGradient(map) }} />
+              <span>{map.label}</span>
+              {selected ? <Check size={15} /> : null}
+            </button>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
+function colorMapGradient(map: ColorMap): string {
+  return `linear-gradient(90deg, ${map.stops.map(([position, color]) => `${color} ${Math.round(position * 100)}%`).join(", ")})`;
 }
 
 function valueFromPointer(slider: HTMLDivElement | null, clientX: number): number {

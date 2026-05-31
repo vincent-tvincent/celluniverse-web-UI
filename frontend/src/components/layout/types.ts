@@ -14,11 +14,10 @@ export type PanelVisibility = {
 export type PanelVisibilityKey = keyof PanelVisibility;
 
 export const LEFT_PANEL_KEYS = ["status", "layers", "update"] as const satisfies PanelVisibilityKey[];
-export const RIGHT_PANEL_KEYS = ["logs"] as const satisfies PanelVisibilityKey[];
 
 export const DEFAULT_PANEL_VISIBILITY: PanelVisibility = {
   status: true,
   layers: true,
   update: true,
-  logs: true,
+  logs: false,
 };

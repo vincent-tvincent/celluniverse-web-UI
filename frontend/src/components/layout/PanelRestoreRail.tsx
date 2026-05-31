@@ -1,17 +1,17 @@
-import { ChevronLeft, ChevronRight, PanelLeftOpen, PanelRightOpen } from "lucide-react";
+import { ChevronRight, PanelBottomOpen, PanelLeftOpen } from "lucide-react";
 
 type PanelRestoreRailProps = {
   leftHidden: boolean;
-  rightHidden: boolean;
+  logHidden: boolean;
   onShowLeft: () => void;
-  onShowRight: () => void;
+  onShowLog: () => void;
 };
 
 export default function PanelRestoreRail({
   leftHidden,
-  rightHidden,
+  logHidden,
   onShowLeft,
-  onShowRight,
+  onShowLog,
 }: PanelRestoreRailProps) {
   return (
     <>
@@ -27,16 +27,15 @@ export default function PanelRestoreRail({
           <ChevronRight size={19} />
         </button>
       ) : null}
-      {rightHidden ? (
+      {logHidden ? (
         <button
           type="button"
-          className="side-restore-tab right"
-          onClick={onShowRight}
+          className="side-restore-tab log"
+          onClick={onShowLog}
           title="Show log panel"
           aria-label="Show log panel"
         >
-          <ChevronLeft size={19} />
-          <PanelRightOpen size={17} />
+          <PanelBottomOpen size={18} />
         </button>
       ) : null}
     </>

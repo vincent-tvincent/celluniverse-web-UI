@@ -35,7 +35,7 @@ export default function SchedulePanel({
 
   return (
     <section className="tool-panel">
-      <PanelHeading title="Update" icon={<ListRestart size={17} />} onHide={onHide} />
+      <PanelHeading title="Update Scheduler" icon={<ListRestart size={17} />} onHide={onHide} />
       <button
         type="button"
         className={`toggle-button ${enabled ? "active" : ""}`}
