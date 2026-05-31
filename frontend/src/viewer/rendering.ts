@@ -1,6 +1,7 @@
 import { uiPalette } from "../theme/palette";
 import type { CellRecord } from "../types";
 import { getColorMap, type ColorMapId } from "./colorMaps";
+import { applyContrastLimits, DEFAULT_CONTRAST_LIMITS, type ContrastLimits } from "./contrast";
 import type { SlicePreviewData } from "./slicePreview";
 import type { VolumeData } from "./tiff";
 
@@ -11,6 +12,8 @@ export type LayerRenderOptions = {
   synthMap: ColorMapId;
   realOpacity: number;
   synthOpacity: number;
+  realContrastLimits: ContrastLimits;
+  synthContrastLimits: ContrastLimits;
 };
 
 export function composeSliceImage(
@@ -29,10 +32,10 @@ export function composeSliceImage(
   }
 
   if (options.realEnabled && real) {
-    applyBottomLayer(pixels, real, slice, options.realMap, options.realOpacity);
+    applyBottomLayer(pixels, real, slice, options.realMap, options.realOpacity, options.realContrastLimits);
   }
   if (options.synthEnabled && synth) {
-    applyOverlayLayer(pixels, synth, slice, options.synthMap, options.synthOpacity);
+    applyOverlayLayer(pixels, synth, slice, options.synthMap, options.synthOpacity, options.synthContrastLimits);
   }
 
   return new ImageData(pixels, base.width, base.height);
@@ -53,10 +56,10 @@ export function composeSlicePreviewImage(
   }
 
   if (options.realEnabled && real) {
-    applySliceBottomLayer(pixels, real, options.realMap, options.realOpacity);
+    applySliceBottomLayer(pixels, real, options.realMap, options.realOpacity, options.realContrastLimits);
   }
   if (options.synthEnabled && synth) {
-    applySliceOverlayLayer(pixels, synth, options.synthMap, options.synthOpacity);
+    applySliceOverlayLayer(pixels, synth, options.synthMap, options.synthOpacity, options.synthContrastLimits);
   }
 
   return new ImageData(pixels, base.width, base.height);
@@ -67,12 +70,13 @@ export function createLayerTextureData(
   slice: number,
   mapId: ColorMapId,
   opacity: number,
+  contrastLimits: ContrastLimits = DEFAULT_CONTRAST_LIMITS,
 ): Uint8ClampedArray {
   const map = getColorMap(mapId);
   const source = getNearestSlice(volume, slice);
   const out = new Uint8ClampedArray(volume.width * volume.height * 4);
   for (let i = 0; i < source.length; i += 1) {
-    const intensity = normalizedIntensity(volume, source[i]);
+    const intensity = applyContrastLimits(normalizedIntensity(volume, source[i]), contrastLimits);
     const [r, g, b] = map.sample(intensity);
     const offset = i * 4;
     out[offset] = Math.round(r * intensity);
@@ -143,11 +147,12 @@ function applyBottomLayer(
   slice: number,
   mapId: ColorMapId,
   opacity: number,
+  contrastLimits: ContrastLimits,
 ): void {
   const source = getNearestSlice(volume, slice);
   const map = getColorMap(mapId);
   for (let i = 0; i < source.length; i += 1) {
-    const value = normalizedIntensity(volume, source[i]);
+    const value = applyContrastLimits(normalizedIntensity(volume, source[i]), contrastLimits);
     const [r, g, b] = map.sample(value);
     const offset = i * 4;
     target[offset] = Math.round(r * value * opacity);
@@ -161,10 +166,11 @@ function applySliceBottomLayer(
   slice: SlicePreviewData,
   mapId: ColorMapId,
   opacity: number,
+  contrastLimits: ContrastLimits,
 ): void {
   const map = getColorMap(mapId);
   for (let i = 0; i < slice.pixels.length; i += 1) {
-    const value = normalizedSliceIntensity(slice, slice.pixels[i]);
+    const value = applyContrastLimits(normalizedSliceIntensity(slice, slice.pixels[i]), contrastLimits);
     const [r, g, b] = map.sample(value);
     const offset = i * 4;
     target[offset] = Math.round(r * value * opacity);
@@ -179,11 +185,12 @@ function applyOverlayLayer(
   slice: number,
   mapId: ColorMapId,
   opacity: number,
+  contrastLimits: ContrastLimits,
 ): void {
   const source = getNearestSlice(volume, slice);
   const map = getColorMap(mapId);
   for (let i = 0; i < source.length; i += 1) {
-    const value = normalizedIntensity(volume, source[i]);
+    const value = applyContrastLimits(normalizedIntensity(volume, source[i]), contrastLimits);
     const alpha = Math.max(0, Math.min(1, opacity * Math.pow(value, 0.82)));
     if (alpha <= 0.002) {
       continue;
@@ -201,10 +208,11 @@ function applySliceOverlayLayer(
   slice: SlicePreviewData,
   mapId: ColorMapId,
   opacity: number,
+  contrastLimits: ContrastLimits,
 ): void {
   const map = getColorMap(mapId);
   for (let i = 0; i < slice.pixels.length; i += 1) {
-    const value = normalizedSliceIntensity(slice, slice.pixels[i]);
+    const value = applyContrastLimits(normalizedSliceIntensity(slice, slice.pixels[i]), contrastLimits);
     const alpha = Math.max(0, Math.min(1, opacity * Math.pow(value, 0.82)));
     if (alpha <= 0.002) {
       continue;

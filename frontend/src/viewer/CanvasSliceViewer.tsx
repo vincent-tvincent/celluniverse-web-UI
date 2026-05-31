@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { uiPalette } from "../theme/palette";
 import type { CellRecord } from "../types";
 import type { ColorMapId } from "./colorMaps";
+import type { ContrastLimits } from "./contrast";
 import { composeSliceImage, composeSlicePreviewImage, drawCellOverlay, fitRect } from "./rendering";
 import type { SlicePreviewData } from "./slicePreview";
 import type { VolumeData } from "./tiff";
@@ -20,6 +21,8 @@ type Props = {
   synthMap: ColorMapId;
   realOpacity: number;
   synthOpacity: number;
+  realContrastLimits: ContrastLimits;
+  synthContrastLimits: ContrastLimits;
   onRenderStart?: () => void;
   onRenderComplete?: () => void;
 };
@@ -38,6 +41,8 @@ export default function CanvasSliceViewer({
   synthMap,
   realOpacity,
   synthOpacity,
+  realContrastLimits,
+  synthContrastLimits,
   onRenderStart,
   onRenderComplete,
 }: Props) {
@@ -76,6 +81,8 @@ export default function CanvasSliceViewer({
             synthMap,
             realOpacity,
             synthOpacity,
+            realContrastLimits,
+            synthContrastLimits,
           })
         : composeSliceImage(real, synth, slice, {
             realEnabled,
@@ -84,6 +91,8 @@ export default function CanvasSliceViewer({
             synthMap,
             realOpacity,
             synthOpacity,
+            realContrastLimits,
+            synthContrastLimits,
           });
       if (!image) {
         drawEmptyState(ctx, rect.width, rect.height);
@@ -137,6 +146,8 @@ export default function CanvasSliceViewer({
     synthMap,
     realOpacity,
     synthOpacity,
+    realContrastLimits,
+    synthContrastLimits,
     cells,
     cellsEnabled,
     baseVolume,

@@ -71,8 +71,12 @@ function App() {
     setSynthMap,
     realOpacity,
     setRealOpacity,
+    realContrastLimits,
+    setRealContrastLimits,
     synthOpacity,
     setSynthOpacity,
+    synthContrastLimits,
+    setSynthContrastLimits,
     logStream,
     setLogStream,
     autoRefreshEnabled,
@@ -252,6 +256,8 @@ function App() {
       synthMap,
       realOpacity,
       synthOpacity,
+      realContrastLimits,
+      synthContrastLimits,
       configQuery.data?.rendering.maxPixelRatio ?? 1,
       JSON.stringify(configQuery.data?.pointCloud ?? {}),
     ].join("|");
@@ -263,6 +269,7 @@ function App() {
     realEnabled,
     realMap,
     realOpacity,
+    realContrastLimits,
     realUrl,
     realVolume,
     realPointCloudQuery.data,
@@ -271,6 +278,7 @@ function App() {
     synthEnabled,
     synthMap,
     synthOpacity,
+    synthContrastLimits,
     synthUrl,
     synthVolume,
     synthPointCloudQuery.data,
@@ -302,6 +310,8 @@ function App() {
           synthMap,
           realOpacity,
           synthOpacity,
+          realContrastLimits,
+          synthContrastLimits,
         ].join("|")
       : volumeRenderKey
     : "";
@@ -518,8 +528,12 @@ function App() {
                   setSynthMap={setSynthMap}
                   realOpacity={realOpacity}
                   setRealOpacity={setRealOpacity}
+                  realContrastLimits={realContrastLimits}
+                  setRealContrastLimits={setRealContrastLimits}
                   synthOpacity={synthOpacity}
                   setSynthOpacity={setSynthOpacity}
+                  synthContrastLimits={synthContrastLimits}
+                  setSynthContrastLimits={setSynthContrastLimits}
                   onHide={() => hidePanel("layers")}
                 />
               ) : (
@@ -587,6 +601,8 @@ function App() {
                 synthMap={synthMap}
                 realOpacity={realOpacity}
                 synthOpacity={synthOpacity}
+                realContrastLimits={realContrastLimits}
+                synthContrastLimits={synthContrastLimits}
                 onRenderStart={handleSliceRenderStart}
                 onRenderComplete={handleSliceRenderComplete}
               />
@@ -604,6 +620,8 @@ function App() {
                 synthMap={synthMap}
                 realOpacity={realOpacity}
                 synthOpacity={synthOpacity}
+                realContrastLimits={realContrastLimits}
+                synthContrastLimits={synthContrastLimits}
                 maxPixelRatio={configQuery.data?.rendering.maxPixelRatio ?? 1}
                 pointCloudConfig={configQuery.data?.pointCloud}
                 onFirstRender={handleVolumeFirstRender}

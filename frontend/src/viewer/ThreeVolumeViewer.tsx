@@ -5,6 +5,7 @@ import { defaultViewerConfig, type ViewerRuntimeConfig } from "../config";
 import { uiPalette } from "../theme/palette";
 import type { CellRecord } from "../types";
 import { getColorMap, type ColorMapId } from "./colorMaps";
+import { applyContrastLimits, type ContrastLimits } from "./contrast";
 import type { PointCloudPreviewData } from "./pointCloud";
 import type { VolumeData } from "./tiff";
 
@@ -21,6 +22,8 @@ type Props = {
   synthMap: ColorMapId;
   realOpacity: number;
   synthOpacity: number;
+  realContrastLimits: ContrastLimits;
+  synthContrastLimits: ContrastLimits;
   maxPixelRatio: number;
   pointCloudConfig?: ViewerRuntimeConfig["pointCloud"];
   onFirstRender?: () => void;
@@ -60,6 +63,8 @@ export default function ThreeVolumeViewer({
   synthMap,
   realOpacity,
   synthOpacity,
+  realContrastLimits,
+  synthContrastLimits,
   maxPixelRatio,
   pointCloudConfig,
   onFirstRender,
@@ -116,6 +121,7 @@ export default function ThreeVolumeViewer({
         realPointCloud,
         realMap,
         realOpacity,
+        realContrastLimits,
         worldWidth,
         worldHeight,
         worldDepth,
@@ -123,7 +129,7 @@ export default function ThreeVolumeViewer({
         interleavePreviewLayers ? "real" : "none",
       );
     } else if (realEnabled && real) {
-      addVolumePointCloud(group, real, realMap, realOpacity, worldWidth, worldHeight, worldDepth, cloudConfig);
+      addVolumePointCloud(group, real, realMap, realOpacity, realContrastLimits, worldWidth, worldHeight, worldDepth, cloudConfig);
     }
     if (synthEnabled && synthPointCloud) {
       addPreviewPointCloud(
@@ -131,6 +137,7 @@ export default function ThreeVolumeViewer({
         synthPointCloud,
         synthMap,
         synthOpacity,
+        synthContrastLimits,
         worldWidth,
         worldHeight,
         worldDepth,
@@ -143,6 +150,7 @@ export default function ThreeVolumeViewer({
         synth,
         synthMap,
         synthOpacity,
+        synthContrastLimits,
         worldWidth,
         worldHeight,
         worldDepth,
@@ -217,6 +225,8 @@ export default function ThreeVolumeViewer({
     synthMap,
     realOpacity,
     synthOpacity,
+    realContrastLimits,
+    synthContrastLimits,
     maxPixelRatio,
     pointCloudConfig,
     onFirstRender,
@@ -348,12 +358,13 @@ function addVolumePointCloud(
   volume: VolumeData,
   colorMap: ColorMapId,
   opacity: number,
+  contrastLimits: ContrastLimits,
   worldWidth: number,
   worldHeight: number,
   worldDepth: number,
   config: ViewerRuntimeConfig["pointCloud"],
 ) {
-  const cloud = getCachedPointCloud(volume, colorMap, worldWidth, worldHeight, worldDepth, config);
+  const cloud = getCachedPointCloud(volume, colorMap, contrastLimits, worldWidth, worldHeight, worldDepth, config);
   if (!cloud.pointCount) {
     return;
   }
@@ -371,13 +382,14 @@ function addPreviewPointCloud(
   preview: PointCloudPreviewData,
   colorMap: ColorMapId,
   opacity: number,
+  contrastLimits: ContrastLimits,
   worldWidth: number,
   worldHeight: number,
   worldDepth: number,
   config: ViewerRuntimeConfig["pointCloud"],
   interleaveRole: InterleaveRole,
 ) {
-  const cloud = getCachedPreviewPointCloud(preview, colorMap, worldWidth, worldHeight, worldDepth, config, interleaveRole);
+  const cloud = getCachedPreviewPointCloud(preview, colorMap, contrastLimits, worldWidth, worldHeight, worldDepth, config, interleaveRole);
   if (!cloud.pointCount) {
     return;
   }
@@ -393,6 +405,7 @@ function addPreviewPointCloud(
 function getCachedPointCloud(
   volume: VolumeData,
   colorMap: ColorMapId,
+  contrastLimits: ContrastLimits,
   worldWidth: number,
   worldHeight: number,
   worldDepth: number,
@@ -400,6 +413,8 @@ function getCachedPointCloud(
 ): PointCloudData {
   const key = [
     colorMap,
+    contrastLimits[0].toFixed(3),
+    contrastLimits[1].toFixed(3),
     config.maxPoints,
     config.intensityPercentile,
     worldWidth.toFixed(4),
@@ -415,7 +430,7 @@ function getCachedPointCloud(
   if (cached) {
     return cached;
   }
-  const cloud = buildPointCloud(volume, colorMap, worldWidth, worldHeight, worldDepth, config);
+  const cloud = buildPointCloud(volume, colorMap, contrastLimits, worldWidth, worldHeight, worldDepth, config);
   perVolume.set(key, cloud);
   return cloud;
 }
@@ -423,6 +438,7 @@ function getCachedPointCloud(
 function getCachedPreviewPointCloud(
   preview: PointCloudPreviewData,
   colorMap: ColorMapId,
+  contrastLimits: ContrastLimits,
   worldWidth: number,
   worldHeight: number,
   worldDepth: number,
@@ -431,6 +447,8 @@ function getCachedPreviewPointCloud(
 ): PointCloudData {
   const key = [
     colorMap,
+    contrastLimits[0].toFixed(3),
+    contrastLimits[1].toFixed(3),
     config.pointSize,
     config.overlayStaggerFraction,
     interleaveRole,
@@ -447,7 +465,7 @@ function getCachedPreviewPointCloud(
   if (cached) {
     return cached;
   }
-  const cloud = buildPreviewPointCloud(preview, colorMap, worldWidth, worldHeight, worldDepth, config, interleaveRole);
+  const cloud = buildPreviewPointCloud(preview, colorMap, contrastLimits, worldWidth, worldHeight, worldDepth, config, interleaveRole);
   perPreview.set(key, cloud);
   return cloud;
 }
@@ -495,6 +513,7 @@ function createPointCloudMaterial(pointSize: number, opacity: number): THREE.Sha
 function buildPointCloud(
   volume: VolumeData,
   colorMap: ColorMapId,
+  contrastLimits: ContrastLimits,
   worldWidth: number,
   worldHeight: number,
   worldDepth: number,
@@ -526,7 +545,10 @@ function buildPointCloud(
         if (pointIndex >= maxPoints) {
           break sliceLoop;
         }
-        const intensity = Math.max(0, Math.min(1, value / Math.max(1, volume.displayMax)));
+        const intensity = applyContrastLimits(Math.max(0, Math.min(1, value / Math.max(1, volume.displayMax))), contrastLimits);
+        if (intensity <= 0.001) {
+          continue;
+        }
         const [r, g, b] = map.sample(intensity);
         const target = pointIndex * 3;
         positions[target] = (x / widthDenominator - 0.5) * worldWidth;
@@ -551,6 +573,7 @@ function buildPointCloud(
 function buildPreviewPointCloud(
   preview: PointCloudPreviewData,
   colorMap: ColorMapId,
+  contrastLimits: ContrastLimits,
   worldWidth: number,
   worldHeight: number,
   worldDepth: number,
@@ -565,9 +588,13 @@ function buildPreviewPointCloud(
   const depthDenominator = Math.max(1, preview.depth - 1);
   const checkerStep = Math.max(1, preview.xyStep || 1);
 
+  let outputPointIndex = 0;
   for (let pointIndex = 0; pointIndex < preview.pointCount; pointIndex += 1) {
-    const target = pointIndex * 3;
-    const intensity = Math.max(0, Math.min(1, preview.intensity[pointIndex] ?? 0));
+    const intensity = applyContrastLimits(Math.max(0, Math.min(1, preview.intensity[pointIndex] ?? 0)), contrastLimits);
+    if (intensity <= 0.001) {
+      continue;
+    }
+    const target = outputPointIndex * 3;
     const [r, g, b] = map.sample(intensity);
     const stagger = getInterleavedPointOffset(
       preview,
@@ -585,9 +612,14 @@ function buildPreviewPointCloud(
     colors[target] = (r / 255) * brightness;
     colors[target + 1] = (g / 255) * brightness;
     colors[target + 2] = (b / 255) * brightness;
+    outputPointIndex += 1;
   }
 
-  return { positions, colors, pointCount: preview.pointCount };
+  return {
+    positions: positions.slice(0, outputPointIndex * 3),
+    colors: colors.slice(0, outputPointIndex * 3),
+    pointCount: outputPointIndex,
+  };
 }
 
 function getInterleavedPointOffset(

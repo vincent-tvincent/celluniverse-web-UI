@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { ColorMapId } from "./viewer/colorMaps";
+import { clampContrastLimits, DEFAULT_CLEAN_CONTRAST_LIMITS, DEFAULT_CONTRAST_LIMITS, type ContrastLimits } from "./viewer/contrast";
 
 export type ViewMode = "slice" | "volume";
 export type RefreshUnit = "seconds" | "minutes" | "hours";
@@ -16,6 +17,8 @@ type ViewerState = {
   synthMap: ColorMapId;
   realOpacity: number;
   synthOpacity: number;
+  realContrastLimits: ContrastLimits;
+  synthContrastLimits: ContrastLimits;
   logStream: "stdout" | "stderr";
   autoRefreshEnabled: boolean;
   autoRefreshSeconds: number;
@@ -29,6 +32,8 @@ type ViewerState = {
   setSynthMap: (map: ColorMapId) => void;
   setRealOpacity: (opacity: number) => void;
   setSynthOpacity: (opacity: number) => void;
+  setRealContrastLimits: (limits: ContrastLimits) => void;
+  setSynthContrastLimits: (limits: ContrastLimits) => void;
   setLogStream: (stream: "stdout" | "stderr") => void;
   setAutoRefreshEnabled: (enabled: boolean) => void;
   setAutoRefreshSeconds: (seconds: number) => void;
@@ -43,10 +48,12 @@ export const useViewerStore = create<ViewerState>((set) => ({
   realEnabled: true,
   synthEnabled: true,
   cellsEnabled: false,
-  realMap: "gray",
-  synthMap: "magenta",
-  realOpacity: 1,
-  synthOpacity: 1,
+  realMap: "viridis",
+  synthMap: "magma",
+  realOpacity: 0.5,
+  synthOpacity: 0.5,
+  realContrastLimits: DEFAULT_CLEAN_CONTRAST_LIMITS,
+  synthContrastLimits: DEFAULT_CONTRAST_LIMITS,
   logStream: "stdout",
   autoRefreshEnabled: true,
   autoRefreshSeconds: 5,
@@ -65,6 +72,14 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setSynthOpacity: (synthOpacity) => set((state) => {
     const opacity = clampOpacity(synthOpacity);
     return state.synthOpacity === opacity ? state : { synthOpacity: opacity };
+  }),
+  setRealContrastLimits: (realContrastLimits) => set((state) => {
+    const limits = clampContrastLimits(realContrastLimits);
+    return areContrastLimitsEqual(state.realContrastLimits, limits) ? state : { realContrastLimits: limits };
+  }),
+  setSynthContrastLimits: (synthContrastLimits) => set((state) => {
+    const limits = clampContrastLimits(synthContrastLimits);
+    return areContrastLimitsEqual(state.synthContrastLimits, limits) ? state : { synthContrastLimits: limits };
   }),
   setLogStream: (logStream) => set((state) => (state.logStream === logStream ? state : { logStream })),
   setAutoRefreshEnabled: (autoRefreshEnabled) => (
@@ -91,4 +106,8 @@ function clampOpacity(opacity: number): number {
     return 1;
   }
   return Math.max(0, Math.min(1, opacity));
+}
+
+function areContrastLimitsEqual(a: ContrastLimits, b: ContrastLimits): boolean {
+  return a[0] === b[0] && a[1] === b[1];
 }
