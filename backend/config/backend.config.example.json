@@ -42,7 +42,13 @@
   "preview": {
     "defaultFormat": "png-stack",
     "enableOmeZarr": false,
-    "enable3D": false
+    "enable3D": false,
+    "pointCloud": {
+      "maxPoints": 250000,
+      "maxSlices": 48,
+      "realIntensityPercentile": 35.0,
+      "synthIntensityPercentile": 20.0
+    }
   },
   "limits": {
     "maxConcurrentJobs": 1,

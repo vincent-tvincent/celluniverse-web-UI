@@ -21,6 +21,8 @@ from celluniverse_backend.datasets.service import DatasetService, DatasetValidat
 from celluniverse_backend.jobs.manager import JobManager
 from celluniverse_backend.parsers.cells import parse_cells_csv
 from celluniverse_backend.preview.manifest import build_preview_artifacts
+from celluniverse_backend.preview.pointcloud import ensure_pointcloud_preview
+from celluniverse_backend.preview.slice import ensure_slice_preview
 from celluniverse_backend.runners.engine import inspect_engine
 from celluniverse_backend.security.paths import PathSecurityError, safe_child_path, validate_input_reference
 from celluniverse_backend.storage.json_store import read_json
@@ -224,7 +226,10 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         manifest_path = job_dir / "preview" / "manifest.json"
         if not manifest_path.exists():
             return build_preview_artifacts(job_dir, job_id)
-        return read_json(manifest_path, {})
+        manifest = read_json(manifest_path, {})
+        if not _manifest_has_pointcloud_layers(manifest):
+            return build_preview_artifacts(job_dir, job_id)
+        return manifest
 
     @router.get("/jobs/{job_id}/frames/{frame}/cells")
     def get_frame_cells(job_id: str, frame: int, _: None = Depends(require_auth)) -> list[dict[str, Any]]:
@@ -241,6 +246,55 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         if not lineage_path.exists():
             build_preview_artifacts(job_dir, job_id)
         return read_json(lineage_path, {"nodes": [], "edges": []})
+
+    @router.get("/jobs/{job_id}/pointcloud/{layer}/{frame}.cupc")
+    def get_pointcloud(job_id: str, layer: str, frame: int, _: None = Depends(require_auth)) -> FileResponse:
+        if layer not in {"real", "synth"}:
+            raise HTTPException(status_code=404, detail="point-cloud layer not found")
+        job_dir = job_dir_or_404(job_id)
+        source_tiff = job_dir / "output" / "tiff" / layer / f"{frame}.tif"
+        if not source_tiff.exists() or not source_tiff.is_file():
+            raise HTTPException(status_code=404, detail="source TIFF not found")
+        preview_path = job_dir / "preview" / "pointcloud" / layer / f"{frame}.cupc"
+        point_cloud_config = config.preview.pointCloud
+        intensity_percentile = (
+            point_cloud_config.synthIntensityPercentile
+            if layer == "synth"
+            else point_cloud_config.realIntensityPercentile
+        )
+        try:
+            ensure_pointcloud_preview(
+                source_tiff,
+                preview_path,
+                max_points=point_cloud_config.maxPoints,
+                max_slices=point_cloud_config.maxSlices,
+                intensity_percentile=intensity_percentile,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return FileResponse(preview_path, media_type="application/octet-stream")
+
+    @router.get("/jobs/{job_id}/slices/{layer}/{frame}/{slice_index}.cusl")
+    def get_slice_preview(
+        job_id: str,
+        layer: str,
+        frame: int,
+        slice_index: int,
+        max_xy: int = Query(default=512, ge=64, le=4096),
+        _: None = Depends(require_auth),
+    ) -> FileResponse:
+        if layer not in {"real", "synth"}:
+            raise HTTPException(status_code=404, detail="slice layer not found")
+        job_dir = job_dir_or_404(job_id)
+        source_tiff = job_dir / "output" / "tiff" / layer / f"{frame}.tif"
+        if not source_tiff.exists() or not source_tiff.is_file():
+            raise HTTPException(status_code=404, detail="source TIFF not found")
+        preview_path = job_dir / "preview" / "slices" / layer / str(frame) / f"z{slice_index}_xy{max_xy}.cusl"
+        try:
+            ensure_slice_preview(source_tiff, preview_path, slice_index=slice_index, max_xy=max_xy)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return FileResponse(preview_path, media_type="application/octet-stream")
 
     @router.get("/jobs/{job_id}/artifacts")
     def get_artifacts(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
@@ -278,6 +332,16 @@ def _tail_lines(path: Path, count: int) -> list[str]:
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         lines = handle.readlines()
     return [line.rstrip("\n") for line in lines[-count:]]
+
+
+def _manifest_has_pointcloud_layers(manifest: dict[str, Any]) -> bool:
+    for frame in manifest.get("frames", []):
+        layers = frame.get("layers", {})
+        if layers.get("realTiff") and not layers.get("realPointCloud"):
+            return False
+        if layers.get("synthTiff") and not layers.get("synthPointCloud"):
+            return False
+    return True
 
 
 def _build_zip(job_dir: Path, zip_path: Path) -> None:

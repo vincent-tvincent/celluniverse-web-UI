@@ -1,0 +1,19 @@
+{
+  "preview": {
+    "maxXY": 512,
+    "maxSlices": 48,
+    "preloadConcurrency": 1
+  },
+  "rendering": {
+    "maxPixelRatio": 1
+  },
+  "pointCloud": {
+    "maxPoints": 120000,
+    "intensityPercentile": 35,
+    "pointSize": 5,
+    "realOpacity": 0.95,
+    "synthOpacityScale": 0.55,
+    "zCompression": 1,
+    "overlayStaggerFraction": 0.38
+  }
+}

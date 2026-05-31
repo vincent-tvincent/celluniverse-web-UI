@@ -61,10 +61,18 @@ class UploadsConfig(BaseModel):
     allowedTiffExtensions: list[str] = Field(default_factory=lambda: [".tif", ".tiff"])
 
 
+class PointCloudPreviewConfig(BaseModel):
+    maxPoints: int = 250_000
+    maxSlices: int = 48
+    realIntensityPercentile: float = 35.0
+    synthIntensityPercentile: float = 20.0
+
+
 class PreviewConfig(BaseModel):
     defaultFormat: Literal["png-stack", "ome-zarr"] = "png-stack"
     enableOmeZarr: bool = False
     enable3D: bool = False
+    pointCloud: PointCloudPreviewConfig = Field(default_factory=PointCloudPreviewConfig)
 
 
 class LimitsConfig(BaseModel):

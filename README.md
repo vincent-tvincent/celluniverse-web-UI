@@ -17,7 +17,7 @@ deployment notes are in:
 
 [backend/README.md](backend/README.md)
 
-Quick local start:
+Backend quick local start:
 
 ```bash
 cd backend
@@ -40,6 +40,34 @@ Verify:
 curl -sS http://127.0.0.1:8765/api/health
 curl -sS http://127.0.0.1:8765/api/engine/status
 ```
+
+## Frontend Debug Server
+
+The first frontend implementation is a live 2D/3D job viewer for generated TIFF
+outputs and cell overlays.
+
+[frontend/README.md](frontend/README.md)
+
+Frontend quick local start after the backend is running:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Default frontend URL:
+
+```text
+http://127.0.0.1:5173
+```
+
+Frontend preview limits are configured in:
+
+[frontend/public/viewer-config.json](frontend/public/viewer-config.json)
+
+This file controls the browser preview resolution and sampled Z-plane count
+without changing the original exported TIFF files.
 
 ## Planning Docs
 

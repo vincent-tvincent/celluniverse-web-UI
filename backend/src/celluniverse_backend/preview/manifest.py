@@ -43,10 +43,18 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
                 "format": "tiff",
                 "url": f"/api/jobs/{job_id}/files/output/tiff/real/{frame}.tif",
             }
+            layers["realPointCloud"] = {
+                "format": "point-cloud-v1",
+                "url": f"/api/jobs/{job_id}/pointcloud/real/{frame}.cupc",
+            }
         if synth_tiff.exists():
             layers["synthTiff"] = {
                 "format": "tiff",
                 "url": f"/api/jobs/{job_id}/files/output/tiff/synth/{frame}.tif",
+            }
+            layers["synthPointCloud"] = {
+                "format": "point-cloud-v1",
+                "url": f"/api/jobs/{job_id}/pointcloud/synth/{frame}.cupc",
             }
         if frame in cell_frames:
             layers["cells"] = {
