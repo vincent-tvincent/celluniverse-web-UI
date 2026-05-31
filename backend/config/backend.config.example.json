@@ -1,0 +1,69 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8765,
+    "publicBaseUrl": "http://127.0.0.1:8765",
+    "apiPrefix": "/api",
+    "corsAllowedOrigins": [
+      "http://127.0.0.1:5173",
+      "http://localhost:5173"
+    ],
+    "eventsTransport": "sse"
+  },
+  "celluniverse": {
+    "celluniverseCppRoot": "/home/blue-lobster/p2/UCI/CS295p/CellUniverse/C++",
+    "buildDir": "build",
+    "threads": "auto"
+  },
+  "runtime": {
+    "runtimeRoot": "/home/blue-lobster/p2/UCI/CS295p/celluniverse-web-UI/backend/runtime",
+    "maxConcurrentJobs": 1,
+    "keepJobDays": 14
+  },
+  "security": {
+    "allowedInputRoots": [
+      "/home/blue-lobster/p2/UCI/CS295p/images",
+      "/run/media/blue-lobster/disk3/celluniverse_inputs",
+      "/home/blue-lobster/p2/UCI/CS295p/celluniverse-web-UI/backend/runtime/uploads"
+    ],
+    "allowedInitialCsvRoots": [
+      "/home/blue-lobster/p2/UCI/CS295p/CellUniverse/C++/config",
+      "/home/blue-lobster/p2/UCI/CS295p/celluniverse-web-UI/backend/runtime/uploads"
+    ],
+    "allowedConfigRoots": [
+      "/home/blue-lobster/p2/UCI/CS295p/CellUniverse/C++/config",
+      "/home/blue-lobster/p2/UCI/CS295p/celluniverse-web-UI/backend/runtime/uploads"
+    ]
+  },
+  "uploads": {
+    "maxUploadSizeMb": 500,
+    "allowedTiffExtensions": [".tif", ".tiff"]
+  },
+  "preview": {
+    "defaultFormat": "png-stack",
+    "enableOmeZarr": false,
+    "enable3D": false
+  },
+  "limits": {
+    "maxConcurrentJobs": 1,
+    "maxFrameCount": 200,
+    "maxUploadSizeMb": 500,
+    "maxRuntimeMinutes": 720,
+    "maxThreads": 32
+  },
+  "debugLogs": {
+    "enabled": true,
+    "roots": [
+      "/run/media/blue-lobster/disk3/celluniverse_output"
+    ],
+    "patterns": [
+      "**/*.log",
+      "**/*.txt",
+      "**/logs/*"
+    ]
+  },
+  "auth": {
+    "mode": "none",
+    "tokenEnv": "CELLUNIVERSE_WEB_TOKEN"
+  }
+}

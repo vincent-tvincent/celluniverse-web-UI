@@ -1,0 +1,39 @@
+{
+  "id": "debug-basic",
+  "label": "Debug Basic",
+  "baseConfig": "config/config.yaml",
+  "groups": [
+    {
+      "id": "runtime",
+      "label": "Runtime",
+      "fields": [
+        {
+          "path": "simulation.parallel_threads",
+          "label": "Parallel Threads",
+          "type": "integer",
+          "min": 1,
+          "max": 128,
+          "default": 32,
+          "ui": "number"
+        },
+        {
+          "path": "simulation.preprocess_mode",
+          "label": "Preprocessing",
+          "type": "enum",
+          "values": ["none", "n2v2"],
+          "default": "none",
+          "ui": "select"
+        },
+        {
+          "path": "pipeline.mode",
+          "label": "Pipeline",
+          "type": "enum",
+          "values": ["standard", "cell_lumen_fusion", "preprocess_only"],
+          "default": "standard",
+          "ui": "select",
+          "virtual": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,313 @@
+{
+  "info": {
+    "name": "CellUniverse Backend API",
+    "description": "Debug collection for the CellUniverse FastAPI backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8765" },
+    { "key": "moduleId", "value": "debug-basic" },
+    { "key": "rootId", "value": "root_0" },
+    { "key": "browsePath", "value": "" },
+    { "key": "jobId", "value": "job_xxx" },
+    { "key": "frame", "value": "0" },
+    { "key": "filePath", "value": "output/cells.csv" },
+    { "key": "uploadId", "value": "upload_xxx" },
+    { "key": "datasetUploadId", "value": "upload_dataset_id" },
+    { "key": "initialCsvUploadId", "value": "upload_initial_csv_id" },
+    { "key": "configYamlUploadId", "value": "upload_config_yaml_id" },
+    { "key": "localInputPath", "value": "/home/blue-lobster/p2/UCI/CS295p/images/Fluo-N3DH-CE/01/t%03d.tif" },
+    { "key": "localInitialCsvPath", "value": "/home/blue-lobster/p2/UCI/CS295p/CellUniverse/C++/config/embryo/initial_embryo_0.csv" },
+    { "key": "datasetFile1", "value": "/absolute/path/to/t000.tif" },
+    { "key": "datasetFile2", "value": "/absolute/path/to/t001.tif" },
+    { "key": "initialCsvFile", "value": "/absolute/path/to/initial.csv" },
+    { "key": "configYamlFile", "value": "/absolute/path/to/config.yaml" }
+  ],
+  "item": [
+    {
+      "name": "Health And Engine",
+      "item": [
+        {
+          "name": "GET health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/health"
+          }
+        },
+        {
+          "name": "GET client config",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/client-config"
+          }
+        },
+        {
+          "name": "GET engine status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/engine/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Config",
+      "item": [
+        {
+          "name": "GET exposed parameter modules",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/config/exposed-parameter-modules"
+          }
+        },
+        {
+          "name": "GET exposed parameter module",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/config/exposed-parameter-modules/{{moduleId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Datasets",
+      "item": [
+        {
+          "name": "GET dataset roots",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/datasets/roots"
+          }
+        },
+        {
+          "name": "GET browse dataset root",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/datasets/browse?rootId={{rootId}}&path={{browsePath}}"
+          }
+        },
+        {
+          "name": "POST validate local dataset",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"inputPath\": \"{{localInputPath}}\",\n  \"firstFrame\": 0,\n  \"lastFrame\": 1\n}"
+            },
+            "url": "{{baseUrl}}/api/datasets/validate-local"
+          }
+        },
+        {
+          "name": "POST upload dataset TIFFs",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "files", "type": "file", "src": "{{datasetFile1}}" },
+                { "key": "files", "type": "file", "src": "{{datasetFile2}}" }
+              ]
+            },
+            "url": "{{baseUrl}}/api/datasets/uploads"
+          }
+        },
+        {
+          "name": "GET uploads",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/datasets/uploads"
+          }
+        },
+        {
+          "name": "GET upload by id",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/datasets/uploads/{{uploadId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Uploads",
+      "item": [
+        {
+          "name": "POST upload initial CSV",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "{{initialCsvFile}}" }
+              ]
+            },
+            "url": "{{baseUrl}}/api/uploads/initial-csv"
+          }
+        },
+        {
+          "name": "POST upload config YAML",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "{{configYamlFile}}" }
+              ]
+            },
+            "url": "{{baseUrl}}/api/uploads/config-yaml"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        {
+          "name": "POST create job from local paths",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"debug fluo 0-1\",\n  \"type\": \"tracking\",\n  \"inputPath\": \"{{localInputPath}}\",\n  \"firstFrame\": 0,\n  \"lastFrame\": 1,\n  \"initialCsvPath\": \"{{localInitialCsvPath}}\",\n  \"parameterModuleId\": \"{{moduleId}}\",\n  \"overrides\": {\n    \"simulation.parallel_threads\": 8,\n    \"simulation.preprocess_mode\": \"none\",\n    \"pipeline.mode\": \"standard\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/jobs"
+          }
+        },
+        {
+          "name": "POST create job from uploaded files",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"uploaded debug run\",\n  \"type\": \"tracking\",\n  \"datasetId\": \"{{datasetUploadId}}\",\n  \"firstFrame\": 0,\n  \"lastFrame\": 1,\n  \"initialCsvUploadId\": \"{{initialCsvUploadId}}\",\n  \"parameterModuleId\": \"{{moduleId}}\",\n  \"overrides\": {\n    \"simulation.parallel_threads\": 8,\n    \"simulation.preprocess_mode\": \"none\",\n    \"pipeline.mode\": \"standard\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/jobs"
+          }
+        },
+        {
+          "name": "POST create job from uploaded files with config",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"uploaded debug run with config\",\n  \"type\": \"tracking\",\n  \"datasetId\": \"{{datasetUploadId}}\",\n  \"firstFrame\": 0,\n  \"lastFrame\": 1,\n  \"initialCsvUploadId\": \"{{initialCsvUploadId}}\",\n  \"configYamlUploadId\": \"{{configYamlUploadId}}\",\n  \"parameterModuleId\": \"{{moduleId}}\",\n  \"overrides\": {\n    \"simulation.parallel_threads\": 8,\n    \"simulation.preprocess_mode\": \"none\",\n    \"pipeline.mode\": \"standard\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/jobs"
+          }
+        },
+        {
+          "name": "GET jobs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs"
+          }
+        },
+        {
+          "name": "GET job",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}"
+          }
+        },
+        {
+          "name": "POST cancel job",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/cancel"
+          }
+        },
+        {
+          "name": "GET job stdout logs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/logs?stream=stdout&tail=500"
+          }
+        },
+        {
+          "name": "GET job stderr logs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/logs?stream=stderr&tail=500"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Viewer And Artifacts",
+      "item": [
+        {
+          "name": "GET manifest",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/manifest"
+          }
+        },
+        {
+          "name": "GET frame cells",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/frames/{{frame}}/cells"
+          }
+        },
+        {
+          "name": "GET lineage",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/lineage"
+          }
+        },
+        {
+          "name": "GET artifacts",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/artifacts"
+          }
+        },
+        {
+          "name": "GET job file",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/files/{{filePath}}"
+          }
+        },
+        {
+          "name": "GET job download zip",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/download"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SSE Events",
+      "item": [
+        {
+          "name": "GET global events",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/events"
+          }
+        },
+        {
+          "name": "GET job events",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/jobs/{{jobId}}/events"
+          }
+        }
+      ]
+    }
+  ]
+}

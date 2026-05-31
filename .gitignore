@@ -206,6 +206,14 @@ tempCodeRunnerFile.py
 # Ruff stuff:
 .ruff_cache/
 
+# CellUniverse web backend local runtime/config
+backend/runtime/*
+!backend/runtime/.gitkeep
+backend/config/backend.config.local.json
+backend/config/backend.config.production.json
+backend/config/backend.config.*.json
+!backend/config/backend.config.example.json
+
 # PyPI configuration file
 .pypirc
 
