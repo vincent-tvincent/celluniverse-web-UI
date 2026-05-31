@@ -83,7 +83,7 @@ Current 3D live viewer development state with the resizable monitoring layout,
 frame-offset controls, layer controls, color-map previews, and color-map themed
 opacity/contrast sliders.
 
-![Live viewer UI snapshot](docs/assets/dev-log/live-viewer-colormap-controls-2026-05-31.png)
+![Live viewer UI snapshot](docs/Screenshot%20From%202026-05-31%2014-53-04.png)
 
 ## Postman API Debugging
 
