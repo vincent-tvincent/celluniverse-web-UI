@@ -1,3 +1,4 @@
+import { uiPalette } from "../theme/palette";
 import type { CellRecord } from "../types";
 import { getColorMap, type ColorMapId } from "./colorMaps";
 import type { SlicePreviewData } from "./slicePreview";
@@ -108,12 +109,12 @@ export function drawCellOverlay(
 
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, Number(cell.theta_z) || 0, 0, Math.PI * 2);
-    ctx.strokeStyle = cell.isTrash ? "rgba(255, 118, 94, 0.88)" : "rgba(246, 229, 130, 0.95)";
+    ctx.strokeStyle = cell.isTrash ? uiPalette.cellTrashStroke : uiPalette.cellNormalStroke;
     ctx.stroke();
 
     ctx.beginPath();
     ctx.arc(cx, cy, 2.2, 0, Math.PI * 2);
-    ctx.fillStyle = cell.isTrash ? "rgba(255, 118, 94, 0.95)" : "rgba(246, 229, 130, 0.95)";
+    ctx.fillStyle = cell.isTrash ? uiPalette.cellTrashFill : uiPalette.cellNormalFill;
     ctx.fill();
   }
   ctx.restore();

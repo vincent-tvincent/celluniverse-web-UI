@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { defaultViewerConfig, type ViewerRuntimeConfig } from "../config";
+import { uiPalette } from "../theme/palette";
 import type { CellRecord } from "../types";
 import { getColorMap, type ColorMapId } from "./colorMaps";
 import type { PointCloudPreviewData } from "./pointCloud";
@@ -74,7 +75,7 @@ export default function ThreeVolumeViewer({
     }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#070a0f");
+    scene.background = new THREE.Color(uiPalette.viewerBackground);
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -156,7 +157,7 @@ export default function ThreeVolumeViewer({
       new THREE.Vector3(-worldWidth / 2, -worldHeight / 2, -worldDepth / 2),
       new THREE.Vector3(worldWidth / 2, worldHeight / 2, worldDepth / 2),
     );
-    const helper = new THREE.Box3Helper(box, new THREE.Color("#506070"));
+    const helper = new THREE.Box3Helper(box, new THREE.Color(uiPalette.volumeBox));
     group.add(helper);
 
     const resizeObserver = new ResizeObserver(() => {
@@ -660,7 +661,7 @@ function addCells(
   for (const cell of cells) {
     const geometry = new THREE.SphereGeometry(1, 18, 12);
     const material = new THREE.MeshBasicMaterial({
-      color: cell.isTrash ? "#ff765e" : "#f6e582",
+      color: cell.isTrash ? uiPalette.cellTrash : uiPalette.cellNormal,
       wireframe: true,
       transparent: true,
       opacity: cell.isTrash ? 0.34 : 0.42,

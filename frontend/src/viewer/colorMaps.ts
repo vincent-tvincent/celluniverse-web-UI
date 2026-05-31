@@ -1,13 +1,6 @@
-export type ColorMapId =
-  | "gray"
-  | "cyan"
-  | "magenta"
-  | "green"
-  | "yellow"
-  | "red"
-  | "blue"
-  | "viridis"
-  | "magma";
+import { colorMapDefinitions, type ColorMapId } from "../theme/palette";
+
+export type { ColorMapId } from "../theme/palette";
 
 export type ColorMap = {
   id: ColorMapId;
@@ -59,54 +52,7 @@ function createMap(id: ColorMapId, label: string, stops: [number, string][]): Co
 }
 
 export const colorMaps: ColorMap[] = [
-  createMap("gray", "Gray", [
-    [0, "#000000"],
-    [1, "#f7f7f2"],
-  ]),
-  createMap("cyan", "Cyan", [
-    [0, "#001011"],
-    [0.55, "#00a7b8"],
-    [1, "#d8ffff"],
-  ]),
-  createMap("magenta", "Magenta", [
-    [0, "#12000f"],
-    [0.55, "#c43b9c"],
-    [1, "#ffe0f8"],
-  ]),
-  createMap("green", "Green", [
-    [0, "#031008"],
-    [0.58, "#3bb56d"],
-    [1, "#e4ffe8"],
-  ]),
-  createMap("yellow", "Yellow", [
-    [0, "#151000"],
-    [0.55, "#d6b83d"],
-    [1, "#fff9ca"],
-  ]),
-  createMap("red", "Red", [
-    [0, "#160300"],
-    [0.55, "#d64a3b"],
-    [1, "#ffe1d4"],
-  ]),
-  createMap("blue", "Blue", [
-    [0, "#020617"],
-    [0.55, "#3a7df0"],
-    [1, "#dce9ff"],
-  ]),
-  createMap("viridis", "Viridis", [
-    [0, "#440154"],
-    [0.25, "#31688e"],
-    [0.5, "#35b779"],
-    [0.75, "#fde725"],
-    [1, "#fff9bf"],
-  ]),
-  createMap("magma", "Magma", [
-    [0, "#000004"],
-    [0.28, "#51127c"],
-    [0.58, "#b73779"],
-    [0.8, "#fc8961"],
-    [1, "#fcfdbf"],
-  ]),
+  ...colorMapDefinitions.map((definition) => createMap(definition.id, definition.label, definition.stops)),
 ];
 
 export function getColorMap(id: ColorMapId): ColorMap {

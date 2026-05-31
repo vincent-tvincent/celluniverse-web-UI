@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { uiPalette } from "../theme/palette";
 import type { CellRecord } from "../types";
 import type { ColorMapId } from "./colorMaps";
 import { composeSliceImage, composeSlicePreviewImage, drawCellOverlay, fitRect } from "./rendering";
@@ -64,7 +65,7 @@ export default function CanvasSliceViewer({
       canvas.height = Math.max(1, Math.floor(rect.height * pixelRatio));
       ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       ctx.clearRect(0, 0, rect.width, rect.height);
-      ctx.fillStyle = "#070a0f";
+      ctx.fillStyle = uiPalette.viewerBackground;
       ctx.fillRect(0, 0, rect.width, rect.height);
 
       const image = baseSlice
@@ -149,7 +150,7 @@ export default function CanvasSliceViewer({
 
 function drawEmptyState(ctx: CanvasRenderingContext2D, width: number, height: number) {
   ctx.save();
-  ctx.fillStyle = "rgba(255,255,255,0.58)";
+  ctx.fillStyle = uiPalette.emptyText;
   ctx.font = "500 14px Inter, system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("Waiting for TIFF output", width / 2, height / 2);
