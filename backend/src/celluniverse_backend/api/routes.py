@@ -39,6 +39,12 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         if authorization != f"Bearer {token}":
             raise HTTPException(status_code=401, detail="invalid token")
 
+    def job_dir_or_404(job_id: str) -> Path:
+        try:
+            return jobs.job_dir(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+
     @router.get("/health")
     def health(_: None = Depends(require_auth)) -> dict[str, str]:
         return {"status": "ok"}
@@ -177,7 +183,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         tail: int = Query(default=500, ge=1, le=5000),
         _: None = Depends(require_auth),
     ) -> dict[str, Any]:
-        log_path = jobs.job_dir(job_id) / f"{stream}.log"
+        log_path = job_dir_or_404(job_id) / f"{stream}.log"
         if not log_path.exists():
             return {"jobId": job_id, "stream": stream, "lines": []}
         return {"jobId": job_id, "stream": stream, "lines": _tail_lines(log_path, tail)}
@@ -193,7 +199,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
 
     @router.get("/jobs/{job_id}/events")
     def job_events(job_id: str, _: None = Depends(require_auth)) -> StreamingResponse:
-        event_path = jobs.job_dir(job_id) / "events.ndjson"
+        event_path = job_dir_or_404(job_id) / "events.ndjson"
 
         def gen() -> Iterable[str]:
             offset = 0
@@ -214,7 +220,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
 
     @router.get("/jobs/{job_id}/manifest")
     def get_manifest(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
-        job_dir = jobs.job_dir(job_id)
+        job_dir = job_dir_or_404(job_id)
         manifest_path = job_dir / "preview" / "manifest.json"
         if not manifest_path.exists():
             return build_preview_artifacts(job_dir, job_id)
@@ -222,7 +228,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
 
     @router.get("/jobs/{job_id}/frames/{frame}/cells")
     def get_frame_cells(job_id: str, frame: int, _: None = Depends(require_auth)) -> list[dict[str, Any]]:
-        job_dir = jobs.job_dir(job_id)
+        job_dir = job_dir_or_404(job_id)
         cells_path = job_dir / "preview" / "frames" / f"t{frame:03d}" / "cells.json"
         if not cells_path.exists():
             build_preview_artifacts(job_dir, job_id)
@@ -230,7 +236,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
 
     @router.get("/jobs/{job_id}/lineage")
     def get_lineage(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
-        job_dir = jobs.job_dir(job_id)
+        job_dir = job_dir_or_404(job_id)
         lineage_path = job_dir / "preview" / "lineage.json"
         if not lineage_path.exists():
             build_preview_artifacts(job_dir, job_id)
@@ -238,7 +244,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
 
     @router.get("/jobs/{job_id}/artifacts")
     def get_artifacts(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
-        job_dir = jobs.job_dir(job_id)
+        job_dir = job_dir_or_404(job_id)
         artifacts_path = job_dir / "artifacts.json"
         if not artifacts_path.exists():
             build_preview_artifacts(job_dir, job_id)
@@ -247,7 +253,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
     @router.get("/jobs/{job_id}/files/{file_path:path}")
     def get_job_file(job_id: str, file_path: str, _: None = Depends(require_auth)) -> FileResponse:
         try:
-            path = safe_child_path(jobs.job_dir(job_id), file_path)
+            path = safe_child_path(job_dir_or_404(job_id), file_path)
         except PathSecurityError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not path.exists() or not path.is_file():
@@ -256,7 +262,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
 
     @router.get("/jobs/{job_id}/download")
     def download_job(job_id: str, _: None = Depends(require_auth)) -> FileResponse:
-        job_dir = jobs.job_dir(job_id)
+        job_dir = job_dir_or_404(job_id)
         if not (job_dir / "status.json").exists():
             raise HTTPException(status_code=404, detail="job not found")
         downloads = job_dir / "downloads"

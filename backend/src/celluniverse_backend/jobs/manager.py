@@ -65,7 +65,7 @@ class JobManager:
 
         job_id = f"job_{uuid.uuid4().hex[:12]}"
         label = request.label or f"{request.type.value} {request.firstFrame}-{request.lastFrame}"
-        job_dir = self.job_dir(job_id)
+        job_dir = self.job_dir(job_id, create=True)
         (job_dir / "output").mkdir(parents=True, exist_ok=True)
         (job_dir / "input").mkdir(parents=True, exist_ok=True)
         write_json_atomic(job_dir / "request.json", request.model_dump(mode="json"))
@@ -98,7 +98,10 @@ class JobManager:
         return statuses
 
     def get_status(self, job_id: str) -> dict[str, Any]:
-        return read_json(self.job_dir(job_id) / "status.json", {})
+        try:
+            return read_json(self.job_dir(job_id) / "status.json", {})
+        except KeyError:
+            return {}
 
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         status = self.get_status(job_id)
@@ -126,12 +129,15 @@ class JobManager:
         self._event(job_id, "job.cancelled", {"jobId": job_id})
         return status
 
-    def job_dir(self, job_id: str) -> Path:
+    def job_dir(self, job_id: str, create: bool = False) -> Path:
         if "/" in job_id or "\\" in job_id or not job_id.startswith("job_"):
             raise KeyError(job_id)
         path = self.jobs_root / job_id
-        if not path.exists() and job_id not in [p.name for p in self.jobs_root.glob("job_*")]:
+        if create:
             path.mkdir(parents=True, exist_ok=True)
+            return path
+        if not path.exists() or not path.is_dir():
+            raise KeyError(job_id)
         return path
 
     def _worker_loop(self) -> None:
