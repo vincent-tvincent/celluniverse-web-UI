@@ -1395,10 +1395,8 @@ input[type="range"] {
   width: 28px;
   height: 26px;
   padding: 0;
-  display: inline-grid;
-  grid-template-columns: 1fr 1fr;
+  display: grid;
   place-items: center;
-  gap: 0;
   color: var(--color-text-muted);
   background: transparent;
   border: 0;

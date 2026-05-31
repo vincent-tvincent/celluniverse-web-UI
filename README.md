@@ -75,6 +75,16 @@ Current backend/frontend integration plan:
 
 [docs/current-architecture-plan.md](docs/current-architecture-plan.md)
 
+## Temporary Development Log
+
+### 2026-05-31 Live Viewer UI Snapshot
+
+Current 3D live viewer development state with the resizable monitoring layout,
+frame-offset controls, layer controls, color-map previews, and color-map themed
+opacity/contrast sliders.
+
+![Live viewer UI snapshot](docs/assets/dev-log/live-viewer-colormap-controls-2026-05-31.png)
+
 ## Postman API Debugging
 
 Import this collection into Postman:

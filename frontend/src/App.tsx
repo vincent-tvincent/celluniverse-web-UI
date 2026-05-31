@@ -51,7 +51,7 @@ const MIN_PANEL_WIDTH = 200;
 const MAX_PANEL_WIDTH = 520;
 const MIN_LOG_HEIGHT = 150;
 const MAX_LOG_HEIGHT = 520;
-const RENDER_LOADING_DELAY_MS = 2500;
+const VIEWER_LOADING_OVERLAY_DELAY_MS = 10000;
 
 function App() {
   const queryClient = useQueryClient();
@@ -99,7 +99,7 @@ function App() {
   const [frameNotice, setFrameNotice] = useState<FrameUpdateNotice | null>(null);
   const [manualSliceOverride, setManualSliceOverride] = useState(false);
   const [sliceRenderPending, setSliceRenderPending] = useState(false);
-  const [delayedRenderPending, setDelayedRenderPending] = useState(false);
+  const [delayedViewerLoading, setDelayedViewerLoading] = useState(false);
   const [panelLayout, setPanelLayout] = useState(readPanelLayout);
   const [panelVisibility, setPanelVisibility] = useState(readPanelVisibility);
   const [hoverSample, setHoverSample] = useState<ViewerHoverSample | null>(null);
@@ -358,15 +358,6 @@ function App() {
   }, [mode, realSliceQuery.data, realVolume, slice, synthSliceQuery.data, synthVolume]);
 
   useEffect(() => {
-    setDelayedRenderPending(false);
-    if (!activeRenderPending) {
-      return undefined;
-    }
-    const timeout = window.setTimeout(() => setDelayedRenderPending(true), RENDER_LOADING_DELAY_MS);
-    return () => window.clearTimeout(timeout);
-  }, [activeRenderPending, renderDelayKey]);
-
-  useEffect(() => {
     setManualSliceOverride(false);
   }, [selectedJobId, activeFrameNumber]);
 
@@ -404,8 +395,27 @@ function App() {
       ? activeSliceWaiting || slicePreviewLoading
       : preload.isLoading || pointCloudLoading || activeVolumeWaiting
   );
-  const renderLoadingOverlayVisible = activeRenderPending && delayedRenderPending;
-  const viewerLoadingOverlayVisible = nonRenderLoadingOverlayVisible || renderLoadingOverlayVisible;
+  const rawViewerLoadingOverlayVisible = nonRenderLoadingOverlayVisible || activeRenderPending;
+  const viewerLoadingDelayKey = [
+    mode,
+    selectedJobId,
+    activeFrameNumber ?? "",
+    slice,
+    realSliceUrl ?? "",
+    synthSliceUrl ?? "",
+    realPointCloudUrl ?? "",
+    synthPointCloudUrl ?? "",
+    renderDelayKey,
+  ].join("|");
+  useEffect(() => {
+    setDelayedViewerLoading(false);
+    if (!rawViewerLoadingOverlayVisible) {
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setDelayedViewerLoading(true), VIEWER_LOADING_OVERLAY_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [rawViewerLoadingOverlayVisible, viewerLoadingDelayKey]);
+  const viewerLoadingOverlayVisible = rawViewerLoadingOverlayVisible && delayedViewerLoading;
   const workspaceStyle = {
     "--left-panel-width": `${panelLayout.left}px`,
     "--right-panel-width": `${panelLayout.right}px`,
@@ -685,7 +695,7 @@ function App() {
                 previewLoadingLabel={mode === "slice" ? "loading 2D slice" : "loading point cloud preview"}
                 previewLoadingDetail={mode === "slice" ? "fetching backend slice preview" : "downloading compact backend preview"}
                 activeFrameWaiting={mode === "slice" ? activeSliceWaiting : activeVolumeWaiting}
-                renderPending={renderLoadingOverlayVisible}
+                renderPending={activeRenderPending}
                 renderLabel={mode === "slice" ? "rendering 2D slice" : "rendering 3D view"}
                 renderDetail={mode === "slice" ? "drawing selected z slice" : "building point cloud"}
               />
