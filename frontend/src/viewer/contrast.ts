@@ -1,7 +1,7 @@
 export type ContrastLimits = [number, number];
 
 export const DEFAULT_CONTRAST_LIMITS: ContrastLimits = [0, 1];
-export const DEFAULT_CLEAN_CONTRAST_LIMITS: ContrastLimits = [0.05, 1];
+export const DEFAULT_CLEAN_CONTRAST_LIMITS: ContrastLimits = [0.025, 1];
 
 export function clampContrastLimits(limits: ContrastLimits): ContrastLimits {
   const low = clamp01(limits[0]);

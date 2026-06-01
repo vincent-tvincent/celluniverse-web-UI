@@ -65,6 +65,9 @@ export type CellRecord = {
   aRadius: number;
   bRadius: number;
   cRadius: number;
+  thetaX?: number;
+  thetaY?: number;
+  thetaZ?: number;
   theta_x?: number;
   theta_y?: number;
   theta_z?: number;

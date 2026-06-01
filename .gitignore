@@ -209,6 +209,10 @@ tempCodeRunnerFile.py
 # CellUniverse web backend local runtime/config
 backend/runtime/*
 !backend/runtime/.gitkeep
+!backend/runtime/jobs/
+backend/runtime/jobs/*
+!backend/runtime/jobs/job_demo_fluo_cancelled/
+!backend/runtime/jobs/job_demo_fluo_cancelled/**
 backend/config/backend.config.local.json
 backend/config/backend.config.production.json
 backend/config/backend.config.*.json

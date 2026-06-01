@@ -53,7 +53,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   realOpacity: 0.5,
   synthOpacity: 0.5,
   realContrastLimits: DEFAULT_CLEAN_CONTRAST_LIMITS,
-  synthContrastLimits: DEFAULT_CONTRAST_LIMITS,
+  synthContrastLimits: DEFAULT_CLEAN_CONTRAST_LIMITS,
   logStream: "stdout",
   autoRefreshEnabled: true,
   autoRefreshSeconds: 5,

@@ -1,0 +1,357 @@
+{
+  "axes": [
+    "t",
+    "z",
+    "y",
+    "x"
+  ],
+  "fixture": {
+    "note": "Committed debug fixture keeps cached pointcloud previews for frames 0-19 and omits large TIFF stacks.",
+    "portable": true,
+    "sourceOutput": "/run/media/blue-lobster/disk3/celluniverse_output/outputs_fluo/output_ubuntu_fluo_0-200_trash_labeled_20260531_051107"
+  },
+  "frames": [
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/0/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/0.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/0.cupc"
+        }
+      },
+      "t": 0
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/1/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/1.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/1.cupc"
+        }
+      },
+      "t": 1
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/2/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/2.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/2.cupc"
+        }
+      },
+      "t": 2
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/3/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/3.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/3.cupc"
+        }
+      },
+      "t": 3
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/4/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/4.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/4.cupc"
+        }
+      },
+      "t": 4
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/5/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/5.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/5.cupc"
+        }
+      },
+      "t": 5
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/6/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/6.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/6.cupc"
+        }
+      },
+      "t": 6
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/7/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/7.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/7.cupc"
+        }
+      },
+      "t": 7
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/8/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/8.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/8.cupc"
+        }
+      },
+      "t": 8
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/9/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/9.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/9.cupc"
+        }
+      },
+      "t": 9
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/10/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/10.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/10.cupc"
+        }
+      },
+      "t": 10
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/11/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/11.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/11.cupc"
+        }
+      },
+      "t": 11
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/12/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/12.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/12.cupc"
+        }
+      },
+      "t": 12
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/13/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/13.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/13.cupc"
+        }
+      },
+      "t": 13
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/14/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/14.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/14.cupc"
+        }
+      },
+      "t": 14
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/15/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/15.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/15.cupc"
+        }
+      },
+      "t": 15
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/16/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/16.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/16.cupc"
+        }
+      },
+      "t": 16
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/17/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/17.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/17.cupc"
+        }
+      },
+      "t": 17
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/18/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/18.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/18.cupc"
+        }
+      },
+      "t": 18
+    },
+    {
+      "layers": {
+        "cells": {
+          "format": "ellipsoid-json",
+          "url": "/api/jobs/job_demo_fluo_cancelled/frames/19/cells"
+        },
+        "realPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/19.cupc"
+        },
+        "synthPointCloud": {
+          "format": "point-cloud-v1",
+          "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/19.cupc"
+        }
+      },
+      "t": 19
+    }
+  ],
+  "jobId": "job_demo_fluo_cancelled",
+  "lineage": "/api/jobs/job_demo_fluo_cancelled/lineage"
+}

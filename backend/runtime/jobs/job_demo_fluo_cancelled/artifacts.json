@@ -1,0 +1,60 @@
+{
+  "artifacts": [
+    {
+      "download": true,
+      "id": "request",
+      "kind": "metadata",
+      "label": "Request",
+      "path": "request.json"
+    },
+    {
+      "download": true,
+      "id": "status",
+      "kind": "metadata",
+      "label": "Status",
+      "path": "status.json"
+    },
+    {
+      "download": true,
+      "id": "effective_config",
+      "kind": "config",
+      "label": "Effective Config",
+      "path": "effective-config.yaml"
+    },
+    {
+      "download": true,
+      "id": "stdout_log",
+      "kind": "log",
+      "label": "Standard Output Log",
+      "path": "stdout.log"
+    },
+    {
+      "download": true,
+      "id": "stderr_log",
+      "kind": "log",
+      "label": "Standard Error Log",
+      "path": "stderr.log"
+    },
+    {
+      "download": true,
+      "id": "cells_csv",
+      "kind": "table",
+      "label": "Cells CSV",
+      "path": "output/cells.csv"
+    },
+    {
+      "download": true,
+      "id": "manifest",
+      "kind": "preview",
+      "label": "Preview Manifest",
+      "path": "preview/manifest.json"
+    },
+    {
+      "download": true,
+      "id": "lineage",
+      "kind": "lineage",
+      "label": "Lineage Graph",
+      "path": "preview/lineage.json"
+    }
+  ]
+}

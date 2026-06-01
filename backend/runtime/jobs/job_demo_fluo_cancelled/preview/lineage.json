@@ -1,0 +1,212 @@
+{
+  "edges": [
+    {
+      "source": "cell_1",
+      "target": "cell_10",
+      "type": "division"
+    },
+    {
+      "source": "cell_1",
+      "target": "cell_11",
+      "type": "division"
+    },
+    {
+      "source": "cell_0",
+      "target": "cell_00",
+      "type": "division"
+    },
+    {
+      "source": "cell_0",
+      "target": "cell_01",
+      "type": "division"
+    },
+    {
+      "source": "cell_2",
+      "target": "cell_20",
+      "type": "division"
+    },
+    {
+      "source": "cell_2",
+      "target": "cell_21",
+      "type": "division"
+    },
+    {
+      "source": "cell_3",
+      "target": "cell_30",
+      "type": "division"
+    },
+    {
+      "source": "cell_3",
+      "target": "cell_31",
+      "type": "division"
+    },
+    {
+      "source": "cell_10",
+      "target": "cell_100",
+      "type": "division"
+    },
+    {
+      "source": "cell_10",
+      "target": "cell_101",
+      "type": "division"
+    },
+    {
+      "source": "cell_11",
+      "target": "cell_110",
+      "type": "division"
+    },
+    {
+      "source": "cell_11",
+      "target": "cell_111",
+      "type": "division"
+    },
+    {
+      "source": "cell_01",
+      "target": "cell_010",
+      "type": "division"
+    },
+    {
+      "source": "cell_01",
+      "target": "cell_011",
+      "type": "division"
+    },
+    {
+      "source": "cell_00",
+      "target": "cell_000",
+      "type": "division"
+    },
+    {
+      "source": "cell_00",
+      "target": "cell_001",
+      "type": "division"
+    }
+  ],
+  "nodes": [
+    {
+      "firstFrame": 0,
+      "id": "cell_0",
+      "lastFrame": 3
+    },
+    {
+      "firstFrame": 0,
+      "id": "cell_1",
+      "lastFrame": 3
+    },
+    {
+      "firstFrame": 0,
+      "id": "cell_2",
+      "lastFrame": 6
+    },
+    {
+      "firstFrame": 0,
+      "id": "cell_3",
+      "lastFrame": 10
+    },
+    {
+      "firstFrame": 0,
+      "id": "trash_1",
+      "lastFrame": 19
+    },
+    {
+      "firstFrame": 0,
+      "id": "trash_2",
+      "lastFrame": 6
+    },
+    {
+      "firstFrame": 4,
+      "id": "cell_00",
+      "lastFrame": 17,
+      "parent": "cell_0"
+    },
+    {
+      "firstFrame": 4,
+      "id": "cell_01",
+      "lastFrame": 17,
+      "parent": "cell_0"
+    },
+    {
+      "firstFrame": 4,
+      "id": "cell_10",
+      "lastFrame": 17,
+      "parent": "cell_1"
+    },
+    {
+      "firstFrame": 4,
+      "id": "cell_11",
+      "lastFrame": 17,
+      "parent": "cell_1"
+    },
+    {
+      "firstFrame": 7,
+      "id": "cell_20",
+      "lastFrame": 19,
+      "parent": "cell_2"
+    },
+    {
+      "firstFrame": 7,
+      "id": "cell_21",
+      "lastFrame": 19,
+      "parent": "cell_2"
+    },
+    {
+      "firstFrame": 11,
+      "id": "cell_30",
+      "lastFrame": 19,
+      "parent": "cell_3"
+    },
+    {
+      "firstFrame": 11,
+      "id": "cell_31",
+      "lastFrame": 19,
+      "parent": "cell_3"
+    },
+    {
+      "firstFrame": 18,
+      "id": "cell_000",
+      "lastFrame": 19,
+      "parent": "cell_00"
+    },
+    {
+      "firstFrame": 18,
+      "id": "cell_001",
+      "lastFrame": 19,
+      "parent": "cell_00"
+    },
+    {
+      "firstFrame": 18,
+      "id": "cell_010",
+      "lastFrame": 19,
+      "parent": "cell_01"
+    },
+    {
+      "firstFrame": 18,
+      "id": "cell_011",
+      "lastFrame": 19,
+      "parent": "cell_01"
+    },
+    {
+      "firstFrame": 18,
+      "id": "cell_100",
+      "lastFrame": 19,
+      "parent": "cell_10"
+    },
+    {
+      "firstFrame": 18,
+      "id": "cell_101",
+      "lastFrame": 19,
+      "parent": "cell_10"
+    },
+    {
+      "firstFrame": 18,
+      "id": "cell_110",
+      "lastFrame": 19,
+      "parent": "cell_11"
+    },
+    {
+      "firstFrame": 18,
+      "id": "cell_111",
+      "lastFrame": 19,
+      "parent": "cell_11"
+    }
+  ]
+}

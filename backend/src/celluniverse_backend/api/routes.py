@@ -252,10 +252,12 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         if layer not in {"real", "synth"}:
             raise HTTPException(status_code=404, detail="point-cloud layer not found")
         job_dir = job_dir_or_404(job_id)
+        preview_path = job_dir / "preview" / "pointcloud" / layer / f"{frame}.cupc"
+        if preview_path.exists() and preview_path.is_file():
+            return FileResponse(preview_path, media_type="application/octet-stream")
         source_tiff = job_dir / "output" / "tiff" / layer / f"{frame}.tif"
         if not source_tiff.exists() or not source_tiff.is_file():
             raise HTTPException(status_code=404, detail="source TIFF not found")
-        preview_path = job_dir / "preview" / "pointcloud" / layer / f"{frame}.cupc"
         point_cloud_config = config.preview.pointCloud
         intensity_percentile = (
             point_cloud_config.synthIntensityPercentile

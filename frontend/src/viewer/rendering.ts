@@ -112,7 +112,7 @@ export function drawCellOverlay(
     const ry = Math.max(2, (Number(cell.bRadius) / imageSize.height) * imageRect.height * scale);
 
     ctx.beginPath();
-    ctx.ellipse(cx, cy, rx, ry, Number(cell.theta_z) || 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, rx, ry, getCellAngle(cell.thetaZ, cell.theta_z), 0, Math.PI * 2);
     ctx.strokeStyle = cell.isTrash ? uiPalette.cellTrashStroke : uiPalette.cellNormalStroke;
     ctx.stroke();
 
@@ -122,6 +122,11 @@ export function drawCellOverlay(
     ctx.fill();
   }
   ctx.restore();
+}
+
+function getCellAngle(camelCaseValue: number | undefined, snakeCaseValue: number | undefined): number {
+  const value = Number(camelCaseValue ?? snakeCaseValue ?? 0);
+  return Number.isFinite(value) ? value : 0;
 }
 
 export function fitRect(

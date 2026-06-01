@@ -1,0 +1,5 @@
+# Demo job generated from an existing CellUniverse output run.
+source_output: /run/media/blue-lobster/disk3/celluniverse_output/outputs_fluo/output_ubuntu_fluo_0-200_trash_labeled_20260531_051107
+final_status: cancelled
+first_frame: 0
+last_frame: 200

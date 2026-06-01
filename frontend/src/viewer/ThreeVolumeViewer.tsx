@@ -826,6 +826,44 @@ function addCells(
       Math.max(0.01, ((Number(cell.bRadius) || 1) / cellSpaceHeight) * worldHeight),
       Math.max(0.01, ((Number(cell.cRadius) || 1) / zScale) * worldDepth),
     );
+    mesh.quaternion.copy(getCellWorldRotation(cell));
     group.add(mesh);
   }
+}
+
+function getCellWorldRotation(cell: CellRecord): THREE.Quaternion {
+  const thetaX = getCellAngle(cell.thetaX, cell.theta_x);
+  const thetaY = getCellAngle(cell.thetaY, cell.theta_y);
+  const thetaZ = getCellAngle(cell.thetaZ, cell.theta_z);
+  const cx = Math.cos(thetaX);
+  const sx = Math.sin(thetaX);
+  const cy = Math.cos(thetaY);
+  const sy = Math.sin(thetaY);
+  const cz = Math.cos(thetaZ);
+  const sz = Math.sin(thetaZ);
+
+  // CellUniverse exports R = Rz * Ry * Rx in image coordinates. The viewer
+  // maps image Y-down to world Y-up, so convert with S * R * S where S flips Y.
+  const r00 = cz * cy;
+  const r01 = cz * sy * sx - sz * cx;
+  const r02 = cz * sy * cx + sz * sx;
+  const r10 = sz * cy;
+  const r11 = sz * sy * sx + cz * cx;
+  const r12 = sz * sy * cx - cz * sx;
+  const r20 = -sy;
+  const r21 = cy * sx;
+  const r22 = cy * cx;
+
+  const matrix = new THREE.Matrix4().set(
+    r00, -r01, r02, 0,
+    -r10, r11, -r12, 0,
+    r20, -r21, r22, 0,
+    0, 0, 0, 1,
+  );
+  return new THREE.Quaternion().setFromRotationMatrix(matrix);
+}
+
+function getCellAngle(camelCaseValue: number | undefined, snakeCaseValue: number | undefined): number {
+  const value = Number(camelCaseValue ?? snakeCaseValue ?? 0);
+  return Number.isFinite(value) ? value : 0;
 }
