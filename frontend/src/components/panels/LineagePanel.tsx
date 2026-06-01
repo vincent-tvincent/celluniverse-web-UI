@@ -1,10 +1,10 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { EyeOff, GitBranch, LocateFixed, Minus, Plus, RefreshCw } from "lucide-react";
 import type { LineageFrameSnapshot, LineageGraph, LineageLayout, LineageNode } from "../../types";
@@ -99,23 +99,50 @@ export default function LineagePanel({
     }
   };
 
-  const handleWheel = (event: ReactWheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
+  useEffect(() => {
     const svg = svgRef.current;
     if (!svg) {
-      return;
+      return undefined;
     }
-    const factor = event.deltaY < 0 ? 1.12 : 0.89;
-    const nextScale = clamp(scale * factor, 0.18, 5.5);
-    const cursor = svgPointFromCursor(svg, event.clientX, event.clientY, extent);
-    const worldX = (cursor.x - pan.x) / scale;
-    const worldY = (cursor.y - pan.y) / scale;
-    setScale(nextScale);
-    setPan({
-      x: cursor.x - worldX * nextScale,
-      y: cursor.y - worldY * nextScale,
-    });
-  };
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const factor = wheelZoomFactor(event);
+      const nextScale = clamp(scale * factor, 0.18, 5.5);
+      const cursor = svgPointFromCursor(svg, event.clientX, event.clientY, extent);
+      const worldX = (cursor.x - pan.x) / scale;
+      const worldY = (cursor.y - pan.y) / scale;
+      setScale(nextScale);
+      setPan({
+        x: cursor.x - worldX * nextScale,
+        y: cursor.y - worldY * nextScale,
+      });
+    };
+
+    svg.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      svg.removeEventListener("wheel", handleWheel);
+    };
+  }, [extent, pan.x, pan.y, scale]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) {
+      return undefined;
+    }
+    const stopBrowserGesture = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    svg.addEventListener("gesturestart", stopBrowserGesture, { passive: false });
+    svg.addEventListener("gesturechange", stopBrowserGesture, { passive: false });
+    return () => {
+      svg.removeEventListener("gesturestart", stopBrowserGesture);
+      svg.removeEventListener("gesturechange", stopBrowserGesture);
+    };
+  }, []);
 
   const resetView = () => {
     setPan({ x: 0, y: 0 });
@@ -150,7 +177,6 @@ export default function LineagePanel({
           onPointerMove={handlePointerMove}
           onPointerUp={stopPan}
           onPointerCancel={stopPan}
-          onWheel={handleWheel}
         >
           <g transform={`translate(${pan.x} ${pan.y}) scale(${scale})`}>
             {sampledRings.map((ring) => (
@@ -356,4 +382,19 @@ function svgPointFromCursor(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function wheelZoomFactor(event: WheelEvent): number {
+  const deltaPixels = clamp(wheelDeltaPixels(event), -180, 180);
+  return Math.exp(-deltaPixels * 0.0012);
+}
+
+function wheelDeltaPixels(event: WheelEvent): number {
+  if (event.deltaMode === 1) {
+    return event.deltaY * 32;
+  }
+  if (event.deltaMode === 2) {
+    return event.deltaY * window.innerHeight;
+  }
+  return event.deltaY;
 }
