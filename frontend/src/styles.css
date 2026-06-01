@@ -50,10 +50,9 @@ button {
 .top-bar {
   min-height: 72px;
   padding: 14px 18px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(270px, 1fr) auto minmax(270px, 1fr);
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
   gap: 18px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-glass-strong);
@@ -94,11 +93,13 @@ button {
 }
 
 .job-select-row {
+  grid-column: 2;
   display: grid;
-  grid-template-columns: auto minmax(150px, 250px) minmax(150px, 280px) 38px;
+  grid-template-columns: auto minmax(180px, 260px) minmax(220px, 320px) 38px;
   align-items: center;
   gap: 9px;
-  flex: 1 1 480px;
+  justify-self: center;
+  width: min(100%, 690px);
   min-width: 0;
 }
 
@@ -1265,6 +1266,29 @@ input[type="range"] {
   font-variant-numeric: tabular-nums;
 }
 
+.interaction-hint {
+  z-index: 3;
+  min-height: 28px;
+  padding: 6px 9px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  background: var(--surface-badge);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  font-size: 11px;
+  line-height: 1.25;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.viewer-interaction-hint {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  max-width: min(360px, calc(100% - 28px));
+}
+
 .log-dock-resizer {
   grid-area: log-resizer;
   display: grid;
@@ -1445,6 +1469,13 @@ input[type="range"] {
   color: var(--color-text-strong);
   background: var(--surface-hover);
   border-color: var(--border-accent);
+}
+
+.lineage-interaction-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  max-width: min(420px, calc(100% - 20px));
 }
 
 .lineage-empty {
@@ -1778,11 +1809,14 @@ input[type="range"] {
 
   .top-bar {
     align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .job-select-row {
+    grid-column: 1;
     grid-template-columns: auto minmax(140px, 1fr) minmax(140px, 1fr) 38px;
+    justify-self: stretch;
+    width: 100%;
   }
 
   .workspace {

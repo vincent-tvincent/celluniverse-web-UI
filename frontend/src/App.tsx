@@ -753,6 +753,11 @@ function App() {
               height={readoutHeight}
               hoverSample={hoverSample}
             />
+            <div className="interaction-hint viewer-interaction-hint">
+              {mode === "slice"
+                ? "2D: hover to sample brightness"
+                : "3D: drag to rotate, wheel to zoom, right-drag to pan"}
+            </div>
             <LoadBadge
               manifestLoading={viewerMetadataLoading}
               preload={preload}

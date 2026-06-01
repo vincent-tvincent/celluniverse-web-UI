@@ -208,6 +208,9 @@ export default function LineagePanel({
             <LocateFixed size={14} />
           </button>
         </div>
+        <div className="interaction-hint lineage-interaction-hint">
+          Right-drag to move, wheel to zoom, click a node
+        </div>
         {error ? <div className="lineage-empty">Lineage unavailable</div> : null}
         {!error && !visibleLayoutNodes.length ? <div className="lineage-empty">No lineage data at t{frame}</div> : null}
         {selectedNode ? (

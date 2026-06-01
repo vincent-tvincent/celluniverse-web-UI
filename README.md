@@ -77,6 +77,30 @@ Current backend/frontend integration plan:
 
 ## Temporary Development Log
 
+### 2026-06-01 Live Viewer And Lineage UI Snapshot
+
+Current viewer-page development state with the portable demo job loaded. The
+page now combines the live 3D point-cloud viewer, color-map themed layer
+controls, contrast-limit controls, responsive frame-offset navigation, and the
+new disk-shaped lineage tree panel in one resizable monitoring workspace.
+
+Important progress in this snapshot:
+
+- Added a right-side lineage tree panel with disk-shaped temporal layout,
+  frame-ring guides, colored roots, node labels, pan/zoom interaction, and
+  cursor-centered zooming.
+- Added lineage-to-viewer interaction: a lineage node can route the 3D viewer
+  to the cell's frame and focus region, with a selected-cell outline layer.
+- Improved 3D viewer controls with real/synthetic opacity, contrast limits,
+  color-map previews, and color-map themed sliders.
+- Added responsive frame-offset buttons that keep a readable minimum size and
+  reduce the visible offset range instead of collapsing.
+- Added a portable cancelled demo job with cached point-cloud previews and
+  downsampled 2D TIFF previews so both 3D and 2D viewer paths can be tested
+  without committing full-resolution TIFF stacks.
+
+![Live viewer and lineage UI snapshot](docs/Screenshot%20From%202026-06-01%2010-12-06.png)
+
 ### 2026-05-31 Live Viewer UI Snapshot
 
 Current 3D live viewer development state with the resizable monitoring layout,
