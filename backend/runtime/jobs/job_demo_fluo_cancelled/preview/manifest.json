@@ -6,7 +6,7 @@
     "x"
   ],
   "fixture": {
-    "note": "Committed debug fixture keeps cached pointcloud previews for frames 0-19 and omits large TIFF stacks.",
+    "note": "Committed debug fixture keeps cached pointcloud previews and downsampled 2D TIFF previews for frames 0-19; full-resolution TIFF stacks are intentionally omitted.",
     "portable": true,
     "sourceOutput": "/run/media/blue-lobster/disk3/celluniverse_output/outputs_fluo/output_ubuntu_fluo_0-200_trash_labeled_20260531_051107"
   },
@@ -21,9 +21,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/0.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/0.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/0.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/0.tif"
         }
       },
       "t": 0
@@ -38,9 +46,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/1.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/1.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/1.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/1.tif"
         }
       },
       "t": 1
@@ -55,9 +71,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/2.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/2.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/2.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/2.tif"
         }
       },
       "t": 2
@@ -72,9 +96,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/3.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/3.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/3.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/3.tif"
         }
       },
       "t": 3
@@ -89,9 +121,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/4.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/4.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/4.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/4.tif"
         }
       },
       "t": 4
@@ -106,9 +146,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/5.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/5.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/5.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/5.tif"
         }
       },
       "t": 5
@@ -123,9 +171,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/6.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/6.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/6.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/6.tif"
         }
       },
       "t": 6
@@ -140,9 +196,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/7.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/7.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/7.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/7.tif"
         }
       },
       "t": 7
@@ -157,9 +221,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/8.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/8.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/8.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/8.tif"
         }
       },
       "t": 8
@@ -174,9 +246,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/9.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/9.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/9.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/9.tif"
         }
       },
       "t": 9
@@ -191,9 +271,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/10.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/10.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/10.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/10.tif"
         }
       },
       "t": 10
@@ -208,9 +296,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/11.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/11.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/11.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/11.tif"
         }
       },
       "t": 11
@@ -225,9 +321,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/12.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/12.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/12.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/12.tif"
         }
       },
       "t": 12
@@ -242,9 +346,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/13.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/13.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/13.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/13.tif"
         }
       },
       "t": 13
@@ -259,9 +371,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/14.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/14.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/14.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/14.tif"
         }
       },
       "t": 14
@@ -276,9 +396,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/15.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/15.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/15.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/15.tif"
         }
       },
       "t": 15
@@ -293,9 +421,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/16.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/16.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/16.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/16.tif"
         }
       },
       "t": 16
@@ -310,9 +446,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/17.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/17.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/17.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/17.tif"
         }
       },
       "t": 17
@@ -327,9 +471,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/18.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/18.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/18.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/18.tif"
         }
       },
       "t": 18
@@ -344,9 +496,17 @@
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/real/19.cupc"
         },
+        "realTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/real/19.tif"
+        },
         "synthPointCloud": {
           "format": "point-cloud-v1",
           "url": "/api/jobs/job_demo_fluo_cancelled/pointcloud/synth/19.cupc"
+        },
+        "synthTiff": {
+          "format": "tiff",
+          "url": "/api/jobs/job_demo_fluo_cancelled/files/output/tiff/synth/19.tif"
         }
       },
       "t": 19

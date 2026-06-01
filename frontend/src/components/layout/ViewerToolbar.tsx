@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ViewMode } from "../../store";
 
 const MAX_FRAME_OFFSET_BUTTONS = 100;
+const MIN_FRAME_OFFSET_BUTTON_WIDTH = 44;
+const FRAME_OFFSET_BUTTON_GAP = 4;
 
 type ViewerToolbarProps = {
   mode: ViewMode;
@@ -32,12 +34,14 @@ export default function ViewerToolbar({
   const [selectedFrameOffset, setSelectedFrameOffset] = useState(0);
   const [draftSlice, setDraftSlice] = useState(slice);
   const sliceInputRef = useRef<HTMLInputElement | null>(null);
+  const frameOffsetStripRef = useRef<HTMLDivElement | null>(null);
   const sliceCommitTimerRef = useRef(0);
   const pendingSliceRef = useRef(slice);
+  const [frameOffsetButtonLimit, setFrameOffsetButtonLimit] = useState(MAX_FRAME_OFFSET_BUTTONS);
   const draftFrame = frames[draftFrameIndex] ?? frame;
   const frameOffsets = useMemo(
-    () => buildFrameOffsets(frameOffsetBaseIndex, maxFrameIndex),
-    [frameOffsetBaseIndex, maxFrameIndex],
+    () => buildFrameOffsets(frameOffsetBaseIndex, maxFrameIndex, frameOffsetButtonLimit),
+    [frameOffsetBaseIndex, frameOffsetButtonLimit, maxFrameIndex],
   );
 
   useEffect(() => {
@@ -56,6 +60,35 @@ export default function ViewerToolbar({
   }, [slice]);
 
   useEffect(() => () => window.clearTimeout(sliceCommitTimerRef.current), []);
+
+  useLayoutEffect(() => {
+    const strip = frameOffsetStripRef.current;
+    if (!strip) {
+      return undefined;
+    }
+
+    const updateLimit = (width: number) => {
+      const nextLimit = Math.max(
+        1,
+        Math.min(
+          MAX_FRAME_OFFSET_BUTTONS,
+          Math.floor((Math.max(0, width) + FRAME_OFFSET_BUTTON_GAP) / (MIN_FRAME_OFFSET_BUTTON_WIDTH + FRAME_OFFSET_BUTTON_GAP)),
+        ),
+      );
+      setFrameOffsetButtonLimit((current) => (current === nextLimit ? current : nextLimit));
+    };
+
+    updateLimit(strip.getBoundingClientRect().width);
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        updateLimit(entry.contentRect.width);
+      }
+    });
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (draftFrameIndex > maxFrameIndex) {
@@ -180,9 +213,9 @@ export default function ViewerToolbar({
           <ChevronRight size={16} />
         </button>
         <div
+          ref={frameOffsetStripRef}
           className="frame-offset-strip"
           aria-label="Frame offset shortcuts"
-          style={{ "--frame-offset-count": frameOffsets.length } as CSSProperties}
         >
           {frameOffsets.map((offset) => {
             const targetIndex = frameOffsetBaseIndex + offset;
@@ -250,25 +283,41 @@ export default function ViewerToolbar({
   );
 }
 
-function buildFrameOffsets(baseIndex: number, maxFrameIndex: number): number[] {
+function buildFrameOffsets(baseIndex: number, maxFrameIndex: number, buttonLimit: number): number[] {
   if (maxFrameIndex <= 0) {
     return [0];
   }
-  const minOffset = -Math.max(0, baseIndex);
-  const maxOffset = Math.max(0, maxFrameIndex - baseIndex);
+  let minOffset = -Math.max(0, baseIndex);
+  let maxOffset = Math.max(0, maxFrameIndex - baseIndex);
   const total = maxOffset - minOffset + 1;
-  if (total <= MAX_FRAME_OFFSET_BUTTONS) {
+  const limit = Math.max(1, Math.min(MAX_FRAME_OFFSET_BUTTONS, Math.floor(buttonLimit)));
+  if (total <= limit) {
     return range(minOffset, maxOffset);
   }
 
-  const left = Math.floor((MAX_FRAME_OFFSET_BUTTONS - 1) / 2);
-  let start = Math.max(minOffset, -left);
-  let end = start + MAX_FRAME_OFFSET_BUTTONS - 1;
-  if (end > maxOffset) {
-    end = maxOffset;
-    start = end - MAX_FRAME_OFFSET_BUTTONS + 1;
+  while (maxOffset - minOffset + 1 > limit) {
+    const negativeCount = Math.abs(Math.min(0, minOffset));
+    const positiveCount = Math.max(0, maxOffset);
+
+    if (negativeCount > positiveCount && minOffset < 0) {
+      minOffset += 1;
+    } else if (positiveCount > negativeCount && maxOffset > 0) {
+      maxOffset -= 1;
+    } else if (minOffset < 0 && maxOffset > 0) {
+      minOffset += 1;
+      if (maxOffset - minOffset + 1 > limit) {
+        maxOffset -= 1;
+      }
+    } else if (maxOffset > 0) {
+      maxOffset -= 1;
+    } else if (minOffset < 0) {
+      minOffset += 1;
+    } else {
+      break;
+    }
   }
-  return range(start, end);
+
+  return range(minOffset, maxOffset);
 }
 
 function range(start: number, end: number): number[] {

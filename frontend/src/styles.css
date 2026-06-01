@@ -1063,14 +1063,14 @@ input[type="range"] {
   grid-column: 1 / -1;
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(var(--frame-offset-count, 1), minmax(0, 1fr));
-  gap: 3px;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  gap: 4px;
   padding-top: 2px;
   overflow: hidden;
 }
 
 .frame-offset-button {
-  min-width: 0;
+  min-width: 44px;
   height: 24px;
   display: inline-grid;
   place-items: center;
