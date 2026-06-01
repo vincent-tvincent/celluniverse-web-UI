@@ -1,212 +1,1062 @@
 {
+  "activeByFrame": {
+    "0": [
+      "cell_0",
+      "cell_1",
+      "cell_2",
+      "cell_3"
+    ],
+    "1": [
+      "cell_0",
+      "cell_1",
+      "cell_2",
+      "cell_3"
+    ],
+    "10": [
+      "cell_00",
+      "cell_01",
+      "cell_3",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21"
+    ],
+    "11": [
+      "cell_00",
+      "cell_01",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21",
+      "cell_30",
+      "cell_31"
+    ],
+    "12": [
+      "cell_00",
+      "cell_01",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21",
+      "cell_30",
+      "cell_31"
+    ],
+    "13": [
+      "cell_00",
+      "cell_01",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21",
+      "cell_30",
+      "cell_31"
+    ],
+    "14": [
+      "cell_00",
+      "cell_01",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21",
+      "cell_30",
+      "cell_31"
+    ],
+    "15": [
+      "cell_00",
+      "cell_01",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21",
+      "cell_30",
+      "cell_31"
+    ],
+    "16": [
+      "cell_00",
+      "cell_01",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21",
+      "cell_30",
+      "cell_31"
+    ],
+    "17": [
+      "cell_00",
+      "cell_01",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21",
+      "cell_30",
+      "cell_31"
+    ],
+    "18": [
+      "cell_000",
+      "cell_001",
+      "cell_010",
+      "cell_011",
+      "cell_20",
+      "cell_21",
+      "cell_30",
+      "cell_31",
+      "cell_100",
+      "cell_101",
+      "cell_110",
+      "cell_111"
+    ],
+    "19": [
+      "cell_000",
+      "cell_001",
+      "cell_010",
+      "cell_011",
+      "cell_20",
+      "cell_21",
+      "cell_30",
+      "cell_31",
+      "cell_100",
+      "cell_101",
+      "cell_110",
+      "cell_111"
+    ],
+    "2": [
+      "cell_0",
+      "cell_1",
+      "cell_2",
+      "cell_3"
+    ],
+    "3": [
+      "cell_0",
+      "cell_1",
+      "cell_2",
+      "cell_3"
+    ],
+    "4": [
+      "cell_00",
+      "cell_01",
+      "cell_2",
+      "cell_3",
+      "cell_10",
+      "cell_11"
+    ],
+    "5": [
+      "cell_00",
+      "cell_01",
+      "cell_2",
+      "cell_3",
+      "cell_10",
+      "cell_11"
+    ],
+    "6": [
+      "cell_00",
+      "cell_01",
+      "cell_2",
+      "cell_3",
+      "cell_10",
+      "cell_11"
+    ],
+    "7": [
+      "cell_00",
+      "cell_01",
+      "cell_3",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21"
+    ],
+    "8": [
+      "cell_00",
+      "cell_01",
+      "cell_3",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21"
+    ],
+    "9": [
+      "cell_00",
+      "cell_01",
+      "cell_3",
+      "cell_10",
+      "cell_11",
+      "cell_20",
+      "cell_21"
+    ]
+  },
   "edges": [
     {
-      "source": "cell_1",
-      "target": "cell_10",
-      "type": "division"
-    },
-    {
-      "source": "cell_1",
-      "target": "cell_11",
-      "type": "division"
-    },
-    {
+      "frame": 4,
+      "id": "cell_0->cell_00",
       "source": "cell_0",
       "target": "cell_00",
       "type": "division"
     },
     {
+      "frame": 4,
+      "id": "cell_0->cell_01",
       "source": "cell_0",
       "target": "cell_01",
       "type": "division"
     },
     {
+      "frame": 4,
+      "id": "cell_1->cell_10",
+      "source": "cell_1",
+      "target": "cell_10",
+      "type": "division"
+    },
+    {
+      "frame": 4,
+      "id": "cell_1->cell_11",
+      "source": "cell_1",
+      "target": "cell_11",
+      "type": "division"
+    },
+    {
+      "frame": 7,
+      "id": "cell_2->cell_20",
       "source": "cell_2",
       "target": "cell_20",
       "type": "division"
     },
     {
+      "frame": 7,
+      "id": "cell_2->cell_21",
       "source": "cell_2",
       "target": "cell_21",
       "type": "division"
     },
     {
+      "frame": 11,
+      "id": "cell_3->cell_30",
       "source": "cell_3",
       "target": "cell_30",
       "type": "division"
     },
     {
+      "frame": 11,
+      "id": "cell_3->cell_31",
       "source": "cell_3",
       "target": "cell_31",
       "type": "division"
     },
     {
-      "source": "cell_10",
-      "target": "cell_100",
-      "type": "division"
-    },
-    {
-      "source": "cell_10",
-      "target": "cell_101",
-      "type": "division"
-    },
-    {
-      "source": "cell_11",
-      "target": "cell_110",
-      "type": "division"
-    },
-    {
-      "source": "cell_11",
-      "target": "cell_111",
-      "type": "division"
-    },
-    {
-      "source": "cell_01",
-      "target": "cell_010",
-      "type": "division"
-    },
-    {
-      "source": "cell_01",
-      "target": "cell_011",
-      "type": "division"
-    },
-    {
+      "frame": 18,
+      "id": "cell_00->cell_000",
       "source": "cell_00",
       "target": "cell_000",
       "type": "division"
     },
     {
+      "frame": 18,
+      "id": "cell_00->cell_001",
       "source": "cell_00",
       "target": "cell_001",
       "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_01->cell_010",
+      "source": "cell_01",
+      "target": "cell_010",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_01->cell_011",
+      "source": "cell_01",
+      "target": "cell_011",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_10->cell_100",
+      "source": "cell_10",
+      "target": "cell_100",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_10->cell_101",
+      "source": "cell_10",
+      "target": "cell_101",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_11->cell_110",
+      "source": "cell_11",
+      "target": "cell_110",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_11->cell_111",
+      "source": "cell_11",
+      "target": "cell_111",
+      "type": "division"
     }
   ],
+  "firstFrame": 0,
+  "frames": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "jobId": "job_demo_fluo_cancelled",
+  "lastFrame": 19,
   "nodes": [
     {
+      "children": [
+        "cell_00",
+        "cell_01"
+      ],
+      "code": "0",
+      "depth": 1,
       "firstFrame": 0,
       "id": "cell_0",
-      "lastFrame": 3
+      "lastCell": {
+        "aRadius": 35.9797,
+        "bRadius": 32.5756,
+        "cRadius": 24.3123,
+        "file": "t003.tif",
+        "isTrash": false,
+        "name": "cell_0",
+        "thetaX": -0.0036246,
+        "thetaY": 0.00241664,
+        "thetaZ": 1.94185,
+        "x": 388.146,
+        "y": 197.939,
+        "z": 102.321
+      },
+      "lastFrame": 19,
+      "name": "cell_0",
+      "observedFrames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "parentId": null,
+      "prefix": "cell_",
+      "rootId": "cell_0"
     },
     {
+      "children": [
+        "cell_10",
+        "cell_11"
+      ],
+      "code": "1",
+      "depth": 1,
       "firstFrame": 0,
       "id": "cell_1",
-      "lastFrame": 3
+      "lastCell": {
+        "aRadius": 40.0341,
+        "bRadius": 39.0051,
+        "cRadius": 24.7442,
+        "file": "t003.tif",
+        "isTrash": false,
+        "name": "cell_1",
+        "thetaX": 0.144468,
+        "thetaY": 0.175872,
+        "thetaZ": 0.0379822,
+        "x": 207.996,
+        "y": 233.31,
+        "z": 102.192
+      },
+      "lastFrame": 19,
+      "name": "cell_1",
+      "observedFrames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "parentId": null,
+      "prefix": "cell_",
+      "rootId": "cell_1"
     },
     {
+      "children": [
+        "cell_20",
+        "cell_21"
+      ],
+      "code": "2",
+      "depth": 1,
       "firstFrame": 0,
       "id": "cell_2",
-      "lastFrame": 6
+      "lastCell": {
+        "aRadius": 38.9643,
+        "bRadius": 34.4079,
+        "cRadius": 16.6259,
+        "file": "t006.tif",
+        "isTrash": false,
+        "name": "cell_2",
+        "thetaX": 1.58852,
+        "thetaY": 0.404164,
+        "thetaZ": -1.26404,
+        "x": 377.828,
+        "y": 336.629,
+        "z": 138.919
+      },
+      "lastFrame": 19,
+      "name": "cell_2",
+      "observedFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "parentId": null,
+      "prefix": "cell_",
+      "rootId": "cell_2"
     },
     {
+      "children": [
+        "cell_30",
+        "cell_31"
+      ],
+      "code": "3",
+      "depth": 1,
       "firstFrame": 0,
       "id": "cell_3",
-      "lastFrame": 10
+      "lastCell": {
+        "aRadius": 35.8429,
+        "bRadius": 32.6284,
+        "cRadius": 15.5537,
+        "file": "t010.tif",
+        "isTrash": false,
+        "name": "cell_3",
+        "thetaX": -1.07665,
+        "thetaY": -0.683659,
+        "thetaZ": -0.535098,
+        "x": 533.437,
+        "y": 286.739,
+        "z": 107.154
+      },
+      "lastFrame": 19,
+      "name": "cell_3",
+      "observedFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "parentId": null,
+      "prefix": "cell_",
+      "rootId": "cell_3"
     },
     {
-      "firstFrame": 0,
-      "id": "trash_1",
-      "lastFrame": 19
-    },
-    {
-      "firstFrame": 0,
-      "id": "trash_2",
-      "lastFrame": 6
-    },
-    {
+      "children": [
+        "cell_000",
+        "cell_001"
+      ],
+      "code": "00",
+      "depth": 2,
       "firstFrame": 4,
       "id": "cell_00",
-      "lastFrame": 17,
-      "parent": "cell_0"
+      "lastCell": {
+        "aRadius": 37.4272,
+        "bRadius": 32.2007,
+        "cRadius": 17.8384,
+        "file": "t017.tif",
+        "isTrash": false,
+        "name": "cell_00",
+        "thetaX": -0.840686,
+        "thetaY": -0.285827,
+        "thetaZ": -1.1343,
+        "x": 319.048,
+        "y": 357.68,
+        "z": 81.451
+      },
+      "lastFrame": 19,
+      "name": "cell_00",
+      "observedFrames": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "parentId": "cell_0",
+      "prefix": "cell_",
+      "rootId": "cell_0"
     },
     {
+      "children": [
+        "cell_010",
+        "cell_011"
+      ],
+      "code": "01",
+      "depth": 2,
       "firstFrame": 4,
       "id": "cell_01",
-      "lastFrame": 17,
-      "parent": "cell_0"
+      "lastCell": {
+        "aRadius": 37.7519,
+        "bRadius": 33.1666,
+        "cRadius": 15.4452,
+        "file": "t017.tif",
+        "isTrash": false,
+        "name": "cell_01",
+        "thetaX": -2.19153,
+        "thetaY": 0.498428,
+        "thetaZ": 2.52845,
+        "x": 451.456,
+        "y": 172.033,
+        "z": 146.707
+      },
+      "lastFrame": 19,
+      "name": "cell_01",
+      "observedFrames": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "parentId": "cell_0",
+      "prefix": "cell_",
+      "rootId": "cell_0"
     },
     {
+      "children": [
+        "cell_100",
+        "cell_101"
+      ],
+      "code": "10",
+      "depth": 2,
       "firstFrame": 4,
       "id": "cell_10",
-      "lastFrame": 17,
-      "parent": "cell_1"
+      "lastCell": {
+        "aRadius": 37.6646,
+        "bRadius": 35.9626,
+        "cRadius": 20.4082,
+        "file": "t017.tif",
+        "isTrash": false,
+        "name": "cell_10",
+        "thetaX": 0.512048,
+        "thetaY": -0.0284299,
+        "thetaZ": 2.98128,
+        "x": 161.025,
+        "y": 274.681,
+        "z": 116.708
+      },
+      "lastFrame": 19,
+      "name": "cell_10",
+      "observedFrames": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "parentId": "cell_1",
+      "prefix": "cell_",
+      "rootId": "cell_1"
     },
     {
+      "children": [
+        "cell_110",
+        "cell_111"
+      ],
+      "code": "11",
+      "depth": 2,
       "firstFrame": 4,
       "id": "cell_11",
-      "lastFrame": 17,
-      "parent": "cell_1"
+      "lastCell": {
+        "aRadius": 37.089,
+        "bRadius": 34.3073,
+        "cRadius": 19.3069,
+        "file": "t017.tif",
+        "isTrash": false,
+        "name": "cell_11",
+        "thetaX": -2.68019,
+        "thetaY": 0.208958,
+        "thetaZ": -1.513,
+        "x": 300.465,
+        "y": 159.948,
+        "z": 95.5903
+      },
+      "lastFrame": 19,
+      "name": "cell_11",
+      "observedFrames": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "parentId": "cell_1",
+      "prefix": "cell_",
+      "rootId": "cell_1"
     },
     {
+      "children": [],
+      "code": "20",
+      "depth": 2,
       "firstFrame": 7,
       "id": "cell_20",
+      "lastCell": {
+        "aRadius": 41.9999,
+        "bRadius": 40.2472,
+        "cRadius": 29.1718,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_20",
+        "thetaX": -0.0259249,
+        "thetaY": 0.0212222,
+        "thetaZ": -2.80324,
+        "x": 475.199,
+        "y": 367.067,
+        "z": 121.085
+      },
       "lastFrame": 19,
-      "parent": "cell_2"
+      "name": "cell_20",
+      "observedFrames": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "parentId": "cell_2",
+      "prefix": "cell_",
+      "rootId": "cell_2"
     },
     {
+      "children": [],
+      "code": "21",
+      "depth": 2,
       "firstFrame": 7,
       "id": "cell_21",
+      "lastCell": {
+        "aRadius": 42.8756,
+        "bRadius": 41.7882,
+        "cRadius": 27.685,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_21",
+        "thetaX": 2.94354,
+        "thetaY": -0.189141,
+        "thetaZ": 1.35314,
+        "x": 332.948,
+        "y": 297.186,
+        "z": 155.676
+      },
       "lastFrame": 19,
-      "parent": "cell_2"
+      "name": "cell_21",
+      "observedFrames": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "parentId": "cell_2",
+      "prefix": "cell_",
+      "rootId": "cell_2"
     },
     {
+      "children": [],
+      "code": "30",
+      "depth": 2,
       "firstFrame": 11,
       "id": "cell_30",
+      "lastCell": {
+        "aRadius": 37.7166,
+        "bRadius": 36.9758,
+        "cRadius": 28.302,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_30",
+        "thetaX": -0.0498501,
+        "thetaY": -0.0557819,
+        "thetaZ": -1.33017,
+        "x": 500.987,
+        "y": 236.383,
+        "z": 62.8242
+      },
       "lastFrame": 19,
-      "parent": "cell_3"
+      "name": "cell_30",
+      "observedFrames": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "parentId": "cell_3",
+      "prefix": "cell_",
+      "rootId": "cell_3"
     },
     {
+      "children": [],
+      "code": "31",
+      "depth": 2,
       "firstFrame": 11,
       "id": "cell_31",
+      "lastCell": {
+        "aRadius": 35.4585,
+        "bRadius": 33.05,
+        "cRadius": 28.6827,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_31",
+        "thetaX": 2.87971,
+        "thetaY": 0.148536,
+        "thetaZ": -0.673227,
+        "x": 567.536,
+        "y": 327.389,
+        "z": 114.943
+      },
       "lastFrame": 19,
-      "parent": "cell_3"
+      "name": "cell_31",
+      "observedFrames": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "parentId": "cell_3",
+      "prefix": "cell_",
+      "rootId": "cell_3"
     },
     {
+      "children": [],
+      "code": "000",
+      "depth": 3,
       "firstFrame": 18,
       "id": "cell_000",
+      "lastCell": {
+        "aRadius": 25.5781,
+        "bRadius": 22.11,
+        "cRadius": 17.5615,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_000",
+        "thetaX": -1.22486,
+        "thetaY": -0.258918,
+        "thetaZ": -0.875553,
+        "x": 316.504,
+        "y": 366.086,
+        "z": 94.2514
+      },
       "lastFrame": 19,
-      "parent": "cell_00"
+      "name": "cell_000",
+      "observedFrames": [
+        18,
+        19
+      ],
+      "parentId": "cell_00",
+      "prefix": "cell_",
+      "rootId": "cell_0"
     },
     {
+      "children": [],
+      "code": "001",
+      "depth": 3,
       "firstFrame": 18,
       "id": "cell_001",
+      "lastCell": {
+        "aRadius": 26.0062,
+        "bRadius": 23.2194,
+        "cRadius": 14.4029,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_001",
+        "thetaX": -0.980082,
+        "thetaY": -0.0764982,
+        "thetaZ": -0.672207,
+        "x": 278.69,
+        "y": 322.472,
+        "z": 65.9728
+      },
       "lastFrame": 19,
-      "parent": "cell_00"
+      "name": "cell_001",
+      "observedFrames": [
+        18,
+        19
+      ],
+      "parentId": "cell_00",
+      "prefix": "cell_",
+      "rootId": "cell_0"
     },
     {
+      "children": [],
+      "code": "010",
+      "depth": 3,
       "firstFrame": 18,
       "id": "cell_010",
+      "lastCell": {
+        "aRadius": 28.8313,
+        "bRadius": 23.4017,
+        "cRadius": 14.1801,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_010",
+        "thetaX": -1.59257,
+        "thetaY": 1.47677,
+        "thetaZ": 2.76792,
+        "x": 438.357,
+        "y": 159.459,
+        "z": 147.948
+      },
       "lastFrame": 19,
-      "parent": "cell_01"
+      "name": "cell_010",
+      "observedFrames": [
+        18,
+        19
+      ],
+      "parentId": "cell_01",
+      "prefix": "cell_",
+      "rootId": "cell_0"
     },
     {
+      "children": [],
+      "code": "011",
+      "depth": 3,
       "firstFrame": 18,
       "id": "cell_011",
+      "lastCell": {
+        "aRadius": 28.182,
+        "bRadius": 23.4692,
+        "cRadius": 12.4938,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_011",
+        "thetaX": 2.35629,
+        "thetaY": 1.40064,
+        "thetaZ": 0.386709,
+        "x": 465.568,
+        "y": 222.542,
+        "z": 145.322
+      },
       "lastFrame": 19,
-      "parent": "cell_01"
+      "name": "cell_011",
+      "observedFrames": [
+        18,
+        19
+      ],
+      "parentId": "cell_01",
+      "prefix": "cell_",
+      "rootId": "cell_0"
     },
     {
+      "children": [],
+      "code": "100",
+      "depth": 3,
       "firstFrame": 18,
       "id": "cell_100",
+      "lastCell": {
+        "aRadius": 28.7707,
+        "bRadius": 24.196,
+        "cRadius": 19.3647,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_100",
+        "thetaX": 0.718188,
+        "thetaY": -0.568237,
+        "thetaZ": -2.93931,
+        "x": 149.11,
+        "y": 244.385,
+        "z": 96.3662
+      },
       "lastFrame": 19,
-      "parent": "cell_10"
+      "name": "cell_100",
+      "observedFrames": [
+        18,
+        19
+      ],
+      "parentId": "cell_10",
+      "prefix": "cell_",
+      "rootId": "cell_1"
     },
     {
+      "children": [],
+      "code": "101",
+      "depth": 3,
       "firstFrame": 18,
       "id": "cell_101",
+      "lastCell": {
+        "aRadius": 27.8231,
+        "bRadius": 24.2304,
+        "cRadius": 21.5921,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_101",
+        "thetaX": 0.607403,
+        "thetaY": -0.792226,
+        "thetaZ": -2.86664,
+        "x": 167.006,
+        "y": 285.714,
+        "z": 140.723
+      },
       "lastFrame": 19,
-      "parent": "cell_10"
+      "name": "cell_101",
+      "observedFrames": [
+        18,
+        19
+      ],
+      "parentId": "cell_10",
+      "prefix": "cell_",
+      "rootId": "cell_1"
     },
     {
+      "children": [],
+      "code": "110",
+      "depth": 3,
       "firstFrame": 18,
       "id": "cell_110",
+      "lastCell": {
+        "aRadius": 27.5451,
+        "bRadius": 25.3957,
+        "cRadius": 17.8981,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_110",
+        "thetaX": -2.25594,
+        "thetaY": 0.395144,
+        "thetaZ": -1.70074,
+        "x": 281.838,
+        "y": 152.605,
+        "z": 117.242
+      },
       "lastFrame": 19,
-      "parent": "cell_11"
+      "name": "cell_110",
+      "observedFrames": [
+        18,
+        19
+      ],
+      "parentId": "cell_11",
+      "prefix": "cell_",
+      "rootId": "cell_1"
     },
     {
+      "children": [],
+      "code": "111",
+      "depth": 3,
       "firstFrame": 18,
       "id": "cell_111",
+      "lastCell": {
+        "aRadius": 26.2915,
+        "bRadius": 23.7784,
+        "cRadius": 18.8382,
+        "file": "t019.tif",
+        "isTrash": false,
+        "name": "cell_111",
+        "thetaX": -2.4033,
+        "thetaY": 0.461553,
+        "thetaZ": -2.36382,
+        "x": 331.872,
+        "y": 154.81,
+        "z": 79.8677
+      },
       "lastFrame": 19,
-      "parent": "cell_11"
+      "name": "cell_111",
+      "observedFrames": [
+        18,
+        19
+      ],
+      "parentId": "cell_11",
+      "prefix": "cell_",
+      "rootId": "cell_1"
     }
-  ]
+  ],
+  "roots": [
+    "cell_0",
+    "cell_1",
+    "cell_2",
+    "cell_3"
+  ],
+  "source": "cells.csv",
+  "sourceSize": 16045,
+  "updatedAt": 1780306566.5463932
 }

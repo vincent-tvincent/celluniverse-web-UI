@@ -9,6 +9,8 @@ export type PanelVisibility = {
   layers: boolean;
   update: boolean;
   logs: boolean;
+  lineage: boolean;
+  viewer: boolean;
 };
 
 export type PanelVisibilityKey = keyof PanelVisibility;
@@ -20,4 +22,6 @@ export const DEFAULT_PANEL_VISIBILITY: PanelVisibility = {
   layers: true,
   update: true,
   logs: false,
+  lineage: true,
+  viewer: true,
 };

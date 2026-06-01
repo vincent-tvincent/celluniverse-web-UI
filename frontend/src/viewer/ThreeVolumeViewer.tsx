@@ -27,6 +27,11 @@ type Props = {
   synthContrastLimits: ContrastLimits;
   maxPixelRatio: number;
   pointCloudConfig?: ViewerRuntimeConfig["pointCloud"];
+  focusCellIds: string[];
+  focusFrame: number | null;
+  focusRequestId: number;
+  labeledCellIds: string[];
+  frame: number;
   onFirstRender?: () => void;
   onHoverSample?: (sample: ViewerHoverSample | null) => void;
 };
@@ -73,11 +78,17 @@ export default function ThreeVolumeViewer({
   synthContrastLimits,
   maxPixelRatio,
   pointCloudConfig,
+  focusCellIds,
+  focusFrame,
+  focusRequestId,
+  labeledCellIds,
+  frame,
   onFirstRender,
   onHoverSample,
 }: Props) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const cameraViewRef = useRef<CameraViewState | null>(null);
+  const appliedFocusRequestRef = useRef(0);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -185,6 +196,20 @@ export default function ThreeVolumeViewer({
     const helper = new THREE.Box3Helper(box, new THREE.Color(uiPalette.volumeBox));
     group.add(helper);
 
+    const labeledCells = cells.filter((cell) => labeledCellIds.includes(cell.name));
+    if (labeledCells.length) {
+      addSelectedCellOutlines(group, labeledCells, cells, base, worldWidth, worldHeight, worldDepth);
+    }
+
+    if (focusRequestId && focusFrame === frame && appliedFocusRequestRef.current !== focusRequestId) {
+      const focusCells = cells.filter((cell) => focusCellIds.includes(cell.name));
+      if (focusCells.length) {
+        focusCameraOnCells(camera, controls, focusCells, cells, base, worldWidth, worldHeight, worldDepth);
+        controls.update();
+        appliedFocusRequestRef.current = focusRequestId;
+      }
+    }
+
     const resizeObserver = new ResizeObserver(() => {
       const width = Math.max(1, mount.clientWidth);
       const height = Math.max(1, mount.clientHeight);
@@ -278,6 +303,11 @@ export default function ThreeVolumeViewer({
     synthContrastLimits,
     maxPixelRatio,
     pointCloudConfig,
+    focusCellIds,
+    focusFrame,
+    focusRequestId,
+    labeledCellIds,
+    frame,
     onFirstRender,
     onHoverSample,
   ]);
@@ -829,6 +859,94 @@ function addCells(
     mesh.quaternion.copy(getCellWorldRotation(cell));
     group.add(mesh);
   }
+}
+
+function addSelectedCellOutlines(
+  group: THREE.Group,
+  cells: CellRecord[],
+  frameCells: CellRecord[],
+  volume: VolumeDimensions,
+  worldWidth: number,
+  worldHeight: number,
+  worldDepth: number,
+) {
+  const maxCellZ = frameCells.reduce((max, cell) => Math.max(max, Number(cell.z) || 0), 0);
+  const zScale = Math.max(volume.depth - 1, maxCellZ, 1);
+  const cellSpaceWidth = Math.max(1, volume.sourceWidth);
+  const cellSpaceHeight = Math.max(1, volume.sourceHeight);
+  for (const cell of cells) {
+    const geometry = new THREE.SphereGeometry(1, 28, 18);
+    const material = new THREE.MeshBasicMaterial({
+      color: uiPalette.cellSelected,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.96,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(cellToWorldPosition(cell, volume, worldWidth, worldHeight, worldDepth, zScale));
+    mesh.scale.set(
+      Math.max(0.012, ((Number(cell.aRadius) || 1) / cellSpaceWidth) * worldWidth * 1.08),
+      Math.max(0.012, ((Number(cell.bRadius) || 1) / cellSpaceHeight) * worldHeight * 1.08),
+      Math.max(0.012, ((Number(cell.cRadius) || 1) / zScale) * worldDepth * 1.08),
+    );
+    mesh.quaternion.copy(getCellWorldRotation(cell));
+    mesh.renderOrder = 30;
+    group.add(mesh);
+  }
+}
+
+function focusCameraOnCells(
+  camera: THREE.PerspectiveCamera,
+  controls: OrbitControls,
+  cells: CellRecord[],
+  frameCells: CellRecord[],
+  volume: VolumeDimensions,
+  worldWidth: number,
+  worldHeight: number,
+  worldDepth: number,
+) {
+  const maxCellZ = frameCells.reduce((max, cell) => Math.max(max, Number(cell.z) || 0), 0);
+  const zScale = Math.max(volume.depth - 1, maxCellZ, 1);
+  const center = new THREE.Vector3();
+  const positions = cells.map((cell) => cellToWorldPosition(cell, volume, worldWidth, worldHeight, worldDepth, zScale));
+  positions.forEach((position) => center.add(position));
+  center.divideScalar(Math.max(1, positions.length));
+
+  let radius = 0.08;
+  for (let index = 0; index < positions.length; index += 1) {
+    const cell = cells[index];
+    const cellRadius = Math.max(
+      ((Number(cell.aRadius) || 1) / Math.max(1, volume.sourceWidth)) * worldWidth,
+      ((Number(cell.bRadius) || 1) / Math.max(1, volume.sourceHeight)) * worldHeight,
+      ((Number(cell.cRadius) || 1) / zScale) * worldDepth,
+    );
+    radius = Math.max(radius, positions[index].distanceTo(center) + cellRadius * 2.2);
+  }
+
+  const distance = Math.max(0.32, radius / Math.sin(THREE.MathUtils.degToRad(camera.fov) / 2) * 1.15);
+  const direction = new THREE.Vector3(0.26, -0.48, 0.84).normalize();
+  controls.target.copy(center);
+  camera.position.copy(center.clone().add(direction.multiplyScalar(distance)));
+  camera.near = Math.max(0.005, distance / 80);
+  camera.far = Math.max(20, distance * 120);
+  camera.updateProjectionMatrix();
+}
+
+function cellToWorldPosition(
+  cell: CellRecord,
+  volume: VolumeDimensions,
+  worldWidth: number,
+  worldHeight: number,
+  worldDepth: number,
+  zScale: number,
+): THREE.Vector3 {
+  return new THREE.Vector3(
+    ((Number(cell.x) || 0) / Math.max(1, volume.sourceWidth) - 0.5) * worldWidth,
+    (0.5 - (Number(cell.y) || 0) / Math.max(1, volume.sourceHeight)) * worldHeight,
+    ((Number(cell.z) || 0) / zScale - 0.5) * worldDepth,
+  );
 }
 
 function getCellWorldRotation(cell: CellRecord): THREE.Quaternion {

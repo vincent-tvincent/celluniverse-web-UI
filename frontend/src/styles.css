@@ -153,13 +153,55 @@ button {
   grid-template-columns:
     minmax(200px, var(--left-panel-width, 292px))
     8px
-    minmax(360px, 1fr);
+    minmax(360px, 1fr)
+    8px
+    minmax(220px, var(--right-panel-width, 360px));
   grid-template-rows: minmax(0, 1fr);
-  grid-template-areas: "left left-resizer viewer";
+  grid-template-areas: "left left-resizer viewer right-resizer right";
   overflow: hidden;
 }
 
 .workspace.hide-left {
+  grid-template-columns:
+    minmax(0, 1fr)
+    8px
+    minmax(220px, var(--right-panel-width, 360px));
+  grid-template-areas: "viewer right-resizer right";
+}
+
+.workspace.hide-right {
+  grid-template-columns:
+    minmax(200px, var(--left-panel-width, 292px))
+    8px
+    minmax(360px, 1fr);
+  grid-template-areas: "left left-resizer viewer";
+}
+
+.workspace.hide-left.hide-right {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "viewer";
+}
+
+.workspace.hide-viewer {
+  grid-template-columns:
+    minmax(200px, var(--left-panel-width, 292px))
+    8px
+    8px
+    minmax(220px, 1fr);
+  grid-template-areas: "left left-resizer right-resizer right";
+}
+
+.workspace.hide-viewer.hide-left {
+  grid-template-columns: 8px minmax(220px, 1fr);
+  grid-template-areas: "right-resizer right";
+}
+
+.workspace.hide-viewer.hide-right {
+  grid-template-columns: minmax(200px, 1fr);
+  grid-template-areas: "left";
+}
+
+.workspace.hide-viewer.hide-left.hide-right {
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas: "viewer";
 }
@@ -195,6 +237,10 @@ button {
 
 .left-resizer {
   grid-area: left-resizer;
+}
+
+.right-resizer {
+  grid-area: right-resizer;
 }
 
 .panel-resizer span {
@@ -418,6 +464,16 @@ button {
   transform: translateX(50%);
 }
 
+.side-restore-tab.top {
+  top: 72px;
+  left: 50%;
+  width: 52px;
+  height: 40px;
+  border-top: 0;
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+  transform: translateX(-50%);
+}
+
 .side-restore-tab::before {
   content: "";
   position: absolute;
@@ -437,6 +493,10 @@ button {
 
 .side-restore-tab.log::before {
   border-radius: 5px 5px 0 0;
+}
+
+.side-restore-tab.top::before {
+  border-radius: 0 0 5px 5px;
 }
 
 .side-restore-tab:hover {
@@ -1242,6 +1302,236 @@ input[type="range"] {
   overflow: hidden;
   background: var(--surface-glass);
   border-top: 1px solid var(--border-subtle);
+}
+
+.lineage-panel {
+  grid-area: right;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+  background: var(--surface-glass);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.lineage-heading .panel-heading-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spin-small {
+  animation: viewer-spin 900ms linear infinite;
+}
+
+.lineage-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--border-card);
+  background:
+    var(--viewer-grid),
+    var(--surface-viewer);
+}
+
+.lineage-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  user-select: none;
+}
+
+.lineage-ring circle {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineage-ring text {
+  fill: var(--color-text-dim);
+  font-size: 10px;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineage-edge {
+  fill: none;
+  stroke: var(--lineage-color);
+  stroke-width: 2.1;
+  stroke-opacity: 0.58;
+  vector-effect: non-scaling-stroke;
+  transition: stroke-opacity 180ms ease;
+}
+
+.lineage-edge.active {
+  stroke-opacity: 0.88;
+}
+
+.lineage-node {
+  cursor: pointer;
+  transition: opacity 180ms ease;
+}
+
+.lineage-node.past {
+  opacity: 0.52;
+}
+
+.lineage-node circle {
+  fill: var(--lineage-color);
+  stroke: color-mix(in srgb, var(--lineage-color) 45%, #fff);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineage-node.selected circle {
+  stroke: var(--color-text-strong);
+  stroke-width: 2.4;
+}
+
+.lineage-node:hover circle {
+  stroke: var(--color-cyan);
+  stroke-width: 2.6;
+}
+
+.lineage-node:hover text {
+  fill: var(--color-accent);
+}
+
+.lineage-node text {
+  fill: var(--color-text-strong);
+  paint-order: stroke;
+  stroke: var(--surface-viewer);
+  stroke-width: 3px;
+  font-size: 11px;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineage-controls {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 2;
+  display: inline-flex;
+  gap: 5px;
+  padding: 4px;
+  border-radius: var(--radius-control);
+  background: var(--surface-badge);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(8px);
+}
+
+.lineage-controls button,
+.lineage-node-card button {
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--color-text-soft);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+}
+
+.lineage-controls button:hover,
+.lineage-node-card button:hover {
+  color: var(--color-text-strong);
+  background: var(--surface-hover);
+  border-color: var(--border-accent);
+}
+
+.lineage-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.lineage-node-card {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  width: min(320px, calc(100% - 24px));
+  max-height: min(420px, calc(100% - 24px));
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  color: var(--color-text-soft);
+  background: var(--surface-toast);
+  border: 1px solid var(--border-accent-muted);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-toast);
+  backdrop-filter: blur(10px);
+}
+
+.lineage-node-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lineage-node-card-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-strong);
+}
+
+.lineage-node-card-heading button {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+}
+
+.lineage-node-card dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.lineage-node-card dl div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.lineage-node-card dt {
+  color: var(--color-text-dim);
+  font-size: 11px;
+}
+
+.lineage-node-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-strong);
+  font-size: 12px;
+}
+
+.lineage-goto-button {
+  width: 100%;
+}
+
+.lineage-goto-button.active {
+  color: var(--color-on-accent);
+  background: color-mix(in srgb, var(--color-cyan) 72%, var(--color-bg));
+  border-color: color-mix(in srgb, var(--color-cyan) 70%, transparent);
 }
 
 .load-badge.error {

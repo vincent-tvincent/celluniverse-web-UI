@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from celluniverse_backend.parsers.cells import parse_cells_csv, build_lineage
+from celluniverse_backend.parsers.cells import parse_cells_csv
+from celluniverse_backend.preview.lineage import ensure_lineage_artifacts
 from celluniverse_backend.storage.json_store import write_json_atomic
 
 
@@ -19,8 +20,7 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
         frame_dir.mkdir(parents=True, exist_ok=True)
         write_json_atomic(frame_dir / "cells.json", cells)
 
-    lineage = build_lineage(cell_frames)
-    write_json_atomic(preview_dir / "lineage.json", lineage)
+    ensure_lineage_artifacts(job_dir, job_id)
 
     frames = sorted(set(_png_frames(output_dir, "real")) | set(_png_frames(output_dir, "synth")) | set(cell_frames))
     manifest_frames = []

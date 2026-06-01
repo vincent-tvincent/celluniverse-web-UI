@@ -3,6 +3,7 @@ export const uiPalette = {
   volumeBox: "#506070",
   cellNormal: "#f6e582",
   cellTrash: "#ff765e",
+  cellSelected: "#67e8f9",
   cellNormalStroke: "rgba(246, 229, 130, 0.95)",
   cellTrashStroke: "rgba(255, 118, 94, 0.88)",
   cellNormalFill: "rgba(246, 229, 130, 0.95)",

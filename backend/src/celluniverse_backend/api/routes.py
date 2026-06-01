@@ -19,7 +19,7 @@ from celluniverse_backend.contracts.models import (
 )
 from celluniverse_backend.datasets.service import DatasetService, DatasetValidationError
 from celluniverse_backend.jobs.manager import JobManager
-from celluniverse_backend.parsers.cells import parse_cells_csv
+from celluniverse_backend.preview.lineage import ensure_lineage_artifacts, read_lineage_layout, read_lineage_snapshot
 from celluniverse_backend.preview.manifest import build_preview_artifacts
 from celluniverse_backend.preview.pointcloud import ensure_pointcloud_preview
 from celluniverse_backend.preview.slice import ensure_slice_preview
@@ -242,10 +242,21 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
     @router.get("/jobs/{job_id}/lineage")
     def get_lineage(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
         job_dir = job_dir_or_404(job_id)
-        lineage_path = job_dir / "preview" / "lineage.json"
-        if not lineage_path.exists():
-            build_preview_artifacts(job_dir, job_id)
-        return read_json(lineage_path, {"nodes": [], "edges": []})
+        return ensure_lineage_artifacts(job_dir, job_id)
+
+    @router.get("/jobs/{job_id}/lineage/layout")
+    def get_lineage_layout(
+        job_id: str,
+        background: str = Query(default="#070a0f"),
+        _: None = Depends(require_auth),
+    ) -> dict[str, Any]:
+        job_dir = job_dir_or_404(job_id)
+        return read_lineage_layout(job_dir, job_id, background=background)
+
+    @router.get("/jobs/{job_id}/lineage/frames/{frame}")
+    def get_lineage_frame(job_id: str, frame: int, _: None = Depends(require_auth)) -> dict[str, Any]:
+        job_dir = job_dir_or_404(job_id)
+        return read_lineage_snapshot(job_dir, job_id, frame)
 
     @router.get("/jobs/{job_id}/pointcloud/{layer}/{frame}.cupc")
     def get_pointcloud(job_id: str, layer: str, frame: int, _: None = Depends(require_auth)) -> FileResponse:

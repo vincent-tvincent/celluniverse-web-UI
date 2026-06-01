@@ -1,4 +1,12 @@
-import type { CellRecord, JobManifest, JobStatus, LogResponse } from "./types";
+import type {
+  CellRecord,
+  JobManifest,
+  JobStatus,
+  LineageFrameSnapshot,
+  LineageGraph,
+  LineageLayout,
+  LogResponse,
+} from "./types";
 
 const API_BASE = "/api";
 
@@ -31,6 +39,22 @@ export function getManifest(jobId: string): Promise<JobManifest> {
 
 export function getFrameCells(jobId: string, frame: number): Promise<CellRecord[]> {
   return requestJson<CellRecord[]>(`/jobs/${encodeURIComponent(jobId)}/frames/${frame}/cells`);
+}
+
+export function getLineage(jobId: string): Promise<LineageGraph> {
+  return requestJson<LineageGraph>(`/jobs/${encodeURIComponent(jobId)}/lineage`);
+}
+
+export function getLineageLayout(jobId: string, background = "#070a0f"): Promise<LineageLayout> {
+  return requestJson<LineageLayout>(
+    `/jobs/${encodeURIComponent(jobId)}/lineage/layout?background=${encodeURIComponent(background)}`,
+  );
+}
+
+export function getLineageFrame(jobId: string, frame: number): Promise<LineageFrameSnapshot> {
+  return requestJson<LineageFrameSnapshot>(
+    `/jobs/${encodeURIComponent(jobId)}/lineage/frames/${frame}`,
+  );
 }
 
 export function getLogs(jobId: string, stream: "stdout" | "stderr", tail = 180): Promise<LogResponse> {

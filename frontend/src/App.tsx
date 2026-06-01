@@ -9,7 +9,17 @@ import {
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Braces } from "lucide-react";
-import { getFrameCells, getJob, getLogs, getManifest, listJobs, toApiUrl } from "./api";
+import {
+  getFrameCells,
+  getJob,
+  getLineage,
+  getLineageFrame,
+  getLineageLayout,
+  getLogs,
+  getManifest,
+  listJobs,
+  toApiUrl,
+} from "./api";
 import FrameUpdateToast from "./components/layout/FrameUpdateToast";
 import LoadBadge from "./components/layout/LoadBadge";
 import PanelResizer from "./components/layout/PanelResizer";
@@ -27,6 +37,7 @@ import {
 } from "./components/layout/types";
 import CollapsedPanel from "./components/panels/CollapsedPanel";
 import LayerPanel from "./components/panels/LayerPanel";
+import LineagePanel from "./components/panels/LineagePanel";
 import LogPanel from "./components/panels/LogPanel";
 import SchedulePanel from "./components/panels/SchedulePanel";
 import StatusPanel from "./components/panels/StatusPanel";
@@ -34,7 +45,7 @@ import ViewModePanel from "./components/panels/ViewModePanel";
 import { previewConfigSignature, useViewerConfig, type PreviewConfig } from "./config";
 import { useJobEvents } from "./hooks";
 import { useViewerStore } from "./store";
-import type { CellRecord, JobManifest, JobStatus, LayerEntry } from "./types";
+import type { CellRecord, JobManifest, JobStatus, LayerEntry, LineageNode } from "./types";
 import CanvasSliceViewer from "./viewer/CanvasSliceViewer";
 import ThreeVolumeViewer from "./viewer/ThreeVolumeViewer";
 import type { ViewerHoverSample } from "./viewer/hover";
@@ -44,6 +55,7 @@ import type { VolumeData } from "./viewer/tiff";
 import { useVolumePreload, type VolumePreloadTarget } from "./viewer/useVolumePreload";
 
 const EMPTY_CELLS: CellRecord[] = [];
+const EMPTY_FOCUS_IDS: string[] = [];
 const PANEL_LAYOUT_STORAGE_KEY = "celluniverse-viewer-panel-layout";
 const PANEL_VISIBILITY_STORAGE_KEY = "celluniverse-viewer-panel-visibility-v2";
 const DEFAULT_PANEL_LAYOUT = { left: 292, right: 360, log: 260 };
@@ -103,6 +115,14 @@ function App() {
   const [panelLayout, setPanelLayout] = useState(readPanelLayout);
   const [panelVisibility, setPanelVisibility] = useState(readPanelVisibility);
   const [hoverSample, setHoverSample] = useState<ViewerHoverSample | null>(null);
+  const [selectedLineageNodeId, setSelectedLineageNodeId] = useState<string | null>(null);
+  const [cellFocusRequest, setCellFocusRequest] = useState<{
+    cellIds: string[];
+    frame: number;
+    requestId: number;
+  } | null>(null);
+  const [labeledLineageNodeId, setLabeledLineageNodeId] = useState<string | null>(null);
+  const [labeledCellIds, setLabeledCellIds] = useState<string[]>(EMPTY_FOCUS_IDS);
   const frameHistoryRef = useRef<{ jobId: string; frames: Set<number> } | null>(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
 
@@ -327,6 +347,25 @@ function App() {
   });
   const frameCells = cellsQuery.data ?? EMPTY_CELLS;
 
+  const lineageQuery = useQuery({
+    queryKey: ["lineage", selectedJobId],
+    queryFn: () => getLineage(selectedJobId),
+    enabled: Boolean(selectedJobId),
+    refetchInterval: selectedJobId ? scheduledRefreshMs : false,
+  });
+  const lineageLayoutQuery = useQuery({
+    queryKey: ["lineage-layout", selectedJobId],
+    queryFn: () => getLineageLayout(selectedJobId),
+    enabled: Boolean(selectedJobId),
+    refetchInterval: selectedJobId ? scheduledRefreshMs : false,
+  });
+  const lineageFrameQuery = useQuery({
+    queryKey: ["lineage-frame", selectedJobId, activeFrameNumber ?? frame],
+    queryFn: () => getLineageFrame(selectedJobId, activeFrameNumber ?? frame),
+    enabled: Boolean(selectedJobId && (activeFrameNumber != null || Number.isFinite(frame))),
+    refetchInterval: selectedJobId ? scheduledRefreshMs : false,
+  });
+
   const logsQuery = useQuery({
     queryKey: ["logs", selectedJobId, logStream],
     queryFn: () => getLogs(selectedJobId, logStream, 80),
@@ -364,6 +403,13 @@ function App() {
   useEffect(() => {
     setHoverSample(null);
   }, [selectedJobId, activeFrameNumber, mode, slice]);
+
+  useEffect(() => {
+    setSelectedLineageNodeId(null);
+    setCellFocusRequest(null);
+    setLabeledLineageNodeId(null);
+    setLabeledCellIds(EMPTY_FOCUS_IDS);
+  }, [selectedJobId]);
 
   useEffect(() => {
     if (mode !== "slice" || manualSliceOverride) {
@@ -422,10 +468,14 @@ function App() {
     "--log-panel-height": `${panelLayout.log}px`,
   } as CSSProperties;
   const leftPanelVisible = panelVisibility.status || panelVisibility.layers || panelVisibility.update;
+  const lineagePanelVisible = panelVisibility.lineage;
+  const viewerPanelVisible = panelVisibility.viewer;
   const logPanelVisible = panelVisibility.logs;
   const workspaceClassName = [
     "workspace",
     leftPanelVisible ? "" : "hide-left",
+    lineagePanelVisible ? "" : "hide-right",
+    viewerPanelVisible ? "" : "hide-viewer",
   ].filter(Boolean).join(" ");
   const setPanelVisible = useCallback((panel: PanelVisibilityKey, visible: boolean) => {
     setPanelVisibility((current) => ({
@@ -455,9 +505,30 @@ function App() {
   }, []);
   const showLeftPanels = useCallback(() => showPanels(LEFT_PANEL_KEYS), [showPanels]);
   const hideLeftPanels = useCallback(() => hidePanels(LEFT_PANEL_KEYS), [hidePanels]);
+  const handleGoToLineageCell = useCallback((node: LineageNode) => {
+    if (labeledLineageNodeId === node.id) {
+      setLabeledLineageNodeId(null);
+      setLabeledCellIds(EMPTY_FOCUS_IDS);
+      return;
+    }
+    const targetFrame = chooseLineageFocusFrame(node, frame, availableFrameNumbers);
+    const focusIds = collectLineageFocusCellIds(node, lineageQuery.data?.nodes ?? [], targetFrame);
+    setFrame(targetFrame);
+    setMode("volume");
+    showPanel("viewer");
+    setLabeledLineageNodeId(node.id);
+    setLabeledCellIds(focusIds);
+    setCellFocusRequest({
+      cellIds: focusIds,
+      frame: targetFrame,
+      requestId: Date.now(),
+    });
+  }, [availableFrameNumbers, frame, labeledLineageNodeId, lineageQuery.data?.nodes, setFrame, setMode, showPanel]);
   const resizePanel = useCallback((panel: "left" | "right", nextWidth: number) => {
     const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width ?? window.innerWidth;
-    const maxByViewport = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, workspaceWidth * 0.42));
+    const maxByViewport = panel === "right"
+      ? Math.max(MIN_PANEL_WIDTH, workspaceWidth - MIN_PANEL_WIDTH)
+      : Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, workspaceWidth * 0.42));
     setPanelLayout((current) => ({
       ...current,
       [panel]: Math.round(clampNumber(nextWidth, MIN_PANEL_WIDTH, maxByViewport)),
@@ -521,10 +592,11 @@ function App() {
     }
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? workspace.clientWidth;
-      const maxByViewport = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, width * 0.42));
+      const leftMaxByViewport = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, width * 0.42));
+      const rightMaxByViewport = Math.max(MIN_PANEL_WIDTH, width - MIN_PANEL_WIDTH);
       setPanelLayout((current) => {
-        const left = Math.round(clampNumber(current.left, MIN_PANEL_WIDTH, maxByViewport));
-        const right = Math.round(clampNumber(current.right, MIN_PANEL_WIDTH, maxByViewport));
+        const left = Math.round(clampNumber(current.left, MIN_PANEL_WIDTH, leftMaxByViewport));
+        const right = Math.round(clampNumber(current.right, MIN_PANEL_WIDTH, rightMaxByViewport));
         const logMax = Math.max(MIN_LOG_HEIGHT, Math.min(MAX_LOG_HEIGHT, (entries[0]?.contentRect.height ?? workspace.clientHeight) * 0.46));
         const log = Math.round(clampNumber(current.log, MIN_LOG_HEIGHT, logMax));
         return left === current.left && right === current.right && log === current.log ? current : { left, right, log };
@@ -546,9 +618,13 @@ function App() {
       <section className={workspaceClassName} ref={workspaceRef} style={workspaceStyle}>
         <PanelRestoreRail
           leftHidden={!leftPanelVisible}
+          rightHidden={!lineagePanelVisible}
           logHidden={!logPanelVisible}
+          viewerHidden={!viewerPanelVisible}
           onShowLeft={showLeftPanels}
+          onShowRight={() => showPanel("lineage")}
           onShowLog={() => showPanel("logs")}
+          onShowViewer={() => showPanel("viewer")}
         />
         {leftPanelVisible ? (
           <>
@@ -605,6 +681,7 @@ function App() {
           </>
         ) : null}
 
+        {viewerPanelVisible ? (
         <section className={`viewer-column ${logPanelVisible ? "with-log-panel" : ""}`}>
           <ViewerToolbar
             mode={mode}
@@ -660,6 +737,11 @@ function App() {
                 synthContrastLimits={synthContrastLimits}
                 maxPixelRatio={configQuery.data?.rendering.maxPixelRatio ?? 1}
                 pointCloudConfig={configQuery.data?.pointCloud}
+                focusCellIds={cellFocusRequest?.cellIds ?? EMPTY_FOCUS_IDS}
+                focusFrame={cellFocusRequest?.frame ?? null}
+                focusRequestId={cellFocusRequest?.requestId ?? 0}
+                labeledCellIds={labeledCellIds}
+                frame={activeFrame?.t ?? frame}
                 onFirstRender={handleVolumeFirstRender}
                 onHoverSample={setHoverSample}
               />
@@ -745,6 +827,29 @@ function App() {
             </>
           ) : null}
         </section>
+        ) : null}
+        {lineagePanelVisible ? (
+          <>
+            <PanelResizer
+              side="right"
+              onPointerDown={(event) => beginPanelResize("right", event)}
+              onKeyboardResize={(delta) => resizePanel("right", panelLayout.right + delta)}
+            />
+            <LineagePanel
+              graph={lineageQuery.data}
+              layout={lineageLayoutQuery.data}
+              snapshot={lineageFrameQuery.data}
+              frame={activeFrame?.t ?? frame}
+              loading={lineageQuery.isFetching || lineageLayoutQuery.isFetching || lineageFrameQuery.isFetching}
+              error={lineageQuery.error ?? lineageLayoutQuery.error ?? lineageFrameQuery.error}
+              selectedNodeId={selectedLineageNodeId}
+              labeledNodeId={labeledLineageNodeId}
+              onSelectNode={setSelectedLineageNodeId}
+              onGoToCell={handleGoToLineageCell}
+              onHide={() => hidePanel("lineage")}
+            />
+          </>
+        ) : null}
       </section>
     </main>
   );
@@ -834,6 +939,34 @@ function clampSlice(slice: number, maxDepth: number): number {
   return Math.max(0, Math.min(Math.max(0, maxDepth - 1), slice));
 }
 
+function chooseLineageFocusFrame(node: LineageNode, currentFrame: number, frames: number[]): number {
+  const available = frames.length ? frames : [currentFrame];
+  const observedFrames = node.observedFrames.filter((candidate) => available.includes(candidate));
+  if (observedFrames.includes(currentFrame)) {
+    return currentFrame;
+  }
+  const preferred = observedFrames.length
+    ? observedFrames.reduce((best, candidate) => (
+        Math.abs(candidate - currentFrame) < Math.abs(best - currentFrame) ? candidate : best
+      ), observedFrames[0])
+    : node.lastFrame;
+  return available.reduce((best, candidate) => (
+    Math.abs(candidate - preferred) < Math.abs(best - preferred) ? candidate : best
+  ), available[0]);
+}
+
+function collectLineageFocusCellIds(node: LineageNode, nodes: LineageNode[], frame: number): string[] {
+  const siblingIds = nodes
+    .filter((candidate) => (
+      candidate.parentId &&
+      candidate.parentId === node.parentId &&
+      candidate.observedFrames.includes(frame)
+    ))
+    .map((candidate) => candidate.id);
+  const ids = siblingIds.length > 1 ? siblingIds : [node.id];
+  return [...new Set(ids)];
+}
+
 function ViewerReadout({
   frames,
   depth,
@@ -879,7 +1012,7 @@ function readPanelLayout(): { left: number; right: number; log: number } {
     const parsed = JSON.parse(raw) as Partial<{ left: number; right: number; log: number }>;
     return {
       left: clampNumber(Number(parsed.left ?? DEFAULT_PANEL_LAYOUT.left), MIN_PANEL_WIDTH, MAX_PANEL_WIDTH),
-      right: clampNumber(Number(parsed.right ?? DEFAULT_PANEL_LAYOUT.right), MIN_PANEL_WIDTH, MAX_PANEL_WIDTH),
+      right: Math.max(MIN_PANEL_WIDTH, Number(parsed.right ?? DEFAULT_PANEL_LAYOUT.right)),
       log: clampNumber(Number(parsed.log ?? DEFAULT_PANEL_LAYOUT.log), MIN_LOG_HEIGHT, MAX_LOG_HEIGHT),
     };
   } catch {
@@ -902,6 +1035,8 @@ function readPanelVisibility(): PanelVisibility {
       layers: typeof parsed.layers === "boolean" ? parsed.layers : DEFAULT_PANEL_VISIBILITY.layers,
       update: typeof parsed.update === "boolean" ? parsed.update : DEFAULT_PANEL_VISIBILITY.update,
       logs: typeof parsed.logs === "boolean" ? parsed.logs : DEFAULT_PANEL_VISIBILITY.logs,
+      lineage: typeof parsed.lineage === "boolean" ? parsed.lineage : DEFAULT_PANEL_VISIBILITY.lineage,
+      viewer: typeof parsed.viewer === "boolean" ? parsed.viewer : DEFAULT_PANEL_VISIBILITY.viewer,
     };
   } catch {
     return DEFAULT_PANEL_VISIBILITY;

@@ -86,3 +86,77 @@ export type JobEvent = {
   jobId?: string;
   payload?: unknown;
 };
+
+export type LineageNode = {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  rootId: string;
+  code: string;
+  depth: number;
+  firstFrame: number;
+  lastFrame: number;
+  children: string[];
+  observedFrames: number[];
+  lastCell?: CellRecord | null;
+};
+
+export type LineageEdge = {
+  id: string;
+  source: string;
+  target: string;
+  type: "division";
+  frame: number;
+};
+
+export type LineageGraph = {
+  jobId: string;
+  source: string;
+  frames: number[];
+  firstFrame: number | null;
+  lastFrame: number | null;
+  nodes: LineageNode[];
+  edges: LineageEdge[];
+  roots: string[];
+  activeByFrame?: Record<string, string[]>;
+  updatedAt?: number | null;
+  sourceSize?: number | null;
+};
+
+export type LineageLayoutNode = {
+  id: string;
+  label: string;
+  compactLabel: string;
+  angle: number;
+  radius: number;
+  radiusFrame: number;
+  x: number;
+  y: number;
+  color: string;
+  rootId: string;
+  depth: number;
+};
+
+export type LineageLayout = {
+  jobId: string;
+  mode: string;
+  background: string;
+  center: { x: number; y: number };
+  innerRadius?: number;
+  ringSpacing: number;
+  firstFrame?: number | null;
+  lastFrame?: number | null;
+  rings: { frame: number; radius: number }[];
+  nodes: Record<string, LineageLayoutNode>;
+  edges: LineageEdge[];
+};
+
+export type LineageFrameSnapshot = {
+  jobId: string;
+  frame: number;
+  sourceFrame: number | null;
+  missingFrameData: boolean;
+  visibleNodes: string[];
+  visibleEdges: LineageEdge[];
+  activeNodes: string[];
+};

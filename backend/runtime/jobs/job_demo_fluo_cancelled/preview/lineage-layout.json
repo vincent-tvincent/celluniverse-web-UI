@@ -1,0 +1,471 @@
+{
+  "background": "#070a0f",
+  "center": {
+    "x": 0,
+    "y": 0
+  },
+  "edges": [
+    {
+      "frame": 4,
+      "id": "cell_0->cell_00",
+      "source": "cell_0",
+      "target": "cell_00",
+      "type": "division"
+    },
+    {
+      "frame": 4,
+      "id": "cell_0->cell_01",
+      "source": "cell_0",
+      "target": "cell_01",
+      "type": "division"
+    },
+    {
+      "frame": 4,
+      "id": "cell_1->cell_10",
+      "source": "cell_1",
+      "target": "cell_10",
+      "type": "division"
+    },
+    {
+      "frame": 4,
+      "id": "cell_1->cell_11",
+      "source": "cell_1",
+      "target": "cell_11",
+      "type": "division"
+    },
+    {
+      "frame": 7,
+      "id": "cell_2->cell_20",
+      "source": "cell_2",
+      "target": "cell_20",
+      "type": "division"
+    },
+    {
+      "frame": 7,
+      "id": "cell_2->cell_21",
+      "source": "cell_2",
+      "target": "cell_21",
+      "type": "division"
+    },
+    {
+      "frame": 11,
+      "id": "cell_3->cell_30",
+      "source": "cell_3",
+      "target": "cell_30",
+      "type": "division"
+    },
+    {
+      "frame": 11,
+      "id": "cell_3->cell_31",
+      "source": "cell_3",
+      "target": "cell_31",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_00->cell_000",
+      "source": "cell_00",
+      "target": "cell_000",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_00->cell_001",
+      "source": "cell_00",
+      "target": "cell_001",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_01->cell_010",
+      "source": "cell_01",
+      "target": "cell_010",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_01->cell_011",
+      "source": "cell_01",
+      "target": "cell_011",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_10->cell_100",
+      "source": "cell_10",
+      "target": "cell_100",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_10->cell_101",
+      "source": "cell_10",
+      "target": "cell_101",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_11->cell_110",
+      "source": "cell_11",
+      "target": "cell_110",
+      "type": "division"
+    },
+    {
+      "frame": 18,
+      "id": "cell_11->cell_111",
+      "source": "cell_11",
+      "target": "cell_111",
+      "type": "division"
+    }
+  ],
+  "firstFrame": 0,
+  "innerRadius": 42,
+  "jobId": "job_demo_fluo_cancelled",
+  "lastFrame": 19,
+  "mode": "radial-time-v1",
+  "nodes": {
+    "cell_0": {
+      "angle": -2.356194490192345,
+      "color": "#7596ba",
+      "compactLabel": "cell_0",
+      "depth": 1,
+      "id": "cell_0",
+      "label": "cell_0",
+      "radius": 42,
+      "radiusFrame": 0,
+      "rootId": "cell_0",
+      "x": -29.698484809834994,
+      "y": -29.698484809834998
+    },
+    "cell_00": {
+      "angle": -2.833251152404128,
+      "color": "#7596ba",
+      "compactLabel": "cell_00",
+      "depth": 2,
+      "id": "cell_00",
+      "label": "cell_00",
+      "radius": 154,
+      "radiusFrame": 4,
+      "rootId": "cell_0",
+      "x": -146.73708269032673,
+      "y": -46.735731122260304
+    },
+    "cell_000": {
+      "angle": -3.07177948351002,
+      "color": "#7596ba",
+      "compactLabel": "cell_000",
+      "depth": 3,
+      "id": "cell_000",
+      "label": "cell_000",
+      "radius": 546,
+      "radiusFrame": 18,
+      "rootId": "cell_0",
+      "x": -544.669971441864,
+      "y": -38.08703466429254
+    },
+    "cell_001": {
+      "angle": -2.5947228212982365,
+      "color": "#7596ba",
+      "compactLabel": "cell_001",
+      "depth": 3,
+      "id": "cell_001",
+      "label": "cell_001",
+      "radius": 546,
+      "radiusFrame": 18,
+      "rootId": "cell_0",
+      "x": -466.3694171029669,
+      "y": -283.9288058493517
+    },
+    "cell_01": {
+      "angle": -1.8791378279805615,
+      "color": "#7596ba",
+      "compactLabel": "cell_01",
+      "depth": 2,
+      "id": "cell_01",
+      "label": "cell_01",
+      "radius": 154,
+      "radiusFrame": 4,
+      "rootId": "cell_0",
+      "x": -46.735731122260276,
+      "y": -146.73708269032676
+    },
+    "cell_010": {
+      "angle": -2.117666159086453,
+      "color": "#7596ba",
+      "compactLabel": "cell_010",
+      "depth": 3,
+      "id": "cell_010",
+      "label": "cell_010",
+      "radius": 546,
+      "radiusFrame": 18,
+      "rootId": "cell_0",
+      "x": -283.9288058493516,
+      "y": -466.36941710296696
+    },
+    "cell_011": {
+      "angle": -1.6406094968746698,
+      "color": "#7596ba",
+      "compactLabel": "cell_011",
+      "depth": 3,
+      "id": "cell_011",
+      "label": "cell_011",
+      "radius": 546,
+      "radiusFrame": 18,
+      "rootId": "cell_0",
+      "x": -38.08703466429243,
+      "y": -544.669971441864
+    },
+    "cell_1": {
+      "angle": -0.7853981633974482,
+      "color": "#f28e2b",
+      "compactLabel": "cell_1",
+      "depth": 1,
+      "id": "cell_1",
+      "label": "cell_1",
+      "radius": 42,
+      "radiusFrame": 0,
+      "rootId": "cell_1",
+      "x": 29.698484809834998,
+      "y": -29.698484809834994
+    },
+    "cell_10": {
+      "angle": -1.2624548256092316,
+      "color": "#f28e2b",
+      "compactLabel": "cell_10",
+      "depth": 2,
+      "id": "cell_10",
+      "label": "cell_10",
+      "radius": 154,
+      "radiusFrame": 4,
+      "rootId": "cell_1",
+      "x": 46.7357311222603,
+      "y": -146.73708269032676
+    },
+    "cell_100": {
+      "angle": -1.5009831567151233,
+      "color": "#f28e2b",
+      "compactLabel": "cell_100",
+      "depth": 3,
+      "id": "cell_100",
+      "label": "cell_100",
+      "radius": 546,
+      "radiusFrame": 18,
+      "rootId": "cell_1",
+      "x": 38.087034664292496,
+      "y": -544.669971441864
+    },
+    "cell_101": {
+      "angle": -1.02392649450334,
+      "color": "#f28e2b",
+      "compactLabel": "cell_101",
+      "depth": 3,
+      "id": "cell_101",
+      "label": "cell_101",
+      "radius": 546,
+      "radiusFrame": 18,
+      "rootId": "cell_1",
+      "x": 283.92880584935165,
+      "y": -466.3694171029669
+    },
+    "cell_11": {
+      "angle": -0.30834150118566495,
+      "color": "#f28e2b",
+      "compactLabel": "cell_11",
+      "depth": 2,
+      "id": "cell_11",
+      "label": "cell_11",
+      "radius": 154,
+      "radiusFrame": 4,
+      "rootId": "cell_1",
+      "x": 146.73708269032676,
+      "y": -46.73573112226029
+    },
+    "cell_110": {
+      "angle": -0.5468698322915566,
+      "color": "#f28e2b",
+      "compactLabel": "cell_110",
+      "depth": 3,
+      "id": "cell_110",
+      "label": "cell_110",
+      "radius": 546,
+      "radiusFrame": 18,
+      "rootId": "cell_1",
+      "x": 466.36941710296696,
+      "y": -283.92880584935165
+    },
+    "cell_111": {
+      "angle": -0.06981317007977328,
+      "color": "#f28e2b",
+      "compactLabel": "cell_111",
+      "depth": 3,
+      "id": "cell_111",
+      "label": "cell_111",
+      "radius": 546,
+      "radiusFrame": 18,
+      "rootId": "cell_1",
+      "x": 544.669971441864,
+      "y": -38.08703466429247
+    },
+    "cell_2": {
+      "angle": 0.7853981633974483,
+      "color": "#e87c7e",
+      "compactLabel": "cell_2",
+      "depth": 1,
+      "id": "cell_2",
+      "label": "cell_2",
+      "radius": 42,
+      "radiusFrame": 0,
+      "rootId": "cell_2",
+      "x": 29.698484809834998,
+      "y": 29.698484809834994
+    },
+    "cell_20": {
+      "angle": 0.06981317007977318,
+      "color": "#e87c7e",
+      "compactLabel": "cell_20",
+      "depth": 2,
+      "id": "cell_20",
+      "label": "cell_20",
+      "radius": 238,
+      "radiusFrame": 7,
+      "rootId": "cell_2",
+      "x": 237.42024396183817,
+      "y": 16.60204075110182
+    },
+    "cell_21": {
+      "angle": 1.5009831567151233,
+      "color": "#e87c7e",
+      "compactLabel": "cell_21",
+      "depth": 2,
+      "id": "cell_21",
+      "label": "cell_21",
+      "radius": 238,
+      "radiusFrame": 7,
+      "rootId": "cell_2",
+      "x": 16.602040751101857,
+      "y": 237.42024396183817
+    },
+    "cell_3": {
+      "angle": 2.356194490192345,
+      "color": "#76b7b2",
+      "compactLabel": "cell_3",
+      "depth": 1,
+      "id": "cell_3",
+      "label": "cell_3",
+      "radius": 42,
+      "radiusFrame": 0,
+      "rootId": "cell_3",
+      "x": -29.698484809834994,
+      "y": 29.698484809834998
+    },
+    "cell_30": {
+      "angle": 1.6406094968746698,
+      "color": "#76b7b2",
+      "compactLabel": "cell_30",
+      "depth": 2,
+      "id": "cell_30",
+      "label": "cell_30",
+      "radius": 350,
+      "radiusFrame": 11,
+      "rootId": "cell_3",
+      "x": -24.414765810443864,
+      "y": 349.14741759093846
+    },
+    "cell_31": {
+      "angle": 3.07177948351002,
+      "color": "#76b7b2",
+      "compactLabel": "cell_31",
+      "depth": 2,
+      "id": "cell_31",
+      "label": "cell_31",
+      "radius": 350,
+      "radiusFrame": 11,
+      "rootId": "cell_3",
+      "x": -349.14741759093846,
+      "y": 24.414765810443935
+    }
+  },
+  "ringSpacing": 28,
+  "rings": [
+    {
+      "frame": 0,
+      "radius": 42
+    },
+    {
+      "frame": 1,
+      "radius": 70
+    },
+    {
+      "frame": 2,
+      "radius": 98
+    },
+    {
+      "frame": 3,
+      "radius": 126
+    },
+    {
+      "frame": 4,
+      "radius": 154
+    },
+    {
+      "frame": 5,
+      "radius": 182
+    },
+    {
+      "frame": 6,
+      "radius": 210
+    },
+    {
+      "frame": 7,
+      "radius": 238
+    },
+    {
+      "frame": 8,
+      "radius": 266
+    },
+    {
+      "frame": 9,
+      "radius": 294
+    },
+    {
+      "frame": 10,
+      "radius": 322
+    },
+    {
+      "frame": 11,
+      "radius": 350
+    },
+    {
+      "frame": 12,
+      "radius": 378
+    },
+    {
+      "frame": 13,
+      "radius": 406
+    },
+    {
+      "frame": 14,
+      "radius": 434
+    },
+    {
+      "frame": 15,
+      "radius": 462
+    },
+    {
+      "frame": 16,
+      "radius": 490
+    },
+    {
+      "frame": 17,
+      "radius": 518
+    },
+    {
+      "frame": 18,
+      "radius": 546
+    },
+    {
+      "frame": 19,
+      "radius": 574
+    }
+  ]
+}

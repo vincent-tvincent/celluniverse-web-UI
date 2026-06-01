@@ -1,4 +1,4 @@
-import { Activity, ChevronDown, Eye, Layers, ListRestart, TerminalSquare } from "lucide-react";
+import { Activity, ChevronDown, Eye, GitBranch, Layers, ListRestart, Monitor, TerminalSquare } from "lucide-react";
 import type { ComponentType } from "react";
 import type { PanelVisibilityKey } from "../layout/types";
 
@@ -7,6 +7,8 @@ const PANEL_ICONS: Record<PanelVisibilityKey, ComponentType<{ size?: number }>> 
   layers: Layers,
   update: ListRestart,
   logs: TerminalSquare,
+  lineage: GitBranch,
+  viewer: Monitor,
 };
 
 type CollapsedPanelProps = {
