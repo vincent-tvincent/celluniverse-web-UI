@@ -6,7 +6,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { EyeOff, GitBranch, LocateFixed, Minus, Plus, RefreshCw } from "lucide-react";
+import { EyeOff, GitBranch, LocateFixed, Minus, Plus, RefreshCw, X as XIcon } from "lucide-react";
 import type { LineageFrameSnapshot, LineageGraph, LineageLayout, LineageNode } from "../../types";
 
 type LineagePanelProps = {
@@ -273,7 +273,9 @@ function NodeDetails({
     <div className="lineage-node-card">
       <div className="lineage-node-card-heading">
         <strong>{node.name}</strong>
-        <button type="button" onClick={onClose} aria-label="Close node details">x</button>
+        <button type="button" className="lineage-close-button" onClick={onClose} aria-label="Close node details">
+          <XIcon size={15} />
+        </button>
       </div>
       <dl>
         <div>

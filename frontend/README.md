@@ -110,6 +110,37 @@ Use a hard browser refresh after changing this file during local development.
 npm run build
 ```
 
+## Component Preview With Storybook
+
+Storybook previews frontend components with mock data, without starting the
+backend or CellUniverse engine.
+
+Run:
+
+```bash
+npm run storybook
+```
+
+Open:
+
+```text
+http://127.0.0.1:6007
+```
+
+Current stories live in:
+
+```text
+src/stories/components.stories.tsx
+```
+
+Build a static Storybook export:
+
+```bash
+npm run build-storybook
+```
+
+The static output is written to `storybook-static/`, which is ignored by git.
+
 ## Visual Smoke Check
 
 With the backend and frontend dev servers running:

@@ -64,7 +64,7 @@ export default function SchedulePanel({
           <option value="hours">hr</option>
         </select>
       </label>
-      <button type="button" className="toggle-button" onClick={onRefresh}>
+      <button type="button" className="action-button" onClick={onRefresh}>
         <RefreshCcw size={16} />
         Refresh now
       </button>

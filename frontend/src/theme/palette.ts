@@ -1,13 +1,23 @@
 export const uiPalette = {
-  viewerBackground: "#070a0f",
-  volumeBox: "#506070",
-  cellNormal: "#f6e582",
+  // Deep neutral background used behind microscopy slice and volume views.
+  viewerBackground: "#fffefa",
+  // Subtle bounding-box guide around the rendered 3D volume.
+  volumeBox: "#60616d",
+  // Default color for valid cell ellipsoid overlays.
+  cellNormal: "#00df82",
+  // Alert color for cells marked as trash or rejected output.
   cellTrash: "#ff765e",
-  cellSelected: "#67e8f9",
-  cellNormalStroke: "rgba(246, 229, 130, 0.95)",
-  cellTrashStroke: "rgba(255, 118, 94, 0.88)",
-  cellNormalFill: "rgba(246, 229, 130, 0.95)",
-  cellTrashFill: "rgba(255, 118, 94, 0.95)",
+  // Highlight color for the currently selected or lineage-focused cell.
+  cellSelected: "#00e7c8",
+  // Stroke for normal cell outlines in the 2D slice overlay.
+  cellNormalStroke: "#00df82",
+  // Stroke for trash/rejected cell outlines in the 2D slice overlay.
+  cellTrashStroke: "#ff765e",
+  // Fill for normal cell markers and overlay accents.
+  cellNormalFill: "#00df82",
+  // Fill for trash/rejected cell markers and overlay accents.
+  cellTrashFill: "#ff765e",
+  // Muted text shown inside empty viewer states.
   emptyText: "rgba(255,255,255,0.58)",
 } as const;
 
@@ -30,6 +40,7 @@ export type ColorMapDefinition = {
 
 export const colorMapDefinitions: ColorMapDefinition[] = [
   {
+    // Neutral luminance map for inspecting raw intensity without hue bias.
     id: "gray",
     label: "Gray",
     stops: [
@@ -38,6 +49,7 @@ export const colorMapDefinitions: ColorMapDefinition[] = [
     ],
   },
   {
+    // Cool single-hue map; useful for real-channel fluorescence-like signal.
     id: "cyan",
     label: "Cyan",
     stops: [
@@ -47,6 +59,7 @@ export const colorMapDefinitions: ColorMapDefinition[] = [
     ],
   },
   {
+    // Warm single-hue map; useful for synthetic or secondary-channel contrast.
     id: "magenta",
     label: "Magenta",
     stops: [
@@ -56,6 +69,7 @@ export const colorMapDefinitions: ColorMapDefinition[] = [
     ],
   },
   {
+    // Green fluorescence-style map for biological signal inspection.
     id: "green",
     label: "Green",
     stops: [
@@ -65,6 +79,7 @@ export const colorMapDefinitions: ColorMapDefinition[] = [
     ],
   },
   {
+    // Bright warm map that makes mid/high intensities stand out strongly.
     id: "yellow",
     label: "Yellow",
     stops: [
@@ -74,6 +89,7 @@ export const colorMapDefinitions: ColorMapDefinition[] = [
     ],
   },
   {
+    // Heat-style map for emphasizing high-intensity regions and warnings.
     id: "red",
     label: "Red",
     stops: [
@@ -83,6 +99,7 @@ export const colorMapDefinitions: ColorMapDefinition[] = [
     ],
   },
   {
+    // Cool blue map for separating one layer from warmer overlays.
     id: "blue",
     label: "Blue",
     stops: [
@@ -92,6 +109,7 @@ export const colorMapDefinitions: ColorMapDefinition[] = [
     ],
   },
   {
+    // Perceptually ordered scientific map; good default for continuous intensity.
     id: "viridis",
     label: "Viridis",
     stops: [
@@ -103,6 +121,7 @@ export const colorMapDefinitions: ColorMapDefinition[] = [
     ],
   },
   {
+    // High-contrast scientific map; useful for dim structures on dark backgrounds.
     id: "magma",
     label: "Magma",
     stops: [

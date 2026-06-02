@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ViewMode } from "../../store";
 
@@ -162,10 +162,10 @@ export default function ViewerToolbar({
     setSlice(nextSlice);
   };
   const scheduleSlice = (nextSlice: number) => {
+    setDraftSlice(nextSlice);
     pendingSliceRef.current = nextSlice;
     window.clearTimeout(sliceCommitTimerRef.current);
     sliceCommitTimerRef.current = window.setTimeout(() => {
-      setDraftSlice(pendingSliceRef.current);
       setSlice(pendingSliceRef.current);
     }, 80);
   };
@@ -192,6 +192,7 @@ export default function ViewerToolbar({
           max={maxFrameIndex}
           step={1}
           value={draftFrameIndex}
+          style={sliderFillStyle(draftFrameIndex, maxFrameIndex)}
           disabled={frames.length <= 1 || frameControlsDisabled}
           onPointerDown={resetFrameOffsetForSlider}
           onInput={(event) => {
@@ -259,6 +260,7 @@ export default function ViewerToolbar({
             max={Math.max(0, maxDepth - 1)}
             step={1}
             defaultValue={draftSlice}
+            style={sliderFillStyle(draftSlice, Math.max(0, maxDepth - 1))}
             onInput={(event) => {
               const nextSlice = Number(event.currentTarget.value);
               scheduleSlice(nextSlice);
@@ -326,4 +328,9 @@ function range(start: number, end: number): number[] {
     values.push(value);
   }
   return values;
+}
+
+function sliderFillStyle(value: number, max: number): CSSProperties {
+  const percent = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+  return { "--slider-fill": `${percent}%` } as CSSProperties;
 }
