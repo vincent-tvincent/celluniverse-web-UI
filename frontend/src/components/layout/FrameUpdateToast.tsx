@@ -1,3 +1,4 @@
+import { X as XIcon } from "lucide-react";
 import type { FrameUpdateNotice } from "./types";
 
 type FrameUpdateToastProps = {
@@ -26,7 +27,7 @@ export default function FrameUpdateToast({ notice, onView, onDismiss }: FrameUpd
         View
       </button>
       <button type="button" className="toast-dismiss" onClick={onDismiss} aria-label="Dismiss frame update notice">
-        x
+        <XIcon size={15} />
       </button>
     </div>
   );

@@ -3,7 +3,7 @@
   --color-bg-elevated: #fffefa;
   --color-panel: #f5f3ea;
   --color-panel-raised: #fff8d9;
-  --color-text: #5b584a;
+  --color-text: #fff8d9;
   --color-text-strong: #1a224b;
   --color-text-panel: #f3f3ed;
   --color-text-label: #e9e9cb;
@@ -11,7 +11,7 @@
   --color-text-soft: #40424e;
   --color-text-subtle: #aaadb7;
   --color-text-dim: #8e9a99;
-  --color-readout-important-text: #ff765e;
+  --color-readout-important-text: #ee482a;
   --color-action-text: #f3f3ed;
   --color-action-text-hover: #fffbec;
   --color-cancel-button-text: #40424e;
@@ -26,7 +26,7 @@
   --color-danger-text: #af031a;
   --color-danger-soft: #fecdd3;
   --color-status-idle: #8c9aa0;
-  --color-status-running: #8ef4b6;
+  --color-status-running: #ff765e;
   --color-control-disabled: #566166;
   --color-on-accent: #07110c;
   --border-subtle: rgba(255, 255, 255, 0.08);
@@ -59,7 +59,7 @@
   --surface-dropdown-menu: #f5f3ea;
   --surface-dropdown-option-hover: var(--surface-hover);
   --color-dropdown-text: var(--color-text-strong);
-  --color-dropdown-option-text: var(--color-text-panel);
+  --color-dropdown-option-text: var(--color-text-strong);
   --border-dropdown: var(--border-control);
   --border-dropdown-focus: var(--border-accent-focus);
   --border-dropdown-option-hover: var(--border-accent-muted);
@@ -90,14 +90,14 @@
   --resizer-handle-active: #5471ff;
   --gradient-page: linear-gradient(180deg, rgba(27, 33, 38, 0.92), rgba(7, 10, 15, 1) 46%);
   --gradient-brand: linear-gradient(145deg, rgba(217, 249, 157, 0.14), rgba(236, 72, 153, 0.12));
-  --gradient-progress: linear-gradient(90deg, #67e8f9, #d9f99d, #f6e582);
-  --gradient-preload: linear-gradient(90deg, #67e8f9, #d9f99d);
+  --gradient-progress: linear-gradient(90deg, #5471ff, #ff6528);
+  --gradient-preload: var(--gradient-progress);
   --viewer-grid:
     linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
   --shadow-overlay: 0 18px 60px rgba(0, 0, 0, 0.28);
   --shadow-toast: 0 16px 42px rgba(0, 0, 0, 0.28);
-  --shadow-running: 0 0 18px rgba(142, 244, 182, 0.65);
+  --shadow-running: 0 0 18px #bfc8ff;
   --spinner-muted: rgba(255, 255, 255, 0.15);
   --radius-control: 7px;
   --radius-panel: 8px;

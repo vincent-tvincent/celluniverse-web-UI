@@ -46,6 +46,8 @@ button {
 }
 
 .top-bar {
+  position: relative;
+  z-index: 100;
   min-height: 72px;
   padding: 14px 18px;
   display: grid;
@@ -205,7 +207,7 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  color: var(--color-dropdown-option-text);
+  color: var(--color-text-strong);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-control);
@@ -252,7 +254,7 @@ button {
   display: grid;
   place-items: center;
   border-radius: 7px;
-  color: var(--color-text);
+  color: var(--color-text-strong);
   background: var(--color-panel-raised);
   border: 1px solid var(--border-strong);
 }
@@ -708,7 +710,7 @@ button {
 }
 
 .metric-grid dt {
-  color: var(--color-text-dim);
+  color: var(--color-readout-important-text);
   font-size: 11px;
   margin-bottom: 3px;
 }
@@ -729,7 +731,7 @@ button {
 
 .layer-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(128px, 150px);
+  grid-template-columns: minmax(112px, 0.75fr) minmax(160px, 1.25fr);
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -900,6 +902,7 @@ button {
 }
 
 .color-map-option span:nth-child(2) {
+  color: var(--color-dropdown-option-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -943,18 +946,18 @@ button {
   height: 16px;
   margin-top: -5px;
   border-radius: 7px;
-  background: var(--layer-accent);
+  background: var(--color-action-text);
   border: 1px solid var(--color-text-strong);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-bg) 70%, transparent);
+  box-shadow: none;
 }
 
 .color-map-range::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border-radius: 7px;
-  background: var(--layer-accent);
+  background: var(--color-action-text);
   border: 1px solid var(--color-text-strong);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-bg) 70%, transparent);
+  box-shadow: none;
 }
 
 .contrast-limit-control {
@@ -1002,9 +1005,9 @@ button {
   height: 24px;
   padding: 0;
   border-radius: 7px;
-  background: var(--layer-accent);
+  background: var(--color-action-text);
   border: 1px solid var(--color-text-strong);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-bg) 70%, transparent);
+  box-shadow: none;
   cursor: ew-resize;
   transform: translate(-50%, -50%);
 }
@@ -1012,8 +1015,6 @@ button {
 .contrast-limit-thumb:hover,
 .contrast-limit-thumb:focus-visible {
   outline: 0;
-  background: var(--color-text-strong);
-  border-color: var(--layer-accent);
 }
 
 .contrast-limit-thumb.low {
@@ -1872,7 +1873,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   gap: 10px;
   align-items: center;
   border-radius: var(--radius-panel);
-  color: var(--color-text-panel);
+  color: var(--color-text-strong);
   background: var(--surface-toast);
   border: 1px solid color-mix(in srgb, var(--color-accent-soft) 36%, transparent);
   box-shadow: var(--shadow-toast);
@@ -1893,7 +1894,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 
 .frame-toast span {
   margin-top: 2px;
-  color: var(--color-text-muted);
+  color: var(--color-text-soft);
   font-size: 12px;
 }
 
@@ -1901,7 +1902,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   height: 30px;
   padding: 0 10px;
   border-radius: var(--radius-control);
-  color: var(--color-on-accent);
+  color: var(--color-toggle-text-active);
   background: var(--color-accent);
   border: 0;
   font-weight: 700;
@@ -1910,9 +1911,15 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 .frame-toast .toast-dismiss {
   width: 28px;
   padding: 0;
-  color: var(--color-text-soft);
-  background: var(--surface-control);
-  border: 1px solid var(--border-subtle);
+  color: var(--color-cancel-button-text);
+  background: var(--surface-cancel-button);
+  border: 1px solid var(--border-cancel-button);
+}
+
+.frame-toast .toast-dismiss:hover {
+  color: var(--color-cancel-button-text-hover);
+  background: var(--surface-cancel-button-hover);
+  border-color: var(--border-cancel-button-hover);
 }
 
 .log-panel {

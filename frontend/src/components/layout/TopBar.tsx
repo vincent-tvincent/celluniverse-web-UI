@@ -48,11 +48,12 @@ function JobCombobox({
 }) {
   const [draft, setDraft] = useState(selectedJobId);
   const [open, setOpen] = useState(false);
+  const [queryActive, setQueryActive] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const filteredJobs = useMemo(() => {
-    const query = draft.trim().toLowerCase();
+    const query = queryActive ? draft.trim().toLowerCase() : "";
     const matches = query
       ? jobs.filter((job) => {
           const label = job.label ?? "";
@@ -64,10 +65,11 @@ function JobCombobox({
         })
       : jobs;
     return matches.slice(0, 8);
-  }, [draft, jobs]);
+  }, [draft, jobs, queryActive]);
 
   useEffect(() => {
     setDraft(selectedJobId);
+    setQueryActive(false);
   }, [selectedJobId]);
 
   const commitDraft = () => {
@@ -79,6 +81,7 @@ function JobCombobox({
 
   const selectJob = (jobId: string) => {
     setDraft(jobId);
+    setQueryActive(false);
     onSelect(jobId);
     setOpen(false);
     setHighlightedIndex(-1);
@@ -97,6 +100,7 @@ function JobCombobox({
       return;
     }
     if (event.key === "Escape") {
+      setQueryActive(false);
       setOpen(false);
       setHighlightedIndex(-1);
       return;
@@ -108,6 +112,7 @@ function JobCombobox({
         selectJob(highlightedJob.id);
       } else {
         commitDraft();
+        setQueryActive(false);
         setOpen(false);
       }
     }
@@ -122,6 +127,7 @@ function JobCombobox({
           return;
         }
         commitDraft();
+        setQueryActive(false);
         setOpen(false);
         setHighlightedIndex(-1);
       }}
@@ -133,10 +139,14 @@ function JobCombobox({
           value={draft}
           onChange={(event) => {
             setDraft(event.target.value);
+            setQueryActive(true);
             setOpen(true);
             setHighlightedIndex(-1);
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setQueryActive(false);
+            setOpen(true);
+          }}
           onKeyDown={handleKeyDown}
           placeholder="job_..."
           aria-label="Job id"
@@ -150,6 +160,7 @@ function JobCombobox({
           className="job-combobox-toggle"
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
+            setQueryActive(false);
             setOpen((value) => !value);
             inputRef.current?.focus();
           }}
