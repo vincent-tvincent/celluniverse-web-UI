@@ -689,6 +689,17 @@ button {
   border: 1px solid var(--border-faint);
 }
 
+.tool-panel .status-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 18px;
+}
+
+.tool-panel .status-actions .action-button,
+.tool-panel .status-actions .cancel-button {
+  width: 100%;
+}
+
 .progress-track > div {
   height: 100%;
   min-width: 2px;
