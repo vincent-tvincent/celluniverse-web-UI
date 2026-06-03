@@ -1,4 +1,4 @@
-export type JobState = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type JobState = "prepared" | "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted" | "archived";
 
 export type JobStatus = {
   id: string;
@@ -56,6 +56,36 @@ export type JobManifest = {
   lineage: string;
 };
 
+export type DatasetPreviewManifest = {
+  datasetId: string;
+  jobId?: string;
+  label: string;
+  sourceType: "upload" | "local";
+  axes: string[];
+  frames: (ManifestFrame & { sourceIndex?: number; sourceName?: string })[];
+  lineage: "none";
+  metadata?: Record<string, unknown>;
+};
+
+export type DeleteDatasetUploadResponse = {
+  uploadId: string;
+  deleted: boolean;
+};
+
+export type DataSourceRoot = {
+  id: string;
+  label: string;
+  path: string;
+  enabled: boolean;
+  preset: boolean;
+  sourceRole: "dataset" | "initial-csv" | string;
+  sourceKind: "preset" | "tiff-image" | "initial-csv" | "initial-csv-preset" | string;
+  exists: boolean;
+  pathKind: "directory" | "file" | "missing";
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
 export type CellRecord = {
   file?: number | string;
   name: string;
@@ -79,6 +109,88 @@ export type LogResponse = {
   stream: "stdout" | "stderr";
   lines: string[];
 };
+
+export type DatasetUploadFile = {
+  name: string;
+  relativePath: string;
+  size: number;
+};
+
+export type DatasetUpload = {
+  uploadId: string;
+  kind: string;
+  createdAt: string;
+  fileCount: number;
+  totalBytes: number;
+  files: DatasetUploadFile[];
+};
+
+export type LocalDataset = {
+  id: string;
+  label: string;
+  sourceType: "local";
+  source: string;
+  rootId: string;
+  inputPath: string;
+  pathKind: "directory" | "frame-pattern" | "file";
+  fileCount: number;
+  frameCount: number;
+  firstFrame: number;
+  lastFrame: number;
+  filePattern: string;
+  totalBytes: number;
+  detectedAt: string;
+  warnings: string[];
+};
+
+export type InitialCsvPreset = {
+  id: string;
+  label: string;
+  path: string;
+  source: string;
+  size: number;
+};
+
+export type ParameterField = {
+  path: string;
+  label: string;
+  type: "integer" | "number" | "boolean" | "enum" | "string";
+  min?: number | null;
+  max?: number | null;
+  values?: string[] | null;
+  default?: unknown;
+  ui?: string | null;
+  virtual?: boolean;
+};
+
+export type ParameterModule = {
+  id: string;
+  label: string;
+  baseConfig: string;
+  groups: {
+    id: string;
+    label: string;
+    fields: ParameterField[];
+  }[];
+};
+
+export type CreateJobPayload = {
+  label?: string | null;
+  type?: string;
+  inputPath?: string | null;
+  datasetId?: string | null;
+  firstFrame: number;
+  lastFrame: number;
+  initialCsvPath?: string | null;
+  initialCsvUploadId?: string | null;
+  configYamlPath?: string | null;
+  configYamlUploadId?: string | null;
+  parameterModuleId?: string;
+  overrides?: Record<string, unknown>;
+  autoStart?: boolean;
+};
+
+export type JobRequest = CreateJobPayload;
 
 export type JobEvent = {
   time?: string;

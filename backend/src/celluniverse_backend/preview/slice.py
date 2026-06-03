@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import struct
 from pathlib import Path
 
@@ -10,6 +11,7 @@ SLICE_MAGIC = b"CUSL"
 SLICE_VERSION = 1
 SLICE_HEADER_FORMAT = "<IIIIIIII"
 SLICE_HEADER_SIZE = 36
+DISPLAY_MAX = 255
 
 
 def ensure_slice_preview(source_tiff: Path, preview_path: Path, *, slice_index: int, max_xy: int) -> Path:
@@ -34,8 +36,8 @@ def build_slice_preview(source_tiff: Path, preview_path: Path, *, slice_index: i
         page = pages[source_index]
         source = _read_page(handle, page)
         width, height = _fit_preview_size(page.width, page.height, max_xy)
-        pixels = _downsample_nearest(source, page.width, page.height, width, height)
-        display_max = max(1, max(pixels) if pixels else 1)
+        values = _downsample_nearest(source, page.width, page.height, width, height)
+        pixels = _normalize_to_u8(values)
 
     with preview_path.open("wb") as out:
         out.write(SLICE_MAGIC)
@@ -48,7 +50,7 @@ def build_slice_preview(source_tiff: Path, preview_path: Path, *, slice_index: i
             page.height,
             depth,
             source_index,
-            display_max,
+            DISPLAY_MAX,
         ))
         out.write(pixels)
 
@@ -59,8 +61,8 @@ def _fit_preview_size(width: int, height: int, max_xy: int) -> tuple[int, int]:
     return max(1, round(width * scale)), max(1, round(height * scale))
 
 
-def _downsample_nearest(source: bytes, source_width: int, source_height: int, width: int, height: int) -> bytes:
-    output = bytearray(width * height)
+def _downsample_nearest(source: list[float], source_width: int, source_height: int, width: int, height: int) -> list[float]:
+    output = [0.0] * (width * height)
     for y in range(height):
         source_y = min(source_height - 1, int((y * source_height) / height))
         source_row = source_y * source_width
@@ -68,4 +70,25 @@ def _downsample_nearest(source: bytes, source_width: int, source_height: int, wi
         for x in range(width):
             source_x = min(source_width - 1, int((x * source_width) / width))
             output[target_row + x] = source[source_row + source_x]
-    return bytes(output)
+    return output
+
+
+def _normalize_to_u8(values: list[float]) -> bytes:
+    finite = [value for value in values if math.isfinite(value) and value > 0]
+    if not finite:
+        return bytes(len(values))
+    display_max = _percentile(finite, 99.5)
+    if not math.isfinite(display_max) or display_max <= 0:
+        display_max = max(finite) if finite else 1.0
+    scale = DISPLAY_MAX / max(display_max, 1e-12)
+    return bytes(max(0, min(DISPLAY_MAX, round(value * scale))) if math.isfinite(value) else 0 for value in values)
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    values.sort()
+    if not values:
+        return 1.0
+    if len(values) == 1:
+        return values[0]
+    index = int(round((len(values) - 1) * max(0.0, min(100.0, percentile)) / 100.0))
+    return values[max(0, min(len(values) - 1, index))]

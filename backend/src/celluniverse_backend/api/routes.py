@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import zipfile
 from pathlib import Path
-from typing import Any, Iterable
+from urllib.parse import quote
+from typing import Any, Callable, Iterable
 
 from fastapi import APIRouter, Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -18,6 +20,7 @@ from celluniverse_backend.contracts.models import (
     LocalDatasetValidationRequest,
 )
 from celluniverse_backend.datasets.service import DatasetService, DatasetValidationError
+from celluniverse_backend.datasets.sources import DataSourceMutation, DataSourceRegistry
 from celluniverse_backend.jobs.manager import JobManager
 from celluniverse_backend.preview.lineage import ensure_lineage_artifacts, read_lineage_layout, read_lineage_snapshot
 from celluniverse_backend.preview.manifest import build_preview_artifacts
@@ -30,6 +33,7 @@ from celluniverse_backend.storage.json_store import read_json
 
 def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, exposed: ExposedParameterRegistry) -> None:
     router = APIRouter(prefix=config.server.apiPrefix)
+    data_sources = DataSourceRegistry(config)
     dataset_service = DatasetService(config)
 
     def require_auth(authorization: str | None = Header(default=None)) -> None:
@@ -46,6 +50,49 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
             return jobs.job_dir(job_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="job not found") from exc
+
+    def dataset_frame_path_or_404(kind: str, dataset_id: str, frame_index: int) -> Path:
+        try:
+            if kind == "local":
+                _dataset, files = dataset_service.local_dataset_files(dataset_id)
+            elif kind == "upload":
+                files = dataset_service.uploaded_dataset_files(dataset_id)
+            else:
+                raise DatasetValidationError(f"unknown dataset source type: {kind}")
+        except (DatasetValidationError, PathSecurityError, FileNotFoundError, OSError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if frame_index < 0 or frame_index >= len(files):
+            raise HTTPException(status_code=404, detail="dataset frame not found")
+        return files[frame_index]
+
+    def dataset_preview_cache_dir(kind: str, dataset_id: str) -> Path:
+        safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", dataset_id)
+        return config.runtime.runtimeRoot / "dataset-previews" / kind / safe_id
+
+    def dataset_pointcloud_response(kind: str, dataset_id: str, frame_index: int) -> FileResponse:
+        source_tiff = dataset_frame_path_or_404(kind, dataset_id, frame_index)
+        preview_path = dataset_preview_cache_dir(kind, dataset_id) / "pointcloud" / f"{frame_index}.cupc"
+        point_cloud_config = config.preview.pointCloud
+        try:
+            ensure_pointcloud_preview(
+                source_tiff,
+                preview_path,
+                max_points=point_cloud_config.maxPoints,
+                max_slices=point_cloud_config.maxSlices,
+                intensity_percentile=point_cloud_config.realIntensityPercentile,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return FileResponse(preview_path, media_type="application/octet-stream")
+
+    def dataset_slice_response(kind: str, dataset_id: str, frame_index: int, slice_index: int, max_xy: int) -> FileResponse:
+        source_tiff = dataset_frame_path_or_404(kind, dataset_id, frame_index)
+        preview_path = dataset_preview_cache_dir(kind, dataset_id) / "slices" / str(frame_index) / f"z{slice_index}_xy{max_xy}.cusl"
+        try:
+            ensure_slice_preview(source_tiff, preview_path, slice_index=slice_index, max_xy=max_xy)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return FileResponse(preview_path, media_type="application/octet-stream")
 
     @router.get("/health")
     def health(_: None = Depends(require_auth)) -> dict[str, str]:
@@ -82,13 +129,106 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @router.get("/config/initial-csv-presets")
+    def list_initial_csv_presets(_: None = Depends(require_auth)) -> list[dict[str, Any]]:
+        return dataset_service.list_initial_csv_presets()
+
+    @router.get("/config/base-yaml/{module_id}")
+    def get_base_yaml(module_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            module = exposed.load_module(module_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        base = Path(module.baseConfig)
+        if not base.is_absolute():
+            base = config.celluniverse.celluniverseCppRoot / base
+        try:
+            if base.is_absolute():
+                # The relative module default resolves inside the configured CellUniverse root.
+                base = base.resolve(strict=True)
+            if not any(base.is_relative_to(root.expanduser().resolve(strict=True)) for root in config.security.allowedConfigRoots if root.expanduser().exists()):
+                raise PathSecurityError(f"base config is outside allowed roots: {base}")
+        except (FileNotFoundError, PathSecurityError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"moduleId": module_id, "path": str(base), "content": base.read_text(encoding="utf-8")}
+
     @router.get("/datasets/roots")
-    def dataset_roots(_: None = Depends(require_auth)) -> list[dict[str, str]]:
-        return [
-            {"id": f"root_{idx}", "path": str(path)}
-            for idx, path in enumerate(config.security.allowedInputRoots)
-            if path.exists()
-        ]
+    def dataset_roots(_: None = Depends(require_auth)) -> list[dict[str, Any]]:
+        return data_sources.list_sources()
+
+    @router.post("/datasets/roots")
+    def add_dataset_root(body: DataSourceMutation, _: None = Depends(require_auth)) -> dict[str, Any]:
+        if body.path is None:
+            raise HTTPException(status_code=400, detail="path is required")
+        try:
+            return data_sources.add_source(body.path, label=body.label, enabled=True if body.enabled is None else body.enabled, source_role=body.sourceRole or "dataset")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.patch("/datasets/roots/{source_id}")
+    def update_dataset_root(source_id: str, body: DataSourceMutation, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            return data_sources.update_source(source_id, body)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="data source not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.delete("/datasets/roots/{source_id}")
+    def delete_dataset_root(source_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            return data_sources.delete_source(source_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="data source not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.get("/datasets/local")
+    def list_local_datasets(_: None = Depends(require_auth)) -> list[dict[str, Any]]:
+        return dataset_service.list_local_datasets()
+
+    @router.get("/datasets/local/{dataset_id}/preview")
+    def get_local_dataset_preview(dataset_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            dataset, files = dataset_service.local_dataset_files(dataset_id)
+        except (DatasetValidationError, PathSecurityError, FileNotFoundError, OSError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _build_dataset_preview_manifest(
+            dataset_id=dataset_id,
+            label=str(dataset.get("label") or dataset_id),
+            source_type="local",
+            files=files,
+            url_for=lambda index, _path: f"{config.server.apiPrefix}/datasets/local/{quote(dataset_id)}/frames/{index}.tif",
+            point_cloud_url_for=lambda index, _path: f"{config.server.apiPrefix}/datasets/local/{quote(dataset_id)}/pointcloud/{index}.cupc",
+            metadata={
+                "source": dataset.get("source"),
+                "inputPath": dataset.get("inputPath"),
+                "pathKind": dataset.get("pathKind"),
+                "filePattern": dataset.get("filePattern"),
+                "firstFrame": dataset.get("firstFrame"),
+                "lastFrame": dataset.get("lastFrame"),
+                "totalBytes": dataset.get("totalBytes"),
+            },
+            first_frame=int(dataset.get("firstFrame") or 0),
+        )
+
+    @router.get("/datasets/local/{dataset_id}/frames/{frame_index}.tif")
+    def get_local_dataset_frame(dataset_id: str, frame_index: int, _: None = Depends(require_auth)) -> FileResponse:
+        return FileResponse(dataset_frame_path_or_404("local", dataset_id, frame_index))
+
+    @router.get("/datasets/local/{dataset_id}/pointcloud/{frame_index}.cupc")
+    def get_local_dataset_pointcloud(dataset_id: str, frame_index: int, _: None = Depends(require_auth)) -> FileResponse:
+        return dataset_pointcloud_response("local", dataset_id, frame_index)
+
+    @router.get("/datasets/local/{dataset_id}/slices/{frame_index}/{slice_index}.cusl")
+    def get_local_dataset_slice_preview(
+        dataset_id: str,
+        frame_index: int,
+        slice_index: int,
+        max_xy: int = Query(default=512, ge=64, le=4096),
+        _: None = Depends(require_auth),
+    ) -> FileResponse:
+        return dataset_slice_response("local", dataset_id, frame_index, slice_index, max_xy)
 
     @router.get("/datasets/browse")
     def browse_dataset_root(
@@ -141,6 +281,87 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         except (DatasetValidationError, PathSecurityError, FileNotFoundError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @router.get("/datasets/uploads/{upload_id}/preview")
+    def get_dataset_upload_preview(upload_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            upload = dataset_service.get_upload(upload_id)
+            files = dataset_service.uploaded_dataset_files(upload_id)
+        except (DatasetValidationError, PathSecurityError, FileNotFoundError, OSError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _build_dataset_preview_manifest(
+            dataset_id=upload_id,
+            label=str(upload.get("files", [{}])[0].get("name") if upload.get("files") else upload_id),
+            source_type="upload",
+            files=files,
+            url_for=lambda _index, path: f"{config.server.apiPrefix}/datasets/uploads/{quote(upload_id)}/files/raw/{quote(path.name)}",
+            point_cloud_url_for=lambda index, _path: f"{config.server.apiPrefix}/datasets/uploads/{quote(upload_id)}/pointcloud/{index}.cupc",
+            metadata={
+                "createdAt": upload.get("createdAt"),
+                "fileCount": upload.get("fileCount"),
+                "totalBytes": upload.get("totalBytes"),
+            },
+        )
+
+    @router.get("/datasets/uploads/{upload_id}/pointcloud/{frame_index}.cupc")
+    def get_uploaded_dataset_pointcloud(upload_id: str, frame_index: int, _: None = Depends(require_auth)) -> FileResponse:
+        return dataset_pointcloud_response("upload", upload_id, frame_index)
+
+    @router.get("/datasets/uploads/{upload_id}/slices/{frame_index}/{slice_index}.cusl")
+    def get_uploaded_dataset_slice_preview(
+        upload_id: str,
+        frame_index: int,
+        slice_index: int,
+        max_xy: int = Query(default=512, ge=64, le=4096),
+        _: None = Depends(require_auth),
+    ) -> FileResponse:
+        return dataset_slice_response("upload", upload_id, frame_index, slice_index, max_xy)
+
+    @router.get("/datasets/uploads/{upload_id}/files/{file_path:path}")
+    def get_dataset_upload_file(upload_id: str, file_path: str, _: None = Depends(require_auth)) -> FileResponse:
+        try:
+            upload_root = safe_child_path(dataset_service.uploads_root, upload_id)
+            path = safe_child_path(upload_root, file_path)
+        except PathSecurityError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not path.exists() or not path.is_file():
+            raise HTTPException(status_code=404, detail="upload file not found")
+        return FileResponse(path)
+
+    @router.delete("/datasets/uploads/{upload_id}")
+    def delete_dataset_upload(upload_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        dependencies = jobs.jobs_for_dataset_upload(upload_id)
+        if dependencies:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "uploaded dataset is used by existing jobs",
+                    "jobs": [
+                        {"id": item.get("id"), "label": item.get("label"), "state": item.get("state")}
+                        for item in dependencies
+                    ],
+                },
+            )
+        try:
+            dataset_service.delete_uploaded_dataset(upload_id)
+        except (DatasetValidationError, PathSecurityError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"uploadId": upload_id, "deleted": True}
+
+    @router.get("/datasets/uploads/{upload_id}/download")
+    def download_dataset_upload(upload_id: str, _: None = Depends(require_auth)) -> FileResponse:
+        try:
+            upload_root = dataset_service.uploads_root / upload_id
+            upload_root = safe_child_path(dataset_service.uploads_root, upload_id)
+        except PathSecurityError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not upload_root.exists() or not upload_root.is_dir():
+            raise HTTPException(status_code=404, detail="upload not found")
+        downloads = upload_root / "downloads"
+        downloads.mkdir(exist_ok=True)
+        zip_path = downloads / f"{upload_id}.zip"
+        _build_upload_zip(upload_root, zip_path)
+        return FileResponse(zip_path, filename=f"{upload_id}.zip")
+
     @router.post("/uploads/initial-csv")
     async def upload_initial_csv(file: UploadFile = File(...), _: None = Depends(require_auth)) -> dict[str, Any]:
         if not (file.filename or "").lower().endswith(".csv"):
@@ -161,8 +382,11 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.get("/jobs")
-    def list_jobs(_: None = Depends(require_auth)) -> list[dict[str, Any]]:
-        return jobs.list_jobs()
+    def list_jobs(
+        includeArchived: bool = Query(default=False),
+        _: None = Depends(require_auth),
+    ) -> list[dict[str, Any]]:
+        return jobs.list_jobs(include_archived=includeArchived)
 
     @router.get("/jobs/{job_id}")
     def get_job(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
@@ -170,6 +394,52 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         if not status:
             raise HTTPException(status_code=404, detail="job not found")
         return status
+
+    @router.get("/jobs/{job_id}/request")
+    def get_job_request(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            request = jobs.get_request(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+        if not request:
+            raise HTTPException(status_code=404, detail="job request not found")
+        return request
+
+    @router.post("/jobs/{job_id}/clone")
+    def clone_job(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            return jobs.clone_job(job_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.put("/jobs/{job_id}")
+    def update_prepared_job(job_id: str, body: CreateJobRequest, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            return jobs.update_prepared_job(job_id, body)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.post("/jobs/{job_id}/start")
+    def start_job(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            return jobs.start_job(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.delete("/jobs/{job_id}")
+    def archive_job(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            return jobs.archive_job(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.post("/jobs/{job_id}/cancel")
     def cancel_job(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
@@ -347,6 +617,54 @@ def _tail_lines(path: Path, count: int) -> list[str]:
     return [line.rstrip("\n") for line in lines[-count:]]
 
 
+def _build_dataset_preview_manifest(
+    *,
+    dataset_id: str,
+    label: str,
+    source_type: str,
+    files: list[Path],
+    url_for: Callable[[int, Path], str],
+    metadata: dict[str, Any],
+    first_frame: int = 0,
+    point_cloud_url_for: Callable[[int, Path], str] | None = None,
+) -> dict[str, Any]:
+    frame_numbers = _preview_frame_numbers(files, first_frame)
+    frames: list[dict[str, Any]] = []
+    for index, path in enumerate(files):
+        layers: dict[str, Any] = {"realTiff": {"format": "tiff", "url": url_for(index, path)}}
+        if point_cloud_url_for:
+            layers["realPointCloud"] = {"format": "point-cloud-v1", "url": point_cloud_url_for(index, path)}
+        frames.append({
+            "t": frame_numbers[index],
+            "sourceIndex": index,
+            "sourceName": path.name,
+            "layers": layers,
+        })
+    return {
+        "datasetId": dataset_id,
+        "jobId": f"dataset:{dataset_id}",
+        "label": label,
+        "sourceType": source_type,
+        "axes": ["t", "z", "y", "x"],
+        "lineage": "none",
+        "frames": frames,
+        "metadata": {**metadata, "fileCount": len(files)},
+    }
+
+
+def _preview_frame_numbers(files: list[Path], first_frame: int = 0) -> list[int]:
+    numbers: list[int] = []
+    for path in files:
+        match = re.search(r"(\d+)(?=\.[^.]+$)", path.name)
+        if not match:
+            numbers = []
+            break
+        numbers.append(int(match.group(1)))
+    if len(numbers) == len(files) and len(set(numbers)) == len(numbers):
+        return numbers
+    return list(range(first_frame, first_frame + len(files)))
+
+
 def _manifest_has_pointcloud_layers(manifest: dict[str, Any]) -> bool:
     for frame in manifest.get("frames", []):
         layers = frame.get("layers", {})
@@ -370,3 +688,11 @@ def _build_zip(job_dir: Path, zip_path: Path) -> None:
             for path in root.rglob("*"):
                 if path.is_file():
                     archive.write(path, path.relative_to(job_dir))
+
+
+def _build_upload_zip(upload_root: Path, zip_path: Path) -> None:
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in upload_root.rglob("*"):
+            if not path.is_file() or path == zip_path or "downloads" in path.relative_to(upload_root).parts:
+                continue
+            archive.write(path, path.relative_to(upload_root))

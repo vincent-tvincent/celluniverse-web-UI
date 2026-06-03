@@ -7,12 +7,14 @@ from pydantic import BaseModel, Field
 
 
 class JobState(str, Enum):
+    prepared = "prepared"
     queued = "queued"
     running = "running"
     completed = "completed"
     failed = "failed"
     cancelled = "cancelled"
     interrupted = "interrupted"
+    archived = "archived"
 
 
 class JobType(str, Enum):
@@ -34,6 +36,7 @@ class CreateJobRequest(BaseModel):
     configYamlUploadId: str | None = None
     parameterModuleId: str = "debug-basic"
     overrides: dict[str, Any] = Field(default_factory=dict)
+    autoStart: bool = False
 
 
 class LocalDatasetValidationRequest(BaseModel):

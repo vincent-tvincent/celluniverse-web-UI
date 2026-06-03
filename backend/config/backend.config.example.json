@@ -52,7 +52,7 @@
   },
   "limits": {
     "maxConcurrentJobs": 1,
-    "maxFrameCount": 200,
+    "maxFrameCount": 201,
     "maxUploadSizeMb": 500,
     "maxRuntimeMinutes": 720,
     "maxThreads": 32

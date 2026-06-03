@@ -21,6 +21,10 @@ type LayerPanelProps = {
   setSynthOpacity: (opacity: number) => void;
   synthContrastLimits: ContrastLimits;
   setSynthContrastLimits: (limits: ContrastLimits) => void;
+  pointAlphaByBrightness?: boolean;
+  setPointAlphaByBrightness?: (enabled: boolean) => void;
+  showCells?: boolean;
+  showSynth?: boolean;
   onHide: () => void;
 };
 
@@ -41,19 +45,36 @@ export default function LayerPanel({
   setSynthOpacity,
   synthContrastLimits,
   setSynthContrastLimits,
+  pointAlphaByBrightness = false,
+  setPointAlphaByBrightness,
+  showCells = true,
+  showSynth = true,
   onHide,
 }: LayerPanelProps) {
   return (
     <section className="tool-panel">
       <PanelHeading title="Layers" icon={<Eye size={17} />} onHide={onHide} />
-      <button
-        type="button"
-        className={`toggle-button ${cellsEnabled ? "active" : ""}`}
-        onClick={() => setLayer("cellsEnabled", !cellsEnabled)}
-      >
-        {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
-        Cell outlines
-      </button>
+      {showCells ? (
+        <button
+          type="button"
+          className={`toggle-button ${cellsEnabled ? "active" : ""}`}
+          onClick={() => setLayer("cellsEnabled", !cellsEnabled)}
+        >
+          {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
+          Cell outlines
+        </button>
+      ) : null}
+      {setPointAlphaByBrightness ? (
+        <button
+          type="button"
+          className={`toggle-button layer-brightness-toggle ${showCells ? "separated" : ""} ${pointAlphaByBrightness ? "active" : ""}`}
+          onClick={() => setPointAlphaByBrightness(!pointAlphaByBrightness)}
+          title="Make point opacity proportional to brightness"
+        >
+          {pointAlphaByBrightness ? <Eye size={16} /> : <EyeOff size={16} />}
+          Brightness alpha
+        </button>
+      ) : null}
       <LayerControlGroup
         label="Real"
         enabled={realEnabled}
@@ -65,17 +86,19 @@ export default function LayerPanel({
         contrastLimits={realContrastLimits}
         onContrastLimitsChange={setRealContrastLimits}
       />
-      <LayerControlGroup
-        label="Synthetic"
-        enabled={synthEnabled}
-        onToggle={(value) => setLayer("synthEnabled", value)}
-        colorMap={synthMap}
-        onMapChange={setSynthMap}
-        opacity={synthOpacity}
-        onOpacityChange={setSynthOpacity}
-        contrastLimits={synthContrastLimits}
-        onContrastLimitsChange={setSynthContrastLimits}
-      />
+      {showSynth ? (
+        <LayerControlGroup
+          label="Synthetic"
+          enabled={synthEnabled}
+          onToggle={(value) => setLayer("synthEnabled", value)}
+          colorMap={synthMap}
+          onMapChange={setSynthMap}
+          opacity={synthOpacity}
+          onOpacityChange={setSynthOpacity}
+          contrastLimits={synthContrastLimits}
+          onContrastLimitsChange={setSynthContrastLimits}
+        />
+      ) : null}
     </section>
   );
 }

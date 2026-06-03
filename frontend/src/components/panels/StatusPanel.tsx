@@ -1,14 +1,17 @@
-import { Activity, CircleAlert, CircleCheck, CircleX, Clock3, LoaderCircle } from "lucide-react";
+import { Activity, CircleAlert, CircleCheck, CircleX, Clock3, LoaderCircle, Play, Square } from "lucide-react";
 import type { JobStatus } from "../../types";
 import PanelHeading from "./PanelHeading";
 
 type StatusPanelProps = {
   job?: JobStatus;
   loading: boolean;
+  actionPending?: boolean;
+  onStart?: (jobId: string) => void;
+  onTerminate?: (job: JobStatus) => void;
   onHide: () => void;
 };
 
-export default function StatusPanel({ job, loading, onHide }: StatusPanelProps) {
+export default function StatusPanel({ job, loading, actionPending = false, onStart, onTerminate, onHide }: StatusPanelProps) {
   const progress = Math.round((job?.progress ?? 0) * 100);
   const stateClass = job?.state ?? "idle";
   const stateIcon =
@@ -54,6 +57,18 @@ export default function StatusPanel({ job, loading, onHide }: StatusPanelProps) 
               <dd>{job.firstFrame}-{job.lastFrame}</dd>
             </div>
           </dl>
+          <div className="status-actions">
+            {job.state === "prepared" && onStart ? (
+              <button className="action-button" type="button" disabled={actionPending} onClick={() => onStart(job.id)}>
+                <Play size={14} /> Start
+              </button>
+            ) : null}
+            {(job.state === "running" || job.state === "queued") && onTerminate ? (
+              <button className="cancel-button" type="button" disabled={actionPending} onClick={() => onTerminate(job)}>
+                <Square size={14} /> Terminate
+              </button>
+            ) : null}
+          </div>
           {job.error ? <p className="error-text">{job.error}</p> : null}
         </>
       ) : (

@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getFrameCells,
   getJob,
@@ -17,6 +17,8 @@ import {
   getLogs,
   getManifest,
   listJobs,
+  startJob,
+  cancelJob,
   toApiUrl,
 } from "./api";
 import FrameUpdateToast from "./components/layout/FrameUpdateToast";
@@ -24,6 +26,8 @@ import LoadBadge from "./components/layout/LoadBadge";
 import PanelResizer from "./components/layout/PanelResizer";
 import PanelRestoreRail from "./components/layout/PanelRestoreRail";
 import PreloadProgress from "./components/layout/PreloadProgress";
+import Dashboard, { DangerConfirmDialog, type ConfirmIntent, type DashboardTab } from "./components/dashboard/Dashboard";
+import DatasetPreviewPanel from "./components/dashboard/DatasetPreviewPanel";
 import TopBar from "./components/layout/TopBar";
 import ViewerLoadingOverlay from "./components/layout/ViewerLoadingOverlay";
 import ViewerToolbar from "./components/layout/ViewerToolbar";
@@ -64,7 +68,74 @@ const MIN_LOG_HEIGHT = 150;
 const MAX_LOG_HEIGHT = 520;
 const VIEWER_LOADING_OVERLAY_DELAY_MS = 10000;
 
+type AppRoute =
+  | { name: "dashboard"; tab: DashboardTab; seedDatasetId: string }
+  | { name: "monitor"; jobId: string; quickPreview: boolean }
+  | { name: "dataset-preview"; kind: "upload" | "local"; datasetId: string };
+
 function App() {
+  const [route, setRoute] = useState<AppRoute>(() => readRoute());
+  const setSelectedJobId = useViewerStore((state) => state.setSelectedJobId);
+  const setFrame = useViewerStore((state) => state.setFrame);
+
+  useEffect(() => {
+    const handlePopState = () => setRoute(readRoute());
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const navigate = useCallback((path: string) => {
+    window.history.pushState({}, "", path);
+    setRoute(readRoute());
+  }, []);
+
+  const openMonitor = useCallback((job: JobStatus, quickPreview = false) => {
+    setSelectedJobId(job.id);
+    setFrame(job.lastCompletedFrame ?? job.currentFrame ?? job.firstFrame);
+    navigate(`/monitor/${encodeURIComponent(job.id)}${quickPreview ? "?preview=latest" : ""}`);
+  }, [navigate, setFrame, setSelectedJobId]);
+
+  if (route.name === "monitor") {
+    return (
+      <LiveMonitor
+        routeJobId={route.jobId}
+        quickPreview={route.quickPreview}
+        onBack={() => navigate("/dashboard?tab=jobs")}
+      />
+    );
+  }
+
+  if (route.name === "dataset-preview") {
+    return (
+      <DatasetPreviewPanel
+        kind={route.kind}
+        datasetId={route.datasetId}
+        onBack={() => navigate("/dashboard?tab=datasets")}
+        onCreateJob={(datasetRef) => navigate(`/dashboard?tab=new&dataset=${encodeURIComponent(datasetRef)}`)}
+      />
+    );
+  }
+
+  return (
+    <Dashboard
+      tab={route.tab}
+      initialDatasetId={route.seedDatasetId}
+      onChangeTab={(tab) => navigate(`/dashboard?tab=${tab}`)}
+      onOpenMonitor={openMonitor}
+      onPreviewDataset={(kind, datasetId) => navigate(`/datasets/${kind}/${encodeURIComponent(datasetId)}/preview`)}
+    />
+  );
+}
+
+function LiveMonitor({
+  routeJobId,
+  quickPreview,
+  onBack,
+}: {
+  routeJobId: string;
+  quickPreview: boolean;
+  onBack: () => void;
+}) {
   const queryClient = useQueryClient();
   const {
     selectedJobId,
@@ -91,6 +162,8 @@ function App() {
     setSynthOpacity,
     synthContrastLimits,
     setSynthContrastLimits,
+    pointAlphaByBrightness,
+    setPointAlphaByBrightness,
     logStream,
     setLogStream,
     autoRefreshEnabled,
@@ -101,12 +174,37 @@ function App() {
     setAutoRefreshUnit,
   } = useViewerStore();
   const configQuery = useViewerConfig();
+  useEffect(() => {
+    if (routeJobId && routeJobId !== selectedJobId) {
+      setSelectedJobId(routeJobId);
+    }
+  }, [routeJobId, selectedJobId, setSelectedJobId]);
+
   const previewConfig = configQuery.data?.preview;
   const previewSignature = previewConfig ? previewConfigSignature(previewConfig) : "";
 
   const scheduledRefreshMs = autoRefreshEnabled ? autoRefreshSeconds * 1000 : false;
   const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: listJobs, refetchInterval: scheduledRefreshMs });
   const sortedJobs = useMemo(() => sortJobs(jobsQuery.data ?? []), [jobsQuery.data]);
+  const [confirmIntent, setConfirmIntent] = useState<ConfirmIntent | null>(null);
+  const startMutation = useMutation({
+    mutationFn: startJob,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      if (selectedJobId) {
+        void queryClient.invalidateQueries({ queryKey: ["job", selectedJobId] });
+      }
+    },
+  });
+  const cancelMutation = useMutation({
+    mutationFn: cancelJob,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      if (selectedJobId) {
+        void queryClient.invalidateQueries({ queryKey: ["job", selectedJobId] });
+      }
+    },
+  });
   const [frameNotice, setFrameNotice] = useState<FrameUpdateNotice | null>(null);
   const [manualSliceOverride, setManualSliceOverride] = useState(false);
   const [sliceRenderPending, setSliceRenderPending] = useState(false);
@@ -215,9 +313,9 @@ function App() {
   const synthSliceUrl = getSlicePreviewUrl(selectedJobId, activeFrameNumber, "synth", slice, previewConfig, synthUrl);
   const preloadTargets = useMemo(
     () => (previewConfig && !usePointCloudPreview && mode !== "slice"
-      ? buildPreloadTargets(frames, activeFrameNumber, previewConfig, previewSignature)
+      ? buildPreloadTargets(frames, activeFrameNumber, previewConfig, previewSignature, quickPreview)
       : []),
-    [activeFrameNumber, frames, mode, previewConfig, previewSignature, usePointCloudPreview],
+    [activeFrameNumber, frames, mode, previewConfig, previewSignature, quickPreview, usePointCloudPreview],
   );
   const preload = useVolumePreload(preloadTargets, previewConfig?.preloadConcurrency ?? 1);
   const realVolume = !usePointCloudPreview && realUrl && previewConfig
@@ -281,6 +379,7 @@ function App() {
       synthOpacity,
       realContrastLimits,
       synthContrastLimits,
+      pointAlphaByBrightness,
       configQuery.data?.rendering.maxPixelRatio ?? 1,
       JSON.stringify(configQuery.data?.pointCloud ?? {}),
     ].join("|");
@@ -294,6 +393,7 @@ function App() {
     realOpacity,
     realContrastLimits,
     realUrl,
+    pointAlphaByBrightness,
     realVolume,
     realPointCloudQuery.data,
     realPointCloudUrl,
@@ -612,6 +712,7 @@ function App() {
         selectedJobId={selectedJobId}
         onSelect={setSelectedJobId}
         onRefresh={refreshAll}
+        onBack={onBack}
       />
 
       <section className={workspaceClassName} ref={workspaceRef} style={workspaceStyle}>
@@ -630,7 +731,23 @@ function App() {
             <aside className="side-panel left-panel">
               <ViewModePanel mode={mode} setMode={setMode} onHide={hideLeftPanels} />
               {panelVisibility.status ? (
-                <StatusPanel job={jobQuery.data} loading={jobQuery.isLoading} onHide={() => hidePanel("status")} />
+                <StatusPanel
+                  job={jobQuery.data}
+                  loading={jobQuery.isLoading}
+                  actionPending={startMutation.isPending || cancelMutation.isPending}
+                  onStart={(jobId) => startMutation.mutate(jobId)}
+                  onTerminate={(job) => {
+                    const sequence = randomSequence();
+                    setConfirmIntent({
+                      title: "Terminate Job",
+                      message: `${job.label ?? job.id} is ${job.state}. Partial outputs may remain available after termination.`,
+                      sequence,
+                      confirmLabel: "Terminate",
+                      onConfirm: () => cancelMutation.mutate(job.id),
+                    });
+                  }}
+                  onHide={() => hidePanel("status")}
+                />
               ) : (
                 <CollapsedPanel panel="status" title="Status" onShow={() => showPanel("status")} />
               )}
@@ -666,6 +783,8 @@ function App() {
                   setSynthOpacity={setSynthOpacity}
                   synthContrastLimits={synthContrastLimits}
                   setSynthContrastLimits={setSynthContrastLimits}
+                  pointAlphaByBrightness={pointAlphaByBrightness}
+                  setPointAlphaByBrightness={setPointAlphaByBrightness}
                   onHide={() => hidePanel("layers")}
                 />
               ) : (
@@ -734,6 +853,7 @@ function App() {
                 synthOpacity={synthOpacity}
                 realContrastLimits={realContrastLimits}
                 synthContrastLimits={synthContrastLimits}
+                pointAlphaByBrightness={pointAlphaByBrightness}
                 maxPixelRatio={configQuery.data?.rendering.maxPixelRatio ?? 1}
                 pointCloudConfig={configQuery.data?.pointCloud}
                 focusCellIds={cellFocusRequest?.cellIds ?? EMPTY_FOCUS_IDS}
@@ -855,6 +975,7 @@ function App() {
           </>
         ) : null}
       </section>
+      <DangerConfirmDialog intent={confirmIntent} onClose={() => setConfirmIntent(null)} />
     </main>
   );
 }
@@ -1058,9 +1179,13 @@ function buildPreloadTargets(
   activeFrame: number | undefined,
   previewConfig: PreviewConfig,
   previewSignature: string,
+  quickPreview: boolean,
 ): VolumePreloadTarget[] {
   const targets: VolumePreloadTarget[] = [];
-  const activeFirst = [...frames].sort((a, b) => {
+  const sourceFrames = quickPreview && activeFrame != null
+    ? frames.filter((frame) => frame.t === activeFrame)
+    : frames;
+  const activeFirst = [...sourceFrames].sort((a, b) => {
     if (a.t === activeFrame) {
       return -1;
     }
@@ -1124,11 +1249,49 @@ function activeRank(job: JobStatus): number {
   if (job.state === "queued") {
     return 1;
   }
-  return 2;
+  if (job.state === "prepared") {
+    return 2;
+  }
+  return 3;
 }
 
 function timestampOf(job: JobStatus): number {
   return Date.parse(job.startedAt ?? job.createdAt ?? job.finishedAt ?? "") || 0;
+}
+
+function readRoute(): AppRoute {
+  const params = new URLSearchParams(window.location.search);
+  const path = window.location.pathname;
+  if (path.startsWith("/monitor")) {
+    const [, , rawJobId = ""] = path.split("/");
+    return {
+      name: "monitor",
+      jobId: decodeURIComponent(rawJobId),
+      quickPreview: params.get("preview") === "latest",
+    };
+  }
+  if (path.startsWith("/datasets/")) {
+    const [, , rawKind = "", rawDatasetId = "", action = ""] = path.split("/");
+    if ((rawKind === "upload" || rawKind === "local") && rawDatasetId && action === "preview") {
+      return { name: "dataset-preview", kind: rawKind, datasetId: decodeURIComponent(rawDatasetId) };
+    }
+  }
+  return {
+    name: "dashboard",
+    tab: parseDashboardTab(params.get("tab")),
+    seedDatasetId: params.get("dataset") ?? "",
+  };
+}
+
+function parseDashboardTab(value: string | null): DashboardTab {
+  if (value === "new" || value === "datasets" || value === "outputs" || value === "settings") {
+    return value;
+  }
+  return "jobs";
+}
+
+function randomSequence(): string {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
 export default App;

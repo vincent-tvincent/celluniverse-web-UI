@@ -25,6 +25,7 @@ type Props = {
   synthOpacity: number;
   realContrastLimits: ContrastLimits;
   synthContrastLimits: ContrastLimits;
+  pointAlphaByBrightness?: boolean;
   maxPixelRatio: number;
   pointCloudConfig?: ViewerRuntimeConfig["pointCloud"];
   focusCellIds: string[];
@@ -43,6 +44,7 @@ type PointCloudData = {
   sourceY: Float32Array;
   sourceZ: Float32Array;
   brightness: Float32Array;
+  alpha: Float32Array;
   pointCount: number;
 };
 
@@ -76,6 +78,7 @@ export default function ThreeVolumeViewer({
   synthOpacity,
   realContrastLimits,
   synthContrastLimits,
+  pointAlphaByBrightness = false,
   maxPixelRatio,
   pointCloudConfig,
   focusCellIds,
@@ -149,12 +152,13 @@ export default function ThreeVolumeViewer({
         worldDepth,
         cloudConfig,
         interleavePreviewLayers ? "real" : "none",
+        pointAlphaByBrightness,
       );
       if (points) {
         realHoverTargets.push(points);
       }
     } else if (realEnabled && real) {
-      const points = addVolumePointCloud(group, real, realMap, realOpacity, realContrastLimits, worldWidth, worldHeight, worldDepth, cloudConfig);
+      const points = addVolumePointCloud(group, real, realMap, realOpacity, realContrastLimits, worldWidth, worldHeight, worldDepth, cloudConfig, pointAlphaByBrightness);
       if (points) {
         realHoverTargets.push(points);
       }
@@ -171,6 +175,7 @@ export default function ThreeVolumeViewer({
         worldDepth,
         cloudConfig,
         interleavePreviewLayers ? "synth" : "none",
+        pointAlphaByBrightness,
       );
     } else if (synthEnabled && synth) {
       addVolumePointCloud(
@@ -183,6 +188,7 @@ export default function ThreeVolumeViewer({
         worldHeight,
         worldDepth,
         cloudConfig,
+        pointAlphaByBrightness,
       );
     }
     if (cellsEnabled && cells.length) {
@@ -301,6 +307,7 @@ export default function ThreeVolumeViewer({
     synthOpacity,
     realContrastLimits,
     synthContrastLimits,
+    pointAlphaByBrightness,
     maxPixelRatio,
     pointCloudConfig,
     focusCellIds,
@@ -475,6 +482,7 @@ function addVolumePointCloud(
   worldHeight: number,
   worldDepth: number,
   config: ViewerRuntimeConfig["pointCloud"],
+  pointAlphaByBrightness: boolean,
 ): THREE.Points | undefined {
   const cloud = getCachedPointCloud(volume, colorMap, contrastLimits, worldWidth, worldHeight, worldDepth, config);
   if (!cloud.pointCount) {
@@ -484,7 +492,8 @@ function addVolumePointCloud(
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(cloud.positions, 3));
   geometry.setAttribute("pointColor", new THREE.BufferAttribute(cloud.colors, 3));
-  const material = createPointCloudMaterial(config.pointSize, opacity);
+  geometry.setAttribute("pointAlpha", new THREE.BufferAttribute(cloud.alpha, 1));
+  const material = createPointCloudMaterial(config.pointSize, opacity, pointAlphaByBrightness);
   const points = new THREE.Points(geometry, material);
   points.userData = getPointCloudHoverData(cloud);
   group.add(points);
@@ -502,6 +511,7 @@ function addPreviewPointCloud(
   worldDepth: number,
   config: ViewerRuntimeConfig["pointCloud"],
   interleaveRole: InterleaveRole,
+  pointAlphaByBrightness: boolean,
 ): THREE.Points | undefined {
   const cloud = getCachedPreviewPointCloud(preview, colorMap, contrastLimits, worldWidth, worldHeight, worldDepth, config, interleaveRole);
   if (!cloud.pointCount) {
@@ -511,7 +521,8 @@ function addPreviewPointCloud(
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(cloud.positions, 3));
   geometry.setAttribute("pointColor", new THREE.BufferAttribute(cloud.colors, 3));
-  const material = createPointCloudMaterial(config.pointSize, opacity);
+  geometry.setAttribute("pointAlpha", new THREE.BufferAttribute(cloud.alpha, 1));
+  const material = createPointCloudMaterial(config.pointSize, opacity, pointAlphaByBrightness);
   const points = new THREE.Points(geometry, material);
   points.userData = getPointCloudHoverData(cloud);
   group.add(points);
@@ -595,19 +606,24 @@ function getCachedPreviewPointCloud(
   return cloud;
 }
 
-function createPointCloudMaterial(pointSize: number, opacity: number): THREE.ShaderMaterial {
+function createPointCloudMaterial(pointSize: number, opacity: number, pointAlphaByBrightness: boolean): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
       pointSize: { value: pointSize },
       opacity: { value: opacity },
+      alphaByBrightness: { value: pointAlphaByBrightness ? 1.0 : 0.0 },
     },
     vertexShader: `
       uniform float pointSize;
+      uniform float alphaByBrightness;
       attribute vec3 pointColor;
+      attribute float pointAlpha;
       varying vec3 vColor;
+      varying float vAlpha;
 
       void main() {
         vColor = pointColor;
+        vAlpha = mix(1.0, pointAlpha, alphaByBrightness);
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
         gl_PointSize = pointSize;
         gl_Position = projectionMatrix * mvPosition;
@@ -617,6 +633,7 @@ function createPointCloudMaterial(pointSize: number, opacity: number): THREE.Sha
       precision mediump float;
       uniform float opacity;
       varying vec3 vColor;
+      varying float vAlpha;
 
       void main() {
         vec2 centered = gl_PointCoord - vec2(0.5);
@@ -625,7 +642,7 @@ function createPointCloudMaterial(pointSize: number, opacity: number): THREE.Sha
           discard;
         }
         float edge = smoothstep(0.5, 0.2, radius);
-        gl_FragColor = vec4(vColor, opacity * edge);
+        gl_FragColor = vec4(vColor, opacity * vAlpha * edge);
       }
     `,
     transparent: true,
@@ -654,6 +671,7 @@ function buildPointCloud(
   const sourceY = new Float32Array(maxPoints);
   const sourceZ = new Float32Array(maxPoints);
   const brightnessValues = new Float32Array(maxPoints);
+  const alphaValues = new Float32Array(maxPoints);
   const map = getColorMap(colorMap);
   const widthDenominator = Math.max(1, volume.width - 1);
   const heightDenominator = Math.max(1, volume.height - 1);
@@ -687,6 +705,7 @@ function buildPointCloud(
         sourceY[pointIndex] = (y / heightDenominator) * Math.max(0, volume.sourceHeight - 1);
         sourceZ[pointIndex] = z;
         brightnessValues[pointIndex] = value;
+        alphaValues[pointIndex] = intensity;
         const brightness = Math.max(0.58, Math.sqrt(intensity));
         colors[target] = (r / 255) * brightness;
         colors[target + 1] = (g / 255) * brightness;
@@ -703,6 +722,7 @@ function buildPointCloud(
     sourceY: sourceY.slice(0, pointIndex),
     sourceZ: sourceZ.slice(0, pointIndex),
     brightness: brightnessValues.slice(0, pointIndex),
+    alpha: alphaValues.slice(0, pointIndex),
     pointCount: pointIndex,
   };
 }
@@ -723,6 +743,7 @@ function buildPreviewPointCloud(
   const sourceY = new Float32Array(preview.pointCount);
   const sourceZ = new Float32Array(preview.pointCount);
   const brightnessValues = new Float32Array(preview.pointCount);
+  const alphaValues = new Float32Array(preview.pointCount);
   const map = getColorMap(colorMap);
   const widthDenominator = Math.max(1, preview.sourceWidth - 1);
   const heightDenominator = Math.max(1, preview.sourceHeight - 1);
@@ -753,6 +774,7 @@ function buildPreviewPointCloud(
     sourceY[outputPointIndex] = preview.y[pointIndex] ?? 0;
     sourceZ[outputPointIndex] = preview.z[pointIndex] ?? 0;
     brightnessValues[outputPointIndex] = Math.max(0, Math.min(255, (preview.intensity[pointIndex] ?? 0) * 255));
+    alphaValues[outputPointIndex] = intensity;
     const brightness = Math.max(0.58, Math.sqrt(intensity));
     colors[target] = (r / 255) * brightness;
     colors[target + 1] = (g / 255) * brightness;
@@ -767,6 +789,7 @@ function buildPreviewPointCloud(
     sourceY: sourceY.slice(0, outputPointIndex),
     sourceZ: sourceZ.slice(0, outputPointIndex),
     brightness: brightnessValues.slice(0, outputPointIndex),
+    alpha: alphaValues.slice(0, outputPointIndex),
     pointCount: outputPointIndex,
   };
 }

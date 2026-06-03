@@ -19,6 +19,7 @@ type ViewerState = {
   synthOpacity: number;
   realContrastLimits: ContrastLimits;
   synthContrastLimits: ContrastLimits;
+  pointAlphaByBrightness: boolean;
   logStream: "stdout" | "stderr";
   autoRefreshEnabled: boolean;
   autoRefreshSeconds: number;
@@ -34,6 +35,7 @@ type ViewerState = {
   setSynthOpacity: (opacity: number) => void;
   setRealContrastLimits: (limits: ContrastLimits) => void;
   setSynthContrastLimits: (limits: ContrastLimits) => void;
+  setPointAlphaByBrightness: (enabled: boolean) => void;
   setLogStream: (stream: "stdout" | "stderr") => void;
   setAutoRefreshEnabled: (enabled: boolean) => void;
   setAutoRefreshSeconds: (seconds: number) => void;
@@ -54,6 +56,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   synthOpacity: 0.5,
   realContrastLimits: DEFAULT_CLEAN_CONTRAST_LIMITS,
   synthContrastLimits: DEFAULT_CLEAN_CONTRAST_LIMITS,
+  pointAlphaByBrightness: false,
   logStream: "stdout",
   autoRefreshEnabled: true,
   autoRefreshSeconds: 5,
@@ -81,6 +84,9 @@ export const useViewerStore = create<ViewerState>((set) => ({
     const limits = clampContrastLimits(synthContrastLimits);
     return areContrastLimitsEqual(state.synthContrastLimits, limits) ? state : { synthContrastLimits: limits };
   }),
+  setPointAlphaByBrightness: (pointAlphaByBrightness) => (
+    set((state) => (state.pointAlphaByBrightness === pointAlphaByBrightness ? state : { pointAlphaByBrightness }))
+  ),
   setLogStream: (logStream) => set((state) => (state.logStream === logStream ? state : { logStream })),
   setAutoRefreshEnabled: (autoRefreshEnabled) => (
     set((state) => (state.autoRefreshEnabled === autoRefreshEnabled ? state : { autoRefreshEnabled }))

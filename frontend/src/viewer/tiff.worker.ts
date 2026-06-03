@@ -88,7 +88,7 @@ function decodeTiffVolume(buffer: ArrayBuffer, id: number, options: PreviewDecod
   const sourceWidth = getIfdWidth(ifds[0]);
   const sourceHeight = getIfdHeight(ifds[0]);
   const previewSize = fitPreviewSize(sourceWidth, sourceHeight, options.maxXY);
-  const stride = Math.max(1, Math.ceil(ifds.length / options.maxSlices));
+  const stride = ifds.length <= 50 ? 1 : Math.max(1, Math.ceil(ifds.length / options.maxSlices));
   const selected = ifds
     .map((ifd, index) => ({ ifd, index }))
     .filter(({ index }) => index % stride === 0 || index === ifds.length - 1);

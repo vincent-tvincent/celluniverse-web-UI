@@ -75,7 +75,7 @@ class JobManager:
             id=job_id,
             label=label,
             type=request.type,
-            state=JobState.queued,
+            state=JobState.prepared,
             createdAt=utc_now(),
             firstFrame=request.firstFrame,
             lastFrame=request.lastFrame,
@@ -83,15 +83,18 @@ class JobManager:
             totalFrames=frame_count,
         )
         self._write_status(status)
-        self._event(job_id, "job.queued", status.model_dump(mode="json"))
-        self._queue.put(job_id)
+        self._event(job_id, "job.prepared", status.model_dump(mode="json"))
+        if request.autoStart:
+            return JobStatus.model_validate(self.start_job(job_id))
         return status
 
-    def list_jobs(self) -> list[dict[str, Any]]:
+    def list_jobs(self, include_archived: bool = False) -> list[dict[str, Any]]:
         statuses = []
         queued = list(self._queue.queue)
         for path in sorted(self.jobs_root.glob("job_*/status.json"), reverse=True):
             data = read_json(path, {})
+            if data.get("state") == JobState.archived.value and not include_archived:
+                continue
             if data.get("state") == JobState.queued.value and data.get("id") in queued:
                 data["queuePosition"] = queued.index(data["id"]) + 1
             statuses.append(data)
@@ -103,10 +106,109 @@ class JobManager:
         except KeyError:
             return {}
 
+    def get_request(self, job_id: str) -> dict[str, Any]:
+        return read_json(self.job_dir(job_id) / "request.json", {})
+
+    def clone_job(self, job_id: str) -> JobStatus:
+        status = self.get_status(job_id)
+        if not status:
+            raise KeyError(job_id)
+        request = CreateJobRequest.model_validate(read_json(self.job_dir(job_id) / "request.json"))
+        request.label = f"Revision of {status.get('label') or request.label or job_id}"
+        request.autoStart = False
+        return self.create_job(request)
+
+    def jobs_for_dataset_upload(self, upload_id: str) -> list[dict[str, Any]]:
+        matches = []
+        for path in self.jobs_root.glob("job_*/request.json"):
+            request = read_json(path, {})
+            if request.get("datasetId") != upload_id:
+                continue
+            job_id = path.parent.name
+            status = self.get_status(job_id)
+            if status and status.get("state") != JobState.archived.value:
+                matches.append(status)
+        return matches
+
+    def update_prepared_job(self, job_id: str, request: CreateJobRequest) -> dict[str, Any]:
+        status = self.get_status(job_id)
+        if not status:
+            raise KeyError(job_id)
+        if status.get("state") != JobState.prepared.value:
+            raise ValueError("only prepared jobs can be edited")
+        if request.lastFrame < request.firstFrame:
+            raise ValueError("lastFrame must be >= firstFrame")
+        frame_count = request.lastFrame - request.firstFrame + 1
+        if frame_count > self.config.limits.maxFrameCount:
+            raise ValueError(f"frame count exceeds limit: {frame_count}")
+
+        job_dir = self.job_dir(job_id)
+        shutil.rmtree(job_dir / "input", ignore_errors=True)
+        (job_dir / "input").mkdir(parents=True, exist_ok=True)
+        write_json_atomic(job_dir / "request.json", request.model_dump(mode="json"))
+        self._materialize_inputs(job_id, request)
+
+        status.update({
+            "label": request.label or f"{request.type.value} {request.firstFrame}-{request.lastFrame}",
+            "type": request.type.value,
+            "firstFrame": request.firstFrame,
+            "lastFrame": request.lastFrame,
+            "currentFrame": request.firstFrame,
+            "lastCompletedFrame": None,
+            "completedFrames": 0,
+            "totalFrames": frame_count,
+            "progress": 0.0,
+            "error": None,
+            "partialOutputsAvailable": False,
+            "outputReady": {},
+        })
+        self._write_status_dict(job_id, status)
+        self._event(job_id, "job.updated", status)
+        return status
+
+    def start_job(self, job_id: str) -> dict[str, Any]:
+        status = self.get_status(job_id)
+        if not status:
+            raise KeyError(job_id)
+        if status.get("state") != JobState.prepared.value:
+            raise ValueError("only prepared jobs can be started")
+        status.update({
+            "state": JobState.queued.value,
+            "startedAt": None,
+            "finishedAt": None,
+            "pid": None,
+            "exitCode": None,
+            "error": None,
+            "currentFrame": status.get("firstFrame"),
+        })
+        self._write_status_dict(job_id, status)
+        self._event(job_id, "job.queued", status)
+        self._queue.put(job_id)
+        return status
+
+    def archive_job(self, job_id: str) -> dict[str, Any]:
+        status = self.get_status(job_id)
+        if not status:
+            raise KeyError(job_id)
+        if status.get("state") in {JobState.running.value, JobState.queued.value}:
+            raise ValueError("running or queued jobs must be terminated before archive")
+        status["state"] = JobState.archived.value
+        status["archivedAt"] = utc_now()
+        self._write_status_dict(job_id, status)
+        self._event(job_id, "job.archived", {"jobId": job_id})
+        return status
+
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         status = self.get_status(job_id)
         if not status:
             raise KeyError(job_id)
+        if status.get("state") == JobState.prepared.value:
+            status["state"] = JobState.cancelled.value
+            status["finishedAt"] = utc_now()
+            status["error"] = "Cancelled by user"
+            self._write_status_dict(job_id, status)
+            self._event(job_id, "job.cancelled", {"jobId": job_id})
+            return status
         if status.get("state") == JobState.queued.value:
             status["state"] = JobState.cancelled.value
             status["finishedAt"] = utc_now()
@@ -294,4 +396,8 @@ class JobManager:
                 status["state"] = JobState.interrupted.value
                 status["finishedAt"] = utc_now()
                 status["error"] = "Backend restarted while job was running"
+                write_json_atomic(path, status)
+            elif status.get("state") == JobState.queued.value:
+                status["state"] = JobState.prepared.value
+                status["error"] = "Backend restarted before queued job started"
                 write_json_atomic(path, status)

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { ChevronDown, Layers3, RefreshCcw } from "lucide-react";
+import { ArrowLeft, ChevronDown, Layers3, RefreshCcw } from "lucide-react";
 import type { JobStatus } from "../../types";
 
 type TopBarProps = {
@@ -7,6 +7,7 @@ type TopBarProps = {
   selectedJobId: string;
   onSelect: (jobId: string) => void;
   onRefresh: () => void;
+  onBack?: () => void;
 };
 
 export default function TopBar({
@@ -14,16 +15,23 @@ export default function TopBar({
   selectedJobId,
   onSelect,
   onRefresh,
+  onBack,
 }: TopBarProps) {
   return (
     <header className="top-bar">
       <div className="brand-block">
-        <div className="brand-mark">
-          <Layers3 size={20} />
-        </div>
+        {onBack ? (
+          <button className="brand-mark brand-back-button" type="button" onClick={onBack} title="Back">
+            <ArrowLeft size={20} />
+          </button>
+        ) : (
+          <div className="brand-mark">
+            <Layers3 size={20} />
+          </div>
+        )}
         <div>
           <h1>CellUniverse Live Viewer</h1>
-          <p>3D TIFF preview with synthetic overlay and cell geometry</p>
+          {onBack ? null : <p>3D TIFF preview with synthetic overlay and cell geometry</p>}
         </div>
       </div>
       <div className="job-select-row">
