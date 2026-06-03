@@ -1,4 +1,4 @@
-import { PanelBottomOpen, PanelLeftOpen, PanelRightOpen, PanelTopOpen } from "lucide-react";
+import { GitBranch, Monitor, PanelLeftOpen, TerminalSquare } from "lucide-react";
 
 type PanelRestoreRailProps = {
   leftHidden: boolean;
@@ -39,10 +39,10 @@ export default function PanelRestoreRail({
           type="button"
           className="side-restore-tab right"
           onClick={onShowRight}
-          title="Show lineage panel"
-          aria-label="Show lineage panel"
+          title="Show Lineage"
+          aria-label="Show Lineage"
         >
-          <PanelRightOpen size={18} />
+          <GitBranch size={18} />
         </button>
       ) : null}
       {viewerHidden ? (
@@ -50,10 +50,10 @@ export default function PanelRestoreRail({
           type="button"
           className="side-restore-tab top"
           onClick={onShowViewer}
-          title="Show viewer panel"
-          aria-label="Show viewer panel"
+          title="Show Viewer"
+          aria-label="Show Viewer"
         >
-          <PanelTopOpen size={18} />
+          <Monitor size={18} />
         </button>
       ) : null}
       {logHidden ? (
@@ -61,10 +61,10 @@ export default function PanelRestoreRail({
           type="button"
           className="side-restore-tab log"
           onClick={onShowLog}
-          title="Show log panel"
-          aria-label="Show log panel"
+          title="Show Logs"
+          aria-label="Show Logs"
         >
-          <PanelBottomOpen size={18} />
+          <TerminalSquare size={18} />
         </button>
       ) : null}
     </>

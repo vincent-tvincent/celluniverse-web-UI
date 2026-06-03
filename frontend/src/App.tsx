@@ -8,7 +8,6 @@ import {
   useState,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Braces } from "lucide-react";
 import {
   getFrameCells,
   getJob,
@@ -988,7 +987,6 @@ function ViewerReadout({
   return (
     <div className="viewer-readout" aria-live="polite">
       <div className="viewer-readout-line">
-        <Braces size={15} />
         <span>{frames} t</span>
         <span>{depth} z</span>
         <span>{width && height ? `${width}x${height}` : "0 xy"}</span>

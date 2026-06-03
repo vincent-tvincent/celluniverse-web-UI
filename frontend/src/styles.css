@@ -93,7 +93,7 @@ button {
 .job-select-row {
   grid-column: 2;
   display: grid;
-  grid-template-columns: auto minmax(180px, 260px) minmax(220px, 320px) 38px;
+  grid-template-columns: auto minmax(280px, 540px) 38px;
   align-items: center;
   gap: 9px;
   justify-self: center;
@@ -108,23 +108,142 @@ button {
 }
 
 .job-select-row select,
-.job-select-row input,
 .layer-row select {
   min-width: 0;
   height: 36px;
   padding: 0 11px;
-  color: var(--color-text-panel);
-  background: var(--color-panel);
-  border: 1px solid var(--border-control);
+  color: var(--color-dropdown-text);
+  background: var(--surface-dropdown);
+  border: 1px solid var(--border-dropdown);
   border-radius: 7px;
   outline: none;
 }
 
-.job-select-row input:focus,
+.job-select-row input {
+  min-width: 0;
+  height: 36px;
+  padding: 0 11px;
+  color: var(--color-input-text);
+  background: var(--surface-input);
+  border: 1px solid var(--border-input);
+  border-radius: 7px;
+  outline: none;
+}
+
 .job-select-row select:focus,
 .layer-row select:focus {
-  border-color: var(--border-accent-focus);
+  border-color: var(--border-dropdown-focus);
   box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.job-select-row input:focus {
+  border-color: var(--border-input-focus);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.job-select-row input::placeholder,
+.number-row input::placeholder {
+  color: var(--color-input-placeholder);
+}
+
+.job-combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.job-combobox-input-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.job-combobox-input-wrap input {
+  width: 100%;
+  padding-right: 40px;
+}
+
+.job-combobox-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 31px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-input-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  transform: translateY(-50%);
+}
+
+.job-combobox-toggle:hover {
+  background: var(--surface-dropdown-option-hover);
+}
+
+.job-combobox-menu {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  max-height: 280px;
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  overflow: auto;
+  background: var(--surface-dropdown-menu);
+  border: 1px solid var(--border-dropdown);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-overlay);
+}
+
+.job-combobox-option {
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-dropdown-option-text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  text-align: left;
+}
+
+.job-combobox-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-combobox-option small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.job-combobox-option:hover,
+.job-combobox-option.highlighted,
+.job-combobox-option[aria-selected="true"] {
+  color: var(--color-text-strong);
+  background: var(--surface-dropdown-option-hover);
+  border-color: var(--border-dropdown-option-hover);
+}
+
+.job-combobox-empty {
+  min-height: 34px;
+  padding: 8px 9px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.job-select-row select option,
+.layer-row select option,
+.number-row select option {
+  color: var(--color-dropdown-option-text);
+  background: var(--surface-dropdown-menu);
 }
 
 .icon-button {
@@ -139,10 +258,15 @@ button {
 }
 
 .icon-button:hover,
-.action-button:hover,
+.action-button:hover {
+  border-color: var(--border-accent);
+}
+
 .toggle-button:hover,
 .segmented button:hover {
-  border-color: var(--border-accent);
+  color: var(--color-toggle-text-hover);
+  background: var(--surface-toggle-hover);
+  border-color: var(--border-toggle-hover);
 }
 
 .action-button:hover {
@@ -509,7 +633,7 @@ button {
 }
 
 .side-restore-tab svg {
-  color: var(--color-accent-soft);
+  color: var(--color-heading);
 }
 
 .muted {
@@ -644,9 +768,9 @@ button {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--color-text-soft);
+  color: var(--color-toggle-text);
   background: var(--surface-toggle);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-toggle);
 }
 
 .action-button {
@@ -669,8 +793,8 @@ button {
 
 .toggle-button.active,
 .segmented button.active {
-  color: var(--color-text-strong);
-  border-color: var(--border-accent);
+  color: var(--color-toggle-text-active);
+  border-color: var(--border-toggle-active);
 }
 
 .segmented button.active {
@@ -712,9 +836,9 @@ button {
   grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  color: var(--color-text-panel);
-  background: var(--color-panel);
-  border: 1px solid var(--border-control);
+  color: var(--color-dropdown-text);
+  background: var(--surface-dropdown);
+  border: 1px solid var(--border-dropdown);
   border-radius: var(--radius-control);
   outline: none;
   cursor: pointer;
@@ -727,7 +851,7 @@ button {
 
 .color-map-select summary:focus-visible,
 .color-map-select[open] summary {
-  border-color: var(--layer-accent);
+  border-color: var(--border-dropdown-focus);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--layer-accent) 18%, transparent);
 }
 
@@ -754,8 +878,8 @@ button {
   display: grid;
   gap: 4px;
   overflow: auto;
-  background: var(--color-panel-raised);
-  border: 1px solid var(--border-strong);
+  background: var(--surface-dropdown-menu);
+  border: 1px solid var(--border-dropdown);
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-overlay);
 }
@@ -768,7 +892,7 @@ button {
   grid-template-columns: 38px minmax(0, 1fr) 16px;
   align-items: center;
   gap: 8px;
-  color: var(--color-text-soft);
+  color: var(--color-dropdown-option-text);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-control);
@@ -785,8 +909,8 @@ button {
 .color-map-option:focus-visible,
 .color-map-option.selected {
   color: var(--color-text-strong);
-  background: var(--surface-hover);
-  border-color: var(--border-accent-muted);
+  background: var(--surface-dropdown-option-hover);
+  border-color: var(--border-dropdown-option-hover);
   outline: 0;
 }
 
@@ -915,9 +1039,20 @@ button {
   min-width: 0;
   height: 34px;
   padding: 0 9px;
-  color: var(--color-text-panel);
-  background: var(--surface-control);
-  border: 1px solid var(--border-control);
+  color: var(--color-dropdown-text);
+  background: var(--surface-dropdown-inline);
+  border: 1px solid var(--border-dropdown);
+  border-radius: var(--radius-control);
+  outline: none;
+}
+
+.number-row input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  color: var(--color-input-text);
+  background: var(--surface-input-inline);
+  border: 1px solid var(--border-input);
   border-radius: var(--radius-control);
   outline: none;
 }
@@ -926,9 +1061,13 @@ button {
   width: 72px;
 }
 
-.number-row input:focus,
 .number-row select:focus {
-  border-color: var(--border-accent-focus);
+  border-color: var(--border-dropdown-focus);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.number-row input:focus {
+  border-color: var(--border-input-focus);
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
@@ -1153,21 +1292,21 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   overflow: hidden;
   text-overflow: clip;
   white-space: nowrap;
-  color: var(--color-text-soft);
+  color: var(--color-toggle-text);
   background: var(--surface-toggle);
-  border: 1px solid var(--border-control);
+  border: 1px solid var(--border-toggle);
 }
 
 .frame-offset-button:hover:not(:disabled) {
-  color: var(--color-text-strong);
-  background: var(--surface-hover);
-  border-color: var(--border-accent);
+  color: var(--color-toggle-text-hover);
+  background: var(--surface-toggle-hover);
+  border-color: var(--border-toggle-hover);
 }
 
 .frame-offset-button.active {
-  color: var(--color-text-strong);
+  color: var(--color-toggle-text-active);
   background: var(--surface-toggle-active);
-  border-color: var(--border-accent);
+  border-color: var(--border-toggle-active);
 }
 
 .frame-offset-button:disabled {
@@ -1329,11 +1468,11 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 }
 
 .viewer-readout-line svg {
-  color: var(--color-accent-soft);
+  color: var(--color-readout-important-text);
 }
 
 .viewer-readout-line.hover {
-  color: var(--color-text-soft);
+  color: var(--color-readout-important-text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1516,7 +1655,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   gap: 5px;
   padding: 4px;
   border-radius: var(--radius-control);
-  background: var(--surface-badge);
+  background: var(--surface-control-subtle);
   border: 1px solid var(--border-subtle);
   backdrop-filter: blur(8px);
 }
@@ -1530,7 +1669,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   justify-content: center;
   gap: 7px;
   color: var(--color-text-soft);
-  background: var(--surface-control);
+  background: var(--surface-toggle);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
 }
@@ -1899,7 +2038,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 
   .job-select-row {
     grid-column: 1;
-    grid-template-columns: auto minmax(140px, 1fr) minmax(140px, 1fr) 38px;
+    grid-template-columns: auto minmax(180px, 1fr) 38px;
     justify-self: stretch;
     width: 100%;
   }
@@ -1931,8 +2070,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
     grid-template-columns: 1fr 38px;
   }
 
-  .job-select-row label,
-  .job-select-row select {
+  .job-select-row label {
     display: none;
   }
 
