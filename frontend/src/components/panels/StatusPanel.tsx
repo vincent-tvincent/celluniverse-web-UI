@@ -16,7 +16,7 @@ export default function StatusPanel({ job, loading, actionPending = false, onSta
   const stateClass = job?.state ?? "idle";
   const stateIcon =
     job?.state === "running" ? (
-      <LoaderCircle size={17} />
+      <LoaderCircle className="spin-small" size={17} />
     ) : job?.state === "queued" ? (
       <Clock3 size={17} />
     ) : job?.state === "completed" ? (
