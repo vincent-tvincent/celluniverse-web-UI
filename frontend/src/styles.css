@@ -2401,9 +2401,16 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 .job-block-grid,
 .dataset-block-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
   align-content: start;
   gap: 12px;
+}
+
+.job-block-grid {
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+
+.dataset-block-grid {
+  grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
 }
 
 .dashboard-card,
