@@ -77,6 +77,35 @@ Current backend/frontend integration plan:
 
 ## Temporary Development Log
 
+### 2026-06-03 Light Theme And Visual Language Snapshot
+
+Current viewer-page development state after the light visual theme pass. The
+page now shows the live viewer as a pale scientific operations workspace with a
+dark top bar, centered job selector, left operational control stack, central 3D
+volume viewer, right lineage tree panel, and bottom runtime log dock.
+
+Important progress in this snapshot:
+
+- Reworked the frontend color system into layered hex-only design tokens:
+  palette, broad semantic colors, component mappings, and specific component
+  colors.
+- Added a documented frontend visual language so future pages can follow the
+  same layout, surface, typography, control, and interaction rules.
+- Added root `AGENTS.md` instructions so future AI-assisted frontend work reads
+  the visual-language guide and checks risky UI consistency changes with the
+  team.
+- Improved job selector behavior so opening the dropdown shows all detected
+  jobs, while filtering only begins after the user types.
+- Refined button semantics and color ownership for action buttons, toggle
+  buttons, cancel/close buttons, slider arrow buttons, and popup dismiss
+  controls.
+- Tuned the layer controls, dropdown readability, slider handles, status metric
+  labels, toast popup colors, and top-bar refresh icon for the current light UI.
+- Added a visible runtime log dock under the viewer while keeping the 3D viewer
+  and lineage tree visible in the same monitoring workspace.
+
+![Light theme live viewer visual language snapshot](docs/Screenshot%20From%202026-06-03%2004-43-21.png)
+
 ### 2026-06-01 Live Viewer And Lineage UI Snapshot
 
 Current viewer-page development state with the portable demo job loaded. The
