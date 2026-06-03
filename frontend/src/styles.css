@@ -2442,6 +2442,11 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   gap: 12px;
 }
 
+.dashboard-row.job-item {
+  grid-template-columns: minmax(300px, 0.45fr) minmax(320px, 1fr) max-content;
+  column-gap: 10px;
+}
+
 .item-mainline,
 .item-title-wrap,
 .item-actions,
@@ -2733,6 +2738,17 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 
 .job-manage-actions {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-row.job-item .job-actions {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(270px, 1fr) minmax(340px, 1.2fr);
+  align-items: stretch;
+}
+
+.dashboard-row.job-item .job-lifecycle-button,
+.dashboard-row.job-item .job-action-row {
+  min-width: 0;
 }
 
 .job-actions .action-button,
@@ -3250,6 +3266,11 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 
   .dataset-preview-side {
     display: none;
+  }
+
+  .dashboard-row.job-item,
+  .dashboard-row.job-item .job-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .dashboard-row,
