@@ -180,6 +180,7 @@
     linear-gradient(90deg, var(--palette-grid-line) 1px, var(--palette-clear) 1px);
   --shadow-overlay: 0 18px 60px var(--palette-shadow);
   --shadow-panel: 0 16px 42px color-mix(in srgb, var(--palette-shadow) 48%, transparent), 0 4px 12px color-mix(in srgb, var(--palette-shadow) 24%, transparent);
+  --shadow-viewer-panel: 0 10px 24px color-mix(in srgb, var(--palette-shadow) 22%, transparent), 0 2px 8px color-mix(in srgb, var(--palette-shadow) 12%, transparent);
   --shadow-toast: 0 16px 42px var(--palette-shadow);
   --shadow-running: 0 0 18px var(--palette-slider-track);
   --spinner-muted: var(--palette-white-15);

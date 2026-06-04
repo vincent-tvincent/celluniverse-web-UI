@@ -401,6 +401,15 @@ button {
   box-shadow: var(--shadow-panel);
 }
 
+.app-shell .tool-panel,
+.app-shell .slider-field,
+.app-shell .lineage-controls,
+.dataset-preview-shell .tool-panel,
+.dataset-preview-shell .slider-field,
+.dataset-preview-shell .lineage-controls {
+  box-shadow: var(--shadow-viewer-panel);
+}
+
 .side-panel-collapse-button {
   width: 100%;
   min-height: 38px;

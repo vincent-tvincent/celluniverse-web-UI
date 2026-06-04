@@ -77,6 +77,7 @@ Common token usage:
 - Slider surfaces: `--surface-slider-track`, `--surface-slider-accent`,
   `--surface-slider-thumb`
 - Floating panel shadow: `--shadow-panel`
+- Viewer panel shadow: `--shadow-viewer-panel`
 
 When a new component needs independent control, add a specific token that maps
 back to an existing semantic token. Example:
@@ -130,9 +131,10 @@ Use surfaces consistently:
 - `--surface-popup` or `--surface-toast` for floating feedback panels.
 - `--surface-loading-card` for loading overlays on top of viewers.
 
-Panels and repeated blocks now use visible `--shadow-panel`; keep that shadow
-consistent. Do not add custom drop shadows per component unless the token is
-updated.
+Panels and repeated dashboard blocks use visible `--shadow-panel`; keep that
+shadow consistent. Live monitor and dataset preview controls use the lighter
+`--shadow-viewer-panel` so adjacent viewer panes do not create hard visual cuts.
+Do not add custom drop shadows per component unless the token is updated.
 
 Do not add page gradients. The current operational pages use flat paper
 backgrounds and tokenized shadows instead.
