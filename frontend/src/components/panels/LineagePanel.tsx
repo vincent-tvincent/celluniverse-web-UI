@@ -89,8 +89,8 @@ export default function LineagePanel({
     const rect = event.currentTarget.getBoundingClientRect();
     const worldUnitsPerPixel = (extent * 2) / Math.max(1, Math.min(rect.width, rect.height));
     setPan({
-      x: drag.pan.x + ((event.clientX - drag.x) * worldUnitsPerPixel) / scale,
-      y: drag.pan.y + ((event.clientY - drag.y) * worldUnitsPerPixel) / scale,
+      x: drag.pan.x + (event.clientX - drag.x) * worldUnitsPerPixel,
+      y: drag.pan.y + (event.clientY - drag.y) * worldUnitsPerPixel,
     });
   };
 
