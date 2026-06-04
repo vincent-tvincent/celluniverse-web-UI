@@ -1696,6 +1696,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   border-radius: var(--radius-control);
   background: var(--surface-control-subtle);
   border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-panel);
   backdrop-filter: blur(8px);
 }
 
