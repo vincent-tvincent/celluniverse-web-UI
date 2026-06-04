@@ -51,7 +51,7 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
             }
             layers["realPointCloud"] = {
                 "format": "point-cloud-v1",
-                "url": f"/api/jobs/{job_id}/pointcloud/real/{frame}.cupc",
+                "url": _versioned_url(f"/api/jobs/{job_id}/pointcloud/real/{frame}.cupc", real_tiff),
             }
         if synth_tiff.exists():
             layers["synthTiff"] = {
@@ -60,7 +60,7 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
             }
             layers["synthPointCloud"] = {
                 "format": "point-cloud-v1",
-                "url": f"/api/jobs/{job_id}/pointcloud/synth/{frame}.cupc",
+                "url": _versioned_url(f"/api/jobs/{job_id}/pointcloud/synth/{frame}.cupc", synth_tiff),
             }
         if frame in cell_frames:
             layers["cells"] = {
@@ -78,6 +78,15 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
     write_json_atomic(preview_dir / "manifest.json", manifest)
     write_json_atomic(job_dir / "artifacts.json", build_artifact_registry(job_dir))
     return manifest
+
+
+def _versioned_url(url: str, source_path: Path) -> str:
+    try:
+        stat = source_path.stat()
+    except OSError:
+        return url
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}v={stat.st_size}-{stat.st_mtime_ns}"
 
 
 def build_artifact_registry(job_dir: Path) -> dict[str, Any]:

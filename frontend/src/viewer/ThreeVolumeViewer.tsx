@@ -94,7 +94,7 @@ export default function ThreeVolumeViewer({
   const mountRef = useRef<HTMLDivElement | null>(null);
   const cameraViewRef = useRef<CameraViewState | null>(null);
   const appliedFocusRequestRef = useRef(0);
-  const [backgroundMode, setBackgroundMode] = useState<ViewerBackgroundMode>("bright");
+  const [backgroundMode, setBackgroundMode] = useState<ViewerBackgroundMode>("dark");
 
   useEffect(() => {
     const mount = mountRef.current;

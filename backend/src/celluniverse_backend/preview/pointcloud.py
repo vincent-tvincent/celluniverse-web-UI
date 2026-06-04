@@ -86,6 +86,7 @@ def build_pointcloud_preview(
     intensity_percentile: float,
     xy_density_multiplier: float = 1.0,
 ) -> None:
+    source_stat = source_tiff.stat()
     with source_tiff.open("rb") as handle:
         _endian, pages = _read_tiff_pages(handle)
         if not pages:
@@ -120,6 +121,8 @@ def build_pointcloud_preview(
             )
             metadata = {
                 "source": source_tiff.name,
+                "sourceSize": source_stat.st_size,
+                "sourceMtimeNs": source_stat.st_mtime_ns,
                 "maxPoints": max_points,
                 "maxSlices": max_slices,
                 "intensityPercentile": intensity_percentile,
@@ -162,18 +165,57 @@ def _preview_cache_matches(
     intensity_percentile: float,
     xy_density_multiplier: float,
 ) -> bool:
-    if not preview_path.exists() or preview_path.stat().st_mtime < source_tiff.stat().st_mtime:
+    try:
+        preview_stat = preview_path.stat()
+        source_stat = source_tiff.stat()
+    except OSError:
         return False
+    if preview_stat.st_mtime_ns < source_stat.st_mtime_ns:
+        return False
+
     metadata = _read_preview_metadata(preview_path)
     if not metadata:
         return False
+
+    try:
+        with source_tiff.open("rb") as handle:
+            _endian, pages = _read_tiff_pages(handle)
+        if not pages:
+            return False
+        first = pages[0]
+        _validate_supported_pages(pages)
+    except (OSError, ValueError, struct.error):
+        return False
+
     return (
         metadata.get("source") == source_tiff.name
-        and metadata.get("maxPoints") == max_points
-        and metadata.get("maxSlices") == max_slices
-        and abs(float(metadata.get("intensityPercentile", -1.0)) - intensity_percentile) < 1e-6
-        and abs(float(metadata.get("xyDensityMultiplier", 1.0)) - xy_density_multiplier) < 1e-6
+        and _metadata_int(metadata, "sourceSize") == source_stat.st_size
+        and _metadata_int(metadata, "sourceMtimeNs") == source_stat.st_mtime_ns
+        and _metadata_int(metadata, "maxPoints") == max_points
+        and _metadata_int(metadata, "maxSlices") == max_slices
+        and abs(_metadata_float(metadata, "intensityPercentile") - intensity_percentile) < 1e-6
+        and abs(_metadata_float(metadata, "xyDensityMultiplier") - xy_density_multiplier) < 1e-6
+        and _metadata_int(metadata, "sourceWidth") == first.width
+        and _metadata_int(metadata, "sourceHeight") == first.height
+        and _metadata_int(metadata, "depth") == len(pages)
+        and _metadata_int(metadata, "bitsPerSample") == first.bits_per_sample
+        and _metadata_int(metadata, "sampleFormat") == first.sample_format
+        and _metadata_int(metadata, "samplesPerPixel") == first.samples_per_pixel
     )
+
+
+def _metadata_int(metadata: dict[str, object], key: str, default: int = -1) -> int:
+    try:
+        return int(metadata.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _metadata_float(metadata: dict[str, object], key: str, default: float = -1.0) -> float:
+    try:
+        return float(metadata.get(key, default))
+    except (TypeError, ValueError):
+        return default
 
 
 def _read_preview_metadata(preview_path: Path) -> dict[str, object] | None:

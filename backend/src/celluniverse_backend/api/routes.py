@@ -200,7 +200,10 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
             source_type="local",
             files=files,
             url_for=lambda index, _path: f"{config.server.apiPrefix}/datasets/local/{quote(dataset_id)}/frames/{index}.tif",
-            point_cloud_url_for=lambda index, _path: f"{config.server.apiPrefix}/datasets/local/{quote(dataset_id)}/pointcloud/{index}.cupc",
+            point_cloud_url_for=lambda index, path: _versioned_url(
+                f"{config.server.apiPrefix}/datasets/local/{quote(dataset_id)}/pointcloud/{index}.cupc",
+                path,
+            ),
             metadata={
                 "source": dataset.get("source"),
                 "inputPath": dataset.get("inputPath"),
@@ -295,7 +298,10 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
             source_type="upload",
             files=files,
             url_for=lambda _index, path: f"{config.server.apiPrefix}/datasets/uploads/{quote(upload_id)}/files/raw/{quote(path.name)}",
-            point_cloud_url_for=lambda index, _path: f"{config.server.apiPrefix}/datasets/uploads/{quote(upload_id)}/pointcloud/{index}.cupc",
+            point_cloud_url_for=lambda index, path: _versioned_url(
+                f"{config.server.apiPrefix}/datasets/uploads/{quote(upload_id)}/pointcloud/{index}.cupc",
+                path,
+            ),
             metadata={
                 "createdAt": upload.get("createdAt"),
                 "fileCount": upload.get("fileCount"),
@@ -545,8 +551,6 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
             raise HTTPException(status_code=404, detail="point-cloud layer not found")
         job_dir = job_dir_or_404(job_id)
         preview_path = job_dir / "preview" / "pointcloud" / layer / f"{frame}.cupc"
-        if preview_path.exists() and preview_path.is_file():
-            return FileResponse(preview_path, media_type="application/octet-stream")
         source_tiff = job_dir / "output" / "tiff" / layer / f"{frame}.tif"
         if not source_tiff.exists() or not source_tiff.is_file():
             raise HTTPException(status_code=404, detail="source TIFF not found")
@@ -661,6 +665,15 @@ def _build_dataset_preview_manifest(
         "frames": frames,
         "metadata": {**metadata, "fileCount": len(files)},
     }
+
+
+def _versioned_url(url: str, source_path: Path) -> str:
+    try:
+        stat = source_path.stat()
+    except OSError:
+        return url
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}v={stat.st_size}-{stat.st_mtime_ns}"
 
 
 def _preview_frame_numbers(files: list[Path], first_frame: int = 0) -> list[int]:
