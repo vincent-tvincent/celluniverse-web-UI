@@ -187,7 +187,7 @@ function LiveMonitor({
   const previewSignature = previewConfig ? previewConfigSignature(previewConfig) : "";
 
   const scheduledRefreshMs = autoRefreshEnabled ? autoRefreshSeconds * 1000 : false;
-  const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: listJobs, refetchInterval: scheduledRefreshMs });
+  const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: () => listJobs(), refetchInterval: scheduledRefreshMs });
   const sortedJobs = useMemo(() => sortJobs(jobsQuery.data ?? []), [jobsQuery.data]);
   const [confirmIntent, setConfirmIntent] = useState<ConfirmIntent | null>(null);
   const startMutation = useMutation({
@@ -1367,7 +1367,7 @@ function readRoute(): AppRoute {
 }
 
 function parseDashboardTab(value: string | null): DashboardTab {
-  if (value === "new" || value === "datasets" || value === "outputs" || value === "settings") {
+  if (value === "new" || value === "datasets" || value === "outputs" || value === "archived" || value === "settings") {
     return value;
   }
   return "jobs";

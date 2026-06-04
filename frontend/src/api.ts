@@ -5,6 +5,7 @@ import type {
   DatasetUpload,
   DataSourceRoot,
   DeleteDatasetUploadResponse,
+  DeleteJobResponse,
   InitialCsvPreset,
   JobManifest,
   JobRequest,
@@ -34,8 +35,9 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
   return response.json() as Promise<T>;
 }
 
-export function listJobs(): Promise<JobStatus[]> {
-  return requestJson<JobStatus[]>("/jobs");
+export function listJobs(options?: { includeArchived?: boolean }): Promise<JobStatus[]> {
+  const suffix = options?.includeArchived ? "?includeArchived=true" : "";
+  return requestJson<JobStatus[]>(`/jobs${suffix}`);
 }
 
 export function getJob(jobId: string): Promise<JobStatus> {
@@ -87,6 +89,14 @@ export function resumeJob(jobId: string): Promise<JobStatus> {
 
 export function archiveJob(jobId: string): Promise<JobStatus> {
   return requestJson<JobStatus>(`/jobs/${encodeURIComponent(jobId)}`, { method: "DELETE" });
+}
+
+export function unarchiveJob(jobId: string): Promise<JobStatus> {
+  return requestJson<JobStatus>(`/jobs/${encodeURIComponent(jobId)}/unarchive`, { method: "POST" });
+}
+
+export function deleteArchivedJob(jobId: string): Promise<DeleteJobResponse> {
+  return requestJson<DeleteJobResponse>(`/jobs/${encodeURIComponent(jobId)}/purge`, { method: "DELETE" });
 }
 
 export function cloneJob(jobId: string): Promise<JobStatus> {

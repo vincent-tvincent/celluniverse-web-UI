@@ -2806,6 +2806,19 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   min-width: 0;
 }
 
+.dashboard-row.archived-job-item .job-actions {
+  grid-column: auto;
+  grid-template-columns: minmax(360px, 1fr);
+}
+
+.archived-job-actions .job-manage-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-row.archived-job-item .job-manage-actions {
+  grid-template-columns: repeat(4, minmax(105px, 1fr));
+}
+
 .job-actions .action-button,
 .job-actions .cancel-button {
   width: 100%;

@@ -458,6 +458,24 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @router.post("/jobs/{job_id}/unarchive")
+    def unarchive_job(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            return jobs.unarchive_job(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.delete("/jobs/{job_id}/purge")
+    def purge_archived_job(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+        try:
+            return jobs.purge_archived_job(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @router.post("/jobs/{job_id}/cancel")
     def cancel_job(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
         try:

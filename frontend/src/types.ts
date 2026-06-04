@@ -27,6 +27,14 @@ export type JobStatus = {
   createdAt?: string;
   startedAt?: string | null;
   finishedAt?: string | null;
+  archivedAt?: string | null;
+  unarchivedAt?: string | null;
+  archivedFromState?: JobState | null;
+};
+
+export type DeleteJobResponse = {
+  jobId: string;
+  deleted: boolean;
 };
 
 export type LayerEntry =

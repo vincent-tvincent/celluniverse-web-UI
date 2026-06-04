@@ -38,6 +38,7 @@ import {
   cancelJob,
   cloneJob,
   createJob,
+  deleteArchivedJob,
   deleteDatasetRoot,
   deleteDatasetUpload,
   addDatasetRoot,
@@ -52,6 +53,7 @@ import {
   listLocalDatasets,
   resumeJob,
   startJob,
+  unarchiveJob,
   updateDatasetRoot,
   updatePreparedJob,
   uploadConfigYaml,
@@ -70,7 +72,7 @@ import type {
 } from "../../types";
 import { useViewerStore } from "../../store";
 
-export type DashboardTab = "jobs" | "new" | "datasets" | "outputs" | "settings";
+export type DashboardTab = "jobs" | "new" | "datasets" | "outputs" | "archived" | "settings";
 type DisplayMode = "block" | "list";
 type DataSourceRole = "dataset" | "initial-csv";
 export type DatasetSource =
@@ -106,6 +108,7 @@ type ContextMenuState = {
 const JOB_VIEW_KEY = "celluniverse-dashboard-job-view";
 const DATASET_VIEW_KEY = "celluniverse-dashboard-dataset-view";
 const DATA_SOURCE_VIEW_KEY = "celluniverse-dashboard-data-source-view";
+const ARCHIVED_JOB_VIEW_KEY = "celluniverse-dashboard-archived-job-view";
 const SIDEBAR_KEY = "celluniverse-dashboard-sidebar-collapsed";
 const DEFAULT_MODULE_ID = "debug-basic";
 
@@ -114,6 +117,7 @@ const tabs: { id: DashboardTab; label: string; icon: ReactNode }[] = [
   { id: "new", label: "New Job", icon: <FileCog size={17} /> },
   { id: "datasets", label: "Datasets", icon: <Database size={17} /> },
   { id: "outputs", label: "Outputs", icon: <ArrowDownToLine size={17} /> },
+  { id: "archived", label: "Archived", icon: <Archive size={17} /> },
   { id: "settings", label: "Settings", icon: <Settings size={17} /> },
 ];
 
@@ -135,6 +139,7 @@ export default function Dashboard({
   const [jobView, setJobView] = useStoredDisplayMode(JOB_VIEW_KEY, "block");
   const [datasetView, setDatasetView] = useStoredDisplayMode(DATASET_VIEW_KEY, "block");
   const [dataSourceView, setDataSourceView] = useStoredDisplayMode(DATA_SOURCE_VIEW_KEY, "block");
+  const [archivedJobView, setArchivedJobView] = useStoredDisplayMode(ARCHIVED_JOB_VIEW_KEY, "block");
   const [seedDatasetId, setSeedDatasetId] = useState<string>(initialDatasetId);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [confirmIntent, setConfirmIntent] = useState<ConfirmIntent | null>(null);
@@ -142,24 +147,28 @@ export default function Dashboard({
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [jobSearch, setJobSearch] = useState("");
+  const [archivedJobSearch, setArchivedJobSearch] = useState("");
   const [datasetSearch, setDatasetSearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
 
-  const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: listJobs, refetchInterval: 2000 });
+  const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: () => listJobs(), refetchInterval: 2000 });
+  const archivedJobsQuery = useQuery({ queryKey: ["jobs", "archived"], queryFn: () => listJobs({ includeArchived: true }), refetchInterval: 5000 });
   const uploadsQuery = useQuery({ queryKey: ["dataset-uploads"], queryFn: listDatasetUploads, refetchInterval: 5000 });
   const localDatasetsQuery = useQuery({ queryKey: ["local-datasets"], queryFn: listLocalDatasets, staleTime: 10000 });
   const datasetRootsQuery = useQuery({ queryKey: ["dataset-roots"], queryFn: listDatasetRoots, staleTime: 10000 });
   const initialCsvQuery = useQuery({ queryKey: ["initial-csv-presets"], queryFn: listInitialCsvPresets, staleTime: 10000 });
 
   const jobs = useMemo(() => sortJobs(jobsQuery.data ?? []), [jobsQuery.data]);
+  const archivedJobs = useMemo(() => sortJobs((archivedJobsQuery.data ?? []).filter((job) => job.state === "archived")), [archivedJobsQuery.data]);
   const uploads = uploadsQuery.data ?? [];
   const localDatasets = localDatasetsQuery.data ?? [];
   const datasetSources = useMemo(() => buildDatasetSources(uploads, localDatasets), [uploads, localDatasets]);
   const filteredJobs = useMemo(() => filterJobs(jobs, jobSearch), [jobSearch, jobs]);
+  const filteredArchivedJobs = useMemo(() => filterJobs(archivedJobs, archivedJobSearch), [archivedJobSearch, archivedJobs]);
   const filteredDatasets = useMemo(() => filterDatasets(datasetSources, datasetSearch), [datasetSearch, datasetSources]);
-  const dashboardBusy = (jobsQuery.isFetching && !jobs.length) || (uploadsQuery.isFetching && !uploads.length) || (localDatasetsQuery.isFetching && !localDatasets.length);
-  const delayedDashboardLoading = useDelayedLoading(dashboardBusy, `${tab}:${jobs.length}:${uploads.length}:${localDatasets.length}`);
+  const dashboardBusy = (jobsQuery.isFetching && !jobs.length) || (archivedJobsQuery.isFetching && tab === "archived" && !archivedJobs.length) || (uploadsQuery.isFetching && !uploads.length) || (localDatasetsQuery.isFetching && !localDatasets.length);
+  const delayedDashboardLoading = useDelayedLoading(dashboardBusy, `${tab}:${jobs.length}:${archivedJobs.length}:${uploads.length}:${localDatasets.length}`);
 
   useEffect(() => {
     if (!initialDatasetId) return;
@@ -182,7 +191,24 @@ export default function Dashboard({
   });
   const archiveMutation = useMutation({
     mutationFn: archiveJob,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["jobs"] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      void queryClient.invalidateQueries({ queryKey: ["jobs", "archived"] });
+    },
+  });
+  const unarchiveMutation = useMutation({
+    mutationFn: unarchiveJob,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      void queryClient.invalidateQueries({ queryKey: ["jobs", "archived"] });
+    },
+  });
+  const deleteArchivedMutation = useMutation({
+    mutationFn: deleteArchivedJob,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      void queryClient.invalidateQueries({ queryKey: ["jobs", "archived"] });
+    },
   });
   const cloneMutation = useMutation({
     mutationFn: cloneJob,
@@ -252,6 +278,19 @@ export default function Dashboard({
       `${job.label ?? job.id} will be hidden from the dashboard. Runtime files are kept on disk.`,
       "Archive",
       () => archiveMutation.mutate(job.id),
+    );
+  };
+
+  const handleUnarchiveJob = (job: JobStatus) => {
+    unarchiveMutation.mutate(job.id);
+  };
+
+  const handleDeleteArchivedJob = (job: JobStatus) => {
+    requestDanger(
+      "Delete Archived Job",
+      `${job.label ?? job.id} and all runtime files will be permanently removed from disk. This cannot be undone.`,
+      "Delete",
+      () => deleteArchivedMutation.mutate(job.id),
     );
   };
 
@@ -472,6 +511,32 @@ export default function Dashboard({
             </DashboardSection>
           ) : null}
 
+          {tab === "archived" ? (
+            <DashboardSection
+              title="Archived Jobs"
+              toolbar={
+                <div className="dashboard-section-tools">
+                  <SearchBox value={archivedJobSearch} onChange={setArchivedJobSearch} placeholder="Search archived jobs" />
+                  <DisplayToggle value={archivedJobView} onChange={setArchivedJobView} />
+                </div>
+              }
+            >
+              <ArchivedJobsPanel
+                jobs={filteredArchivedJobs}
+                view={archivedJobView}
+                loading={archivedJobsQuery.isLoading}
+                error={archivedJobsQuery.error ?? cloneMutation.error ?? unarchiveMutation.error ?? deleteArchivedMutation.error}
+                emptyLabel={archivedJobSearch ? "No archived jobs match this filter" : "No archived jobs yet"}
+                clonePending={cloneMutation.isPending}
+                unarchivePending={unarchiveMutation.isPending}
+                deletePending={deleteArchivedMutation.isPending}
+                onClone={handleCloneJob}
+                onUnarchive={handleUnarchiveJob}
+                onDelete={handleDeleteArchivedJob}
+              />
+            </DashboardSection>
+          ) : null}
+
           {tab === "settings" ? (
             <DashboardSection title="Settings">
               <SettingsPanel
@@ -599,6 +664,108 @@ function JobsPanel({
         />
       ))}
     </div>
+  );
+}
+
+function ArchivedJobsPanel({
+  jobs,
+  view,
+  loading,
+  error,
+  emptyLabel,
+  clonePending,
+  unarchivePending,
+  deletePending,
+  onClone,
+  onUnarchive,
+  onDelete,
+}: {
+  jobs: JobStatus[];
+  view: DisplayMode;
+  loading: boolean;
+  error: unknown;
+  emptyLabel: string;
+  clonePending: boolean;
+  unarchivePending: boolean;
+  deletePending: boolean;
+  onClone: (job: JobStatus) => void;
+  onUnarchive: (job: JobStatus) => void;
+  onDelete: (job: JobStatus) => void;
+}) {
+  if (loading && !jobs.length) return <p className="dashboard-muted">Loading archived jobs</p>;
+  if (error) return <p className="dashboard-error">{formatError(error)}</p>;
+  if (!jobs.length) return <p className="dashboard-muted">{emptyLabel}</p>;
+  return (
+    <div className={view === "block" ? "job-block-grid" : "dashboard-list"}>
+      {jobs.map((job) => (
+        <ArchivedJobItem
+          key={job.id}
+          job={job}
+          view={view}
+          clonePending={clonePending}
+          unarchivePending={unarchivePending}
+          deletePending={deletePending}
+          onClone={onClone}
+          onUnarchive={onUnarchive}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ArchivedJobItem({
+  job,
+  view,
+  clonePending,
+  unarchivePending,
+  deletePending,
+  onClone,
+  onUnarchive,
+  onDelete,
+}: {
+  job: JobStatus;
+  view: DisplayMode;
+  clonePending: boolean;
+  unarchivePending: boolean;
+  deletePending: boolean;
+  onClone: (job: JobStatus) => void;
+  onUnarchive: (job: JobStatus) => void;
+  onDelete: (job: JobStatus) => void;
+}) {
+  const rowClass = view === "block" ? "job-card dashboard-card job-item archived-job-item" : "dashboard-row job-item archived-job-item";
+  return (
+    <article className={rowClass}>
+      <div className="item-mainline">
+        <div className="item-title-wrap">
+          <span className="state-dot archived" />
+          <strong>{job.label ?? job.id}</strong>
+          <small>{job.id}</small>
+        </div>
+        <span className="state-pill archived">archived</span>
+      </div>
+      <div className="item-metrics">
+        <span>{job.completedFrames}/{job.totalFrames} frames</span>
+        <span>range {job.firstFrame}-{job.lastFrame}</span>
+        <span>archived {formatDateTime(job.archivedAt)}</span>
+      </div>
+      <div className="item-actions job-actions archived-job-actions">
+        <div className="job-action-row job-manage-actions">
+          <a className="action-button" href={`/api/jobs/${encodeURIComponent(job.id)}/download`}>
+            <Download size={15} /> Download
+          </a>
+          <button className="action-button" type="button" disabled={unarchivePending} onClick={() => onUnarchive(job)}>
+            <Archive size={15} /> Unarchive
+          </button>
+          <button className="action-button" type="button" disabled={clonePending} onClick={() => onClone(job)} title="Duplicate this archived job as a prepared copy for editing">
+            <Copy size={15} /> Duplicate
+          </button>
+          <button className="action-button danger-action-button" type="button" disabled={deletePending} onClick={() => onDelete(job)}>
+            <Trash2 size={15} /> Delete
+          </button>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -1330,7 +1497,7 @@ function DataSourceItem({
         <span>{countLabel}</span>
       </div>
       <div className="item-actions data-source-actions">
-        <button className={source.enabled ? "cancel-button" : "action-button strong-action-button"} type="button" disabled={pending || !source.exists} onClick={() => onToggle(source)}>
+        <button className={source.enabled ? "action-button" : "action-button strong-action-button"} type="button" disabled={pending || !source.exists} onClick={() => onToggle(source)}>
           {source.enabled ? "Disable" : "Enable"}
         </button>
         <button className="action-button danger-action-button" type="button" disabled={pending || source.preset} onClick={() => onDelete(source)} title={source.preset ? "Preset sources cannot be removed" : "Remove source"}>
@@ -1578,6 +1745,13 @@ function formatBytes(bytes: number): string {
     index += 1;
   }
   return `${value >= 10 || index === 0 ? Math.round(value) : value.toFixed(1)} ${units[index]}`;
+}
+
+function formatDateTime(value?: string | null): string {
+  if (!value) return "-";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "-";
+  return new Date(timestamp).toLocaleString();
 }
 
 function sortJobs(jobs: JobStatus[]): JobStatus[] {

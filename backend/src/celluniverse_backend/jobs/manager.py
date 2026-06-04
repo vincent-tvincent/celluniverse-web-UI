@@ -250,11 +250,37 @@ class JobManager:
             raise KeyError(job_id)
         if status.get("state") in {JobState.running.value, JobState.queued.value}:
             raise ValueError("running or queued jobs must be terminated before archive")
+        status["archivedFromState"] = status.get("state")
         status["state"] = JobState.archived.value
         status["archivedAt"] = utc_now()
         self._write_status_dict(job_id, status)
         self._event(job_id, "job.archived", {"jobId": job_id})
         return status
+
+    def unarchive_job(self, job_id: str) -> dict[str, Any]:
+        status = self.get_status(job_id)
+        if not status:
+            raise KeyError(job_id)
+        if status.get("state") != JobState.archived.value:
+            raise ValueError("only archived jobs can be restored")
+        restored_state = self._unarchive_state(status)
+        status["state"] = restored_state
+        status["unarchivedAt"] = utc_now()
+        status.pop("archivedAt", None)
+        self._write_status_dict(job_id, status)
+        self._event(job_id, "job.unarchived", status)
+        return status
+
+    def purge_archived_job(self, job_id: str) -> dict[str, Any]:
+        status = self.get_status(job_id)
+        if not status:
+            raise KeyError(job_id)
+        if status.get("state") != JobState.archived.value:
+            raise ValueError("only archived jobs can be permanently deleted")
+        job_dir = self.job_dir(job_id)
+        with self._status_lock:
+            shutil.rmtree(job_dir)
+        return {"jobId": job_id, "deleted": True}
 
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         status = self.get_status(job_id)
@@ -541,6 +567,27 @@ class JobManager:
                 self._event(job_id, "job.updated", status)
         if changed and rebuild_preview:
             build_preview_artifacts(self.job_dir(job_id), job_id)
+
+    def _unarchive_state(self, status: dict[str, Any]) -> str:
+        archived_from = status.get("archivedFromState")
+        if archived_from in {
+            JobState.prepared.value,
+            JobState.completed.value,
+            JobState.failed.value,
+            JobState.cancelled.value,
+            JobState.interrupted.value,
+        }:
+            return str(archived_from)
+        if status.get("completedFrames") == status.get("totalFrames") and status.get("totalFrames", 0) > 0:
+            return JobState.completed.value
+        error = str(status.get("error") or "").lower()
+        if "cancel" in error:
+            return JobState.cancelled.value
+        if error:
+            return JobState.failed.value
+        if int(status.get("completedFrames") or 0) > 0:
+            return JobState.interrupted.value
+        return JobState.prepared.value
 
     def _write_status(self, status: JobStatus) -> None:
         self._write_status_dict(status.id, status.model_dump(mode="json"))
