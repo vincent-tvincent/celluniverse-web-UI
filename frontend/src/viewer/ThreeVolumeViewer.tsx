@@ -749,10 +749,12 @@ function buildPreviewPointCloud(
   const heightDenominator = Math.max(1, preview.sourceHeight - 1);
   const depthDenominator = Math.max(1, preview.depth - 1);
   const checkerStep = Math.max(1, preview.xyStep || 1);
+  const intensityScale = computePointCloudIntensityScale(preview.intensity);
 
   let outputPointIndex = 0;
   for (let pointIndex = 0; pointIndex < preview.pointCount; pointIndex += 1) {
-    const intensity = applyContrastLimits(Math.max(0, Math.min(1, preview.intensity[pointIndex] ?? 0)), contrastLimits);
+    const displayIntensity = normalizePreviewPointIntensity(preview.intensity[pointIndex] ?? 0, intensityScale);
+    const intensity = applyContrastLimits(displayIntensity, contrastLimits);
     if (intensity <= 0.001) {
       continue;
     }
@@ -773,7 +775,7 @@ function buildPreviewPointCloud(
     sourceX[outputPointIndex] = preview.x[pointIndex] ?? 0;
     sourceY[outputPointIndex] = preview.y[pointIndex] ?? 0;
     sourceZ[outputPointIndex] = preview.z[pointIndex] ?? 0;
-    brightnessValues[outputPointIndex] = Math.max(0, Math.min(255, (preview.intensity[pointIndex] ?? 0) * 255));
+    brightnessValues[outputPointIndex] = Math.max(0, Math.min(255, displayIntensity * 255));
     alphaValues[outputPointIndex] = intensity;
     const brightness = Math.max(0.58, Math.sqrt(intensity));
     colors[target] = (r / 255) * brightness;
@@ -792,6 +794,45 @@ function buildPreviewPointCloud(
     alpha: alphaValues.slice(0, outputPointIndex),
     pointCount: outputPointIndex,
   };
+}
+
+function computePointCloudIntensityScale(values: Float32Array): { low: number; high: number } {
+  const finiteValues: number[] = [];
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    if (Number.isFinite(value) && value > 0) {
+      finiteValues.push(value);
+    }
+  }
+  if (!finiteValues.length) {
+    return { low: 0, high: 1 };
+  }
+  finiteValues.sort((a, b) => a - b);
+  const low = percentileFromSorted(finiteValues, 2);
+  const high = Math.max(low + 1e-6, percentileFromSorted(finiteValues, 99.5));
+  return { low, high };
+}
+
+function normalizePreviewPointIntensity(value: number, scale: { low: number; high: number }): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, (value - scale.low) / (scale.high - scale.low)));
+}
+
+function percentileFromSorted(values: number[], percentile: number): number {
+  if (values.length === 1) {
+    return values[0];
+  }
+  const clamped = Math.max(0, Math.min(100, percentile));
+  const position = (clamped / 100) * (values.length - 1);
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  if (lower === upper) {
+    return values[lower];
+  }
+  const weight = position - lower;
+  return values[lower] * (1 - weight) + values[upper] * weight;
 }
 
 function getInterleavedPointOffset(

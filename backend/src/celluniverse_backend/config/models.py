@@ -22,6 +22,7 @@ class CellUniverseConfig(BaseModel):
     celluniverseCppRoot: Path = Path("/home/blue-lobster/p2/UCI/CS295p/CellUniverse/C++")
     buildDir: str = "build"
     threads: int | Literal["auto"] = "auto"
+    cpuSet: str | None = None
 
     @property
     def binary(self) -> Path:

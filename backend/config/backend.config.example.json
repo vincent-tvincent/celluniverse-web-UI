@@ -13,7 +13,8 @@
   "celluniverse": {
     "celluniverseCppRoot": "/home/blue-lobster/p2/UCI/CS295p/CellUniverse/C++",
     "buildDir": "build",
-    "threads": "auto"
+    "threads": "auto",
+    "cpuSet": null
   },
   "runtime": {
     "runtimeRoot": "/home/blue-lobster/p2/UCI/CS295p/celluniverse-web-UI/backend/runtime",

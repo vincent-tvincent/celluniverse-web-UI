@@ -277,14 +277,24 @@ class JobManager:
         self._event(job_id, "job.started", {"jobId": job_id})
 
         argv = read_json(job_dir / "argv.json")
-        process = start_celluniverse_process(self.config, argv)
+        stdout_path = job_dir / "stdout.log"
+        stderr_path = job_dir / "stderr.log"
+        stdout_path.write_text("", encoding="utf-8")
+        stderr_path.write_text("", encoding="utf-8")
+
+        process = start_celluniverse_process(
+            self.config,
+            argv,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+        )
         self._processes[job_id] = process
         status["pid"] = process.pid
         self._write_status_dict(job_id, status)
         self._event(job_id, "process.started", {"jobId": job_id, "pid": process.pid, "argv": argv})
 
-        stdout_thread = threading.Thread(target=self._pipe_log, args=(job_id, process.stdout, "stdout"), daemon=True)
-        stderr_thread = threading.Thread(target=self._pipe_log, args=(job_id, process.stderr, "stderr"), daemon=True)
+        stdout_thread = threading.Thread(target=self._tail_log_file, args=(job_id, stdout_path, "stdout", process), daemon=True)
+        stderr_thread = threading.Thread(target=self._tail_log_file, args=(job_id, stderr_path, "stderr", process), daemon=True)
         stdout_thread.start()
         stderr_thread.start()
 
@@ -355,21 +365,25 @@ class JobManager:
             return ensure_inside_roots(base, self.config.security.allowedConfigRoots)
         return self.config.celluniverse.celluniverseCppRoot / base
 
-    def _pipe_log(self, job_id: str, pipe: Any, stream: str) -> None:
-        if pipe is None:
-            return
-        log_path = self.job_dir(job_id) / f"{stream}.log"
-        with log_path.open("a", encoding="utf-8", errors="replace") as handle:
-            for line in pipe:
-                handle.write(line)
-                handle.flush()
-                self._event(job_id, "log.line", {"jobId": job_id, "stream": stream, "line": line.rstrip("\n")})
-                match = FRAME_HINT_RE.search(line)
-                if match:
-                    with self._status_lock:
-                        status = self.get_status(job_id)
-                        status["currentFrame"] = int(match.group(1))
-                        self._write_status_dict(job_id, status)
+    def _tail_log_file(self, job_id: str, log_path: Path, stream: str, process: subprocess.Popen[Any]) -> None:
+        with log_path.open("r", encoding="utf-8", errors="replace") as handle:
+            while True:
+                line = handle.readline()
+                if line:
+                    self._handle_log_line(job_id, stream, line.rstrip("\n"))
+                    continue
+                if process.poll() is not None:
+                    break
+                time.sleep(0.1)
+
+    def _handle_log_line(self, job_id: str, stream: str, line: str) -> None:
+        self._event(job_id, "log.line", {"jobId": job_id, "stream": stream, "line": line})
+        match = FRAME_HINT_RE.search(line)
+        if match:
+            with self._status_lock:
+                status = self.get_status(job_id)
+                status["currentFrame"] = int(match.group(1))
+                self._write_status_dict(job_id, status)
 
     def _refresh_progress(self, job_id: str, rebuild_preview: bool = True) -> None:
         status = self.get_status(job_id)
