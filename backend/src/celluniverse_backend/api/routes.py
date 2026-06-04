@@ -390,7 +390,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
 
     @router.get("/jobs/{job_id}")
     def get_job(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
-        status = jobs.get_status(job_id)
+        status = jobs.get_fresh_status(job_id)
         if not status:
             raise HTTPException(status_code=404, detail="job not found")
         return status

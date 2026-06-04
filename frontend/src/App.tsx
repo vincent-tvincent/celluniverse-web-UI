@@ -221,6 +221,7 @@ function LiveMonitor({
   const [labeledLineageNodeId, setLabeledLineageNodeId] = useState<string | null>(null);
   const [labeledCellIds, setLabeledCellIds] = useState<string[]>(EMPTY_FOCUS_IDS);
   const frameHistoryRef = useRef<{ jobId: string; frames: Set<number> } | null>(null);
+  const autoFollowLatestFrameRef = useRef(true);
   const workspaceRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -246,8 +247,18 @@ function LiveMonitor({
     refetchInterval: selectedJobId ? scheduledRefreshMs : false,
   });
 
-  const frames = manifestQuery.data?.frames ?? [];
+  const frames = useMemo(
+    () => mergeStatusReadyFrames(manifestQuery.data?.frames ?? [], jobQuery.data, selectedJobId),
+    [jobQuery.data, manifestQuery.data?.frames, selectedJobId],
+  );
   const availableFrameNumbers = useMemo(() => frames.map((item) => item.t), [frames]);
+  const selectFrame = useCallback((nextFrame: number, options?: { manual?: boolean }) => {
+    if (options?.manual) {
+      const latestFrame = availableFrameNumbers.at(-1);
+      autoFollowLatestFrameRef.current = latestFrame == null || nextFrame >= latestFrame;
+    }
+    setFrame(nextFrame);
+  }, [availableFrameNumbers, setFrame]);
 
   useEffect(() => {
     if (!selectedJobId) {
@@ -265,15 +276,21 @@ function LiveMonitor({
     }
 
     const newFrames = availableFrameNumbers.filter((frameNumber) => !history.frames.has(frameNumber));
+    const previousLatestFrame = history.frames.size ? Math.max(...history.frames) : null;
+    const latestFrame = availableFrameNumbers.length ? availableFrameNumbers[availableFrameNumbers.length - 1] : null;
     frameHistoryRef.current = { jobId: selectedJobId, frames: currentFrames };
     if (newFrames.length > 0) {
+      const latestNewFrame = Math.max(...newFrames);
       setFrameNotice({
         frames: newFrames,
-        latestFrame: Math.max(...newFrames),
+        latestFrame: latestNewFrame,
         createdAt: Date.now(),
       });
+      if (autoFollowLatestFrameRef.current && latestFrame != null && (previousLatestFrame == null || frame === previousLatestFrame)) {
+        setFrame(latestFrame);
+      }
     }
-  }, [availableFrameNumbers, selectedJobId]);
+  }, [availableFrameNumbers, frame, selectedJobId, setFrame]);
 
   useEffect(() => {
     if (!frameNotice) {
@@ -298,6 +315,10 @@ function LiveMonitor({
       ? statusFrame
       : availableFrameNumbers[availableFrameNumbers.length - 1];
     if (!availableFrameNumbers.includes(frame)) {
+      setFrame(target);
+      return;
+    }
+    if (autoFollowLatestFrameRef.current && jobQuery.data?.state === "running" && frame !== target) {
       setFrame(target);
     }
   }, [availableFrameNumbers, frame, jobQuery.data, setFrame]);
@@ -612,7 +633,7 @@ function LiveMonitor({
     }
     const targetFrame = chooseLineageFocusFrame(node, frame, availableFrameNumbers);
     const focusIds = collectLineageFocusCellIds(node, lineageQuery.data?.nodes ?? [], targetFrame);
-    setFrame(targetFrame);
+    selectFrame(targetFrame, { manual: true });
     setMode("volume");
     showPanel("viewer");
     setLabeledLineageNodeId(node.id);
@@ -622,7 +643,7 @@ function LiveMonitor({
       frame: targetFrame,
       requestId: Date.now(),
     });
-  }, [availableFrameNumbers, frame, labeledLineageNodeId, lineageQuery.data?.nodes, setFrame, setMode, showPanel]);
+  }, [availableFrameNumbers, frame, labeledLineageNodeId, lineageQuery.data?.nodes, selectFrame, setMode, showPanel]);
   const resizePanel = useCallback((panel: "left" | "right", nextWidth: number) => {
     const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width ?? window.innerWidth;
     const maxByViewport = panel === "right"
@@ -805,7 +826,7 @@ function LiveMonitor({
             mode={mode}
             frame={activeFrame?.t ?? frame}
             frames={availableFrameNumbers}
-            setFrame={setFrame}
+            setFrame={(nextFrame) => selectFrame(nextFrame, { manual: true })}
             slice={slice}
             maxDepth={maxDepth}
             setSlice={(nextSlice) => {
@@ -912,7 +933,7 @@ function LiveMonitor({
                 if (!frameNotice) {
                   return;
                 }
-                setFrame(frameNotice.latestFrame);
+                selectFrame(frameNotice.latestFrame, { manual: true });
                 setFrameNotice(null);
               }}
               onDismiss={() => setFrameNotice(null)}
@@ -1007,6 +1028,52 @@ function getSlicePreviewUrl(
   }
   const requestedSlice = Math.max(0, Math.round(slice));
   return `/api/jobs/${encodeURIComponent(jobId)}/slices/${layer}/${frame}/${requestedSlice}.cusl?max_xy=${previewConfig.maxXY}`;
+}
+
+function mergeStatusReadyFrames(
+  manifestFrames: JobManifest["frames"],
+  job: JobStatus | undefined,
+  jobId: string,
+): JobManifest["frames"] {
+  if (!job || !jobId) {
+    return manifestFrames;
+  }
+
+  const framesByTime = new Map<number, JobManifest["frames"][number]>();
+  for (const frame of manifestFrames) {
+    framesByTime.set(frame.t, { t: frame.t, layers: { ...frame.layers } });
+  }
+
+  for (const frameNumber of job.outputReady?.tiffFrames ?? []) {
+    const frame = framesByTime.get(frameNumber) ?? { t: frameNumber, layers: {} };
+    if (!frame.layers.realTiff) {
+      frame.layers.realTiff = {
+        format: "tiff",
+        url: `/api/jobs/${jobId}/files/output/tiff/real/${frameNumber}.tif`,
+      };
+    }
+    if (!frame.layers.realPointCloud) {
+      frame.layers.realPointCloud = {
+        format: "point-cloud-v1",
+        url: `/api/jobs/${jobId}/pointcloud/real/${frameNumber}.cupc`,
+      };
+    }
+    if (!frame.layers.synthTiff) {
+      frame.layers.synthTiff = {
+        format: "tiff",
+        url: `/api/jobs/${jobId}/files/output/tiff/synth/${frameNumber}.tif`,
+      };
+    }
+    if (!frame.layers.synthPointCloud) {
+      frame.layers.synthPointCloud = {
+        format: "point-cloud-v1",
+        url: `/api/jobs/${jobId}/pointcloud/synth/${frameNumber}.cupc`,
+      };
+    }
+    framesByTime.set(frameNumber, frame);
+  }
+
+  return [...framesByTime.values()].sort((a, b) => a.t - b.t);
 }
 
 function chooseInformativeSlice(

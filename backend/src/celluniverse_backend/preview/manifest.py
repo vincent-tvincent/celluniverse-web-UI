@@ -22,7 +22,13 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
 
     ensure_lineage_artifacts(job_dir, job_id)
 
-    frames = sorted(set(_png_frames(output_dir, "real")) | set(_png_frames(output_dir, "synth")) | set(cell_frames))
+    frames = sorted(
+        set(_png_frames(output_dir, "real"))
+        | set(_png_frames(output_dir, "synth"))
+        | set(_tiff_frames(output_dir, "real"))
+        | set(_tiff_frames(output_dir, "synth"))
+        | set(cell_frames)
+    )
     manifest_frames = []
     for frame in frames:
         layers: dict[str, Any] = {}
@@ -107,4 +113,15 @@ def _png_frames(output_dir: Path, layer: str) -> list[int]:
     for child in root.iterdir():
         if child.is_dir() and child.name.isdigit():
             frames.append(int(child.name))
+    return frames
+
+
+def _tiff_frames(output_dir: Path, layer: str) -> list[int]:
+    root = output_dir / "tiff" / layer
+    if not root.exists():
+        return []
+    frames = []
+    for child in root.iterdir():
+        if child.suffix.lower() in {".tif", ".tiff"} and child.stem.isdigit():
+            frames.append(int(child.stem))
     return frames

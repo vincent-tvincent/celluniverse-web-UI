@@ -41,6 +41,7 @@ class JobManager:
         self.jobs_root.mkdir(parents=True, exist_ok=True)
         self._queue: queue.Queue[str] = queue.Queue()
         self._processes: dict[str, subprocess.Popen[str]] = {}
+        self._status_lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -93,6 +94,9 @@ class JobManager:
         queued = list(self._queue.queue)
         for path in sorted(self.jobs_root.glob("job_*/status.json"), reverse=True):
             data = read_json(path, {})
+            if data.get("state") == JobState.running.value:
+                self._refresh_progress(path.parent.name, rebuild_preview=False)
+                data = read_json(path, {})
             if data.get("state") == JobState.archived.value and not include_archived:
                 continue
             if data.get("state") == JobState.queued.value and data.get("id") in queued:
@@ -105,6 +109,13 @@ class JobManager:
             return read_json(self.job_dir(job_id) / "status.json", {})
         except KeyError:
             return {}
+
+    def get_fresh_status(self, job_id: str) -> dict[str, Any]:
+        status = self.get_status(job_id)
+        if status.get("state") == JobState.running.value:
+            self._refresh_progress(job_id, rebuild_preview=False)
+            status = self.get_status(job_id)
+        return status
 
     def get_request(self, job_id: str) -> dict[str, Any]:
         return read_json(self.job_dir(job_id) / "request.json", {})
@@ -355,29 +366,35 @@ class JobManager:
                 self._event(job_id, "log.line", {"jobId": job_id, "stream": stream, "line": line.rstrip("\n")})
                 match = FRAME_HINT_RE.search(line)
                 if match:
-                    status = self.get_status(job_id)
-                    status["currentFrame"] = int(match.group(1))
-                    self._write_status_dict(job_id, status)
+                    with self._status_lock:
+                        status = self.get_status(job_id)
+                        status["currentFrame"] = int(match.group(1))
+                        self._write_status_dict(job_id, status)
 
-    def _refresh_progress(self, job_id: str) -> None:
+    def _refresh_progress(self, job_id: str, rebuild_preview: bool = True) -> None:
         status = self.get_status(job_id)
         if not status:
             return
         scan = scan_output(self.job_dir(job_id), int(status["firstFrame"]), int(status["lastFrame"]))
         changed = False
-        for key in ["lastCompletedFrame", "completedFrames", "totalFrames", "progress", "outputReady", "partialOutputsAvailable"]:
-            if status.get(key) != scan[key]:
-                status[key] = scan[key]
-                changed = True
-        if status.get("state") == JobState.running.value and scan["lastCompletedFrame"] is not None:
-            current = min(int(status["lastFrame"]), int(scan["lastCompletedFrame"]) + 1)
-            if status.get("currentFrame") != current:
-                status["currentFrame"] = current
-                changed = True
-        if changed:
-            self._write_status_dict(job_id, status)
+        with self._status_lock:
+            status = self.get_status(job_id)
+            if not status:
+                return
+            for key in ["lastCompletedFrame", "completedFrames", "totalFrames", "progress", "outputReady", "partialOutputsAvailable"]:
+                if status.get(key) != scan[key]:
+                    status[key] = scan[key]
+                    changed = True
+            if status.get("state") == JobState.running.value and scan["lastCompletedFrame"] is not None:
+                current = min(int(status["lastFrame"]), int(scan["lastCompletedFrame"]) + 1)
+                if status.get("currentFrame") != current:
+                    status["currentFrame"] = current
+                    changed = True
+            if changed:
+                self._write_status_dict(job_id, status)
+                self._event(job_id, "job.updated", status)
+        if changed and rebuild_preview:
             build_preview_artifacts(self.job_dir(job_id), job_id)
-            self._event(job_id, "job.updated", status)
 
     def _write_status(self, status: JobStatus) -> None:
         self._write_status_dict(status.id, status.model_dump(mode="json"))
