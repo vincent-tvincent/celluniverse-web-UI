@@ -2583,6 +2583,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 }
 
 .state-pill.completed {
+  color: var(--color-on-accent);
   background: var(--color-cyan);
 }
 
