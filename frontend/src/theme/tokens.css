@@ -72,7 +72,7 @@
   --color-danger-text: var(--palette-danger-text);
   --color-danger-soft: var(--palette-danger-soft);
   --color-status-idle: var(--palette-status-idle);
-  --color-status-running: var(--palette-danger);
+  --color-status-running: var(--color-accent);
   --color-control-disabled: var(--palette-disabled);
   --color-on-accent: var(--palette-on-accent);
   --surface-hover: var(--palette-accent-blue-soft);

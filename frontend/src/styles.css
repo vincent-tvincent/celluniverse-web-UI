@@ -483,7 +483,7 @@ button {
 }
 
 .status-heading-icon.completed {
-  color: var(--color-accent);
+  color: var(--color-cyan);
 }
 
 .status-heading-icon.failed,
@@ -673,7 +673,7 @@ button {
 }
 
 .state-dot.completed {
-  background: var(--color-accent);
+  background: var(--color-cyan);
 }
 
 .state-dot.failed,
@@ -2569,12 +2569,12 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 }
 
 .state-pill.running {
-  color: var(--color-cancel-button-text-hover);
-  background: var(--surface-cancel-button);
+  color: var(--color-strong-action-text);
+  background: var(--surface-strong-action);
 }
 
 .state-pill.completed {
-  background: var(--surface-toggle-active);
+  background: var(--color-cyan);
 }
 
 .state-dot.prepared,
