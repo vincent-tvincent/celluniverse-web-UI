@@ -19,6 +19,9 @@ export type JobStatus = {
     tiffFrames: number[];
   };
   partialOutputsAvailable: boolean;
+  resumeAvailable?: boolean;
+  resumeFromFrame?: number | null;
+  resumeSourceDir?: string | null;
   pid?: number | null;
   error?: string | null;
   createdAt?: string;

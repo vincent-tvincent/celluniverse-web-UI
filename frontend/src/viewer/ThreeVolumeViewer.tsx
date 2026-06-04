@@ -138,7 +138,8 @@ export default function ThreeVolumeViewer({
     };
     controls.addEventListener("change", saveCameraView);
 
-    const interleavePreviewLayers = Boolean(realEnabled && synthEnabled && realPointCloud && synthPointCloud);
+    const realPreviewStaggerRole: InterleaveRole = realPointCloud ? "real" : "none";
+    const synthPreviewStaggerRole: InterleaveRole = synthPointCloud ? "synth" : "none";
     const realHoverTargets: THREE.Points[] = [];
     if (realEnabled && realPointCloud) {
       const points = addPreviewPointCloud(
@@ -151,7 +152,7 @@ export default function ThreeVolumeViewer({
         worldHeight,
         worldDepth,
         cloudConfig,
-        interleavePreviewLayers ? "real" : "none",
+        realPreviewStaggerRole,
         pointAlphaByBrightness,
       );
       if (points) {
@@ -174,7 +175,7 @@ export default function ThreeVolumeViewer({
         worldHeight,
         worldDepth,
         cloudConfig,
-        interleavePreviewLayers ? "synth" : "none",
+        synthPreviewStaggerRole,
         pointAlphaByBrightness,
       );
     } else if (synthEnabled && synth) {

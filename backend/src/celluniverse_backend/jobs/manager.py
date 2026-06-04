@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from celluniverse_backend.config.exposed import ExposedParameterRegistry
 from celluniverse_backend.config.merge import materialize_effective_config
 from celluniverse_backend.config.models import BackendConfig
@@ -40,7 +42,7 @@ class JobManager:
         self.jobs_root = config.runtime.runtimeRoot / "jobs"
         self.jobs_root.mkdir(parents=True, exist_ok=True)
         self._queue: queue.Queue[str] = queue.Queue()
-        self._processes: dict[str, subprocess.Popen[str]] = {}
+        self._processes: dict[str, subprocess.Popen[Any]] = {}
         self._status_lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -94,7 +96,12 @@ class JobManager:
         queued = list(self._queue.queue)
         for path in sorted(self.jobs_root.glob("job_*/status.json"), reverse=True):
             data = read_json(path, {})
-            if data.get("state") == JobState.running.value:
+            if data.get("state") in {
+                JobState.running.value,
+                JobState.cancelled.value,
+                JobState.failed.value,
+                JobState.interrupted.value,
+            }:
                 self._refresh_progress(path.parent.name, rebuild_preview=False)
                 data = read_json(path, {})
             if data.get("state") == JobState.archived.value and not include_archived:
@@ -112,7 +119,12 @@ class JobManager:
 
     def get_fresh_status(self, job_id: str) -> dict[str, Any]:
         status = self.get_status(job_id)
-        if status.get("state") == JobState.running.value:
+        if status.get("state") in {
+            JobState.running.value,
+            JobState.cancelled.value,
+            JobState.failed.value,
+            JobState.interrupted.value,
+        }:
             self._refresh_progress(job_id, rebuild_preview=False)
             status = self.get_status(job_id)
         return status
@@ -191,9 +203,44 @@ class JobManager:
             "exitCode": None,
             "error": None,
             "currentFrame": status.get("firstFrame"),
+            "resumeAvailable": False,
+            "resumeFromFrame": None,
+            "resumeSourceDir": None,
         })
         self._write_status_dict(job_id, status)
         self._event(job_id, "job.queued", status)
+        self._queue.put(job_id)
+        return status
+
+
+    def resume_job(self, job_id: str) -> dict[str, Any]:
+        self._refresh_progress(job_id, rebuild_preview=False)
+        status = self.get_status(job_id)
+        if not status:
+            raise KeyError(job_id)
+        if status.get("state") not in {JobState.cancelled.value, JobState.failed.value, JobState.interrupted.value}:
+            raise ValueError("only cancelled, failed, or interrupted jobs can be resumed")
+        if not status.get("resumeAvailable"):
+            raise ValueError("job has no resumable checkpoint")
+        resume_from = status.get("resumeFromFrame")
+        if not isinstance(resume_from, int):
+            raise ValueError("job has no valid resume frame")
+
+        self._write_resume_config(job_id, resume_from)
+        status.update({
+            "state": JobState.queued.value,
+            "startedAt": None,
+            "finishedAt": None,
+            "pid": None,
+            "exitCode": None,
+            "error": None,
+            "currentFrame": resume_from,
+            "resumeAvailable": False,
+            "resumeFromFrame": resume_from,
+            "resumeSourceDir": str(self.job_dir(job_id) / "output"),
+        })
+        self._write_status_dict(job_id, status)
+        self._event(job_id, "job.resume_queued", status)
         self._queue.put(job_id)
         return status
 
@@ -279,8 +326,17 @@ class JobManager:
         argv = read_json(job_dir / "argv.json")
         stdout_path = job_dir / "stdout.log"
         stderr_path = job_dir / "stderr.log"
-        stdout_path.write_text("", encoding="utf-8")
-        stderr_path.write_text("", encoding="utf-8")
+        resume_from = status.get("resumeFromFrame") if isinstance(status.get("resumeFromFrame"), int) else None
+        if resume_from and stdout_path.exists():
+            with stdout_path.open("a", encoding="utf-8") as handle:
+                handle.write(f"\n[Web Resume] resume_from={resume_from} resume_source_dir={job_dir / 'output'}\n")
+            stdout_offset = stdout_path.stat().st_size
+            stderr_offset = stderr_path.stat().st_size if stderr_path.exists() else 0
+        else:
+            stdout_path.write_text("", encoding="utf-8")
+            stderr_path.write_text("", encoding="utf-8")
+            stdout_offset = 0
+            stderr_offset = 0
 
         process = start_celluniverse_process(
             self.config,
@@ -293,8 +349,8 @@ class JobManager:
         self._write_status_dict(job_id, status)
         self._event(job_id, "process.started", {"jobId": job_id, "pid": process.pid, "argv": argv})
 
-        stdout_thread = threading.Thread(target=self._tail_log_file, args=(job_id, stdout_path, "stdout", process), daemon=True)
-        stderr_thread = threading.Thread(target=self._tail_log_file, args=(job_id, stderr_path, "stderr", process), daemon=True)
+        stdout_thread = threading.Thread(target=self._tail_log_file, args=(job_id, stdout_path, "stdout", process, stdout_offset), daemon=True)
+        stderr_thread = threading.Thread(target=self._tail_log_file, args=(job_id, stderr_path, "stderr", process, stderr_offset), daemon=True)
         stdout_thread.start()
         stderr_thread.start()
 
@@ -365,8 +421,82 @@ class JobManager:
             return ensure_inside_roots(base, self.config.security.allowedConfigRoots)
         return self.config.celluniverse.celluniverseCppRoot / base
 
-    def _tail_log_file(self, job_id: str, log_path: Path, stream: str, process: subprocess.Popen[Any]) -> None:
+    def _write_resume_config(self, job_id: str, resume_from: int) -> None:
+        job_dir = self.job_dir(job_id)
+        config_path = job_dir / "effective-config.yaml"
+        if not config_path.exists():
+            raise ValueError("effective config is missing")
+        with config_path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        if not isinstance(data, dict):
+            raise ValueError("effective config YAML must be a mapping")
+        simulation = data.setdefault("simulation", {})
+        if not isinstance(simulation, dict):
+            raise ValueError("effective config simulation block must be a mapping")
+        simulation["resume_from"] = resume_from
+        simulation["resume_source_dir"] = str(job_dir / "output")
+        with config_path.open("w", encoding="utf-8") as handle:
+            yaml.safe_dump(data, handle, sort_keys=False)
+
+    def _apply_resume_fields(self, job_id: str, status: dict[str, Any], scan: dict[str, Any]) -> bool:
+        checkpoints = set(scan.get("outputReady", {}).get("checkpointFrames") or [])
+        last_completed = scan.get("lastCompletedFrame")
+        job_dir = self.job_dir(job_id)
+        can_resume = (
+            status.get("state") in {JobState.cancelled.value, JobState.failed.value, JobState.interrupted.value}
+            and isinstance(last_completed, int)
+            and last_completed in checkpoints
+            and last_completed < int(status.get("lastFrame", last_completed))
+            and (job_dir / "argv.json").exists()
+            and (job_dir / "effective-config.yaml").exists()
+            and self._checkpoint_has_resume_state(job_dir, last_completed, int(status.get("lastFrame", last_completed)))
+        )
+        resume_from = last_completed + 1 if can_resume else None
+        resume_source = str(job_dir / "output") if can_resume else None
+        changed = False
+        for key, value in {
+            "resumeAvailable": can_resume,
+            "resumeFromFrame": resume_from,
+            "resumeSourceDir": resume_source,
+        }.items():
+            if status.get(key) != value:
+                status[key] = value
+                changed = True
+        return changed
+
+
+    def _checkpoint_has_resume_state(self, job_dir: Path, checkpoint_frame: int, last_frame: int) -> bool:
+        checkpoint_path = job_dir / "output" / "checkpoints" / f"frame_{checkpoint_frame:03d}.txt"
+        if not checkpoint_path.exists() or checkpoint_path.stat().st_size == 0:
+            return False
+        required = {"frame", "z_slices", "maxZ", "perFrameAdaptiveBackground", "perFrameMeanBrightness"}
+        if checkpoint_frame < last_frame:
+            required.add("nextFrameBackgroundValue")
+        seen: set[str] = set()
+        has_cell = False
+        try:
+            with checkpoint_path.open("r", encoding="utf-8", errors="replace") as handle:
+                for raw_line in handle:
+                    line = raw_line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    tag, *_ = line.split(maxsplit=1)
+                    if tag == "frame":
+                        parts = line.split()
+                        if len(parts) < 2 or not parts[1].lstrip("-").isdigit() or int(parts[1]) != checkpoint_frame:
+                            return False
+                    if tag == "cell":
+                        has_cell = True
+                    if tag in required:
+                        seen.add(tag)
+        except OSError:
+            return False
+        return required.issubset(seen) and has_cell
+
+    def _tail_log_file(self, job_id: str, log_path: Path, stream: str, process: subprocess.Popen[Any], initial_offset: int = 0) -> None:
         with log_path.open("r", encoding="utf-8", errors="replace") as handle:
+            if initial_offset > 0:
+                handle.seek(initial_offset)
             while True:
                 line = handle.readline()
                 if line:
@@ -399,6 +529,8 @@ class JobManager:
                 if status.get(key) != scan[key]:
                     status[key] = scan[key]
                     changed = True
+            if self._apply_resume_fields(job_id, status, scan):
+                changed = True
             if status.get("state") == JobState.running.value and scan["lastCompletedFrame"] is not None:
                 current = min(int(status["lastFrame"]), int(scan["lastCompletedFrame"]) + 1)
                 if status.get("currentFrame") != current:

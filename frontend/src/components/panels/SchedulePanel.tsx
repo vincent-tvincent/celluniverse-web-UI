@@ -38,11 +38,13 @@ export default function SchedulePanel({
       <PanelHeading title="Update Scheduler" icon={<ListRestart size={17} />} onHide={onHide} />
       <button
         type="button"
-        className={`toggle-button ${enabled ? "active" : ""}`}
+        className={enabled ? "toggle-button active" : "toggle-button"}
+        aria-pressed={enabled}
+        title={enabled ? "Auto refresh is active" : "Auto refresh is inactive"}
         onClick={() => setEnabled(!enabled)}
       >
         {enabled ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
-        Auto refresh
+        {enabled ? "Auto refresh active" : "Auto refresh inactive"}
       </button>
       <label className="number-row">
         <span>Period</span>

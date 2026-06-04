@@ -35,7 +35,7 @@
       19
     ],
     "pngFrames": [],
-    "pointCloudFrames": [
+    "tiffFrames": [
       0,
       1,
       2,
@@ -56,13 +56,15 @@
       17,
       18,
       19
-    ],
-    "tiffFrames": []
+    ]
   },
   "partialOutputsAvailable": true,
   "pid": null,
   "progress": 0.09950248756218906,
   "queuePosition": null,
+  "resumeAvailable": true,
+  "resumeFromFrame": 20,
+  "resumeSourceDir": "/home/puv/celluniverse/celluniverse-web-UI/backend/runtime/jobs/job_demo_fluo_cancelled/output",
   "startedAt": "2026-06-01T08:45:32.475665+00:00",
   "state": "cancelled",
   "totalFrames": 201,

@@ -7,11 +7,12 @@ type StatusPanelProps = {
   loading: boolean;
   actionPending?: boolean;
   onStart?: (jobId: string) => void;
+  onResume?: (jobId: string) => void;
   onTerminate?: (job: JobStatus) => void;
   onHide: () => void;
 };
 
-export default function StatusPanel({ job, loading, actionPending = false, onStart, onTerminate, onHide }: StatusPanelProps) {
+export default function StatusPanel({ job, loading, actionPending = false, onStart, onResume, onTerminate, onHide }: StatusPanelProps) {
   const progress = Math.round((job?.progress ?? 0) * 100);
   const stateClass = job?.state ?? "idle";
   const stateIcon =
@@ -61,6 +62,11 @@ export default function StatusPanel({ job, loading, actionPending = false, onSta
             {job.state === "prepared" && onStart ? (
               <button className="action-button" type="button" disabled={actionPending} onClick={() => onStart(job.id)}>
                 <Play size={14} /> Start
+              </button>
+            ) : null}
+            {job.resumeAvailable && onResume ? (
+              <button className="action-button" type="button" disabled={actionPending} onClick={() => onResume(job.id)}>
+                <Play size={14} /> Resume
               </button>
             ) : null}
             {(job.state === "running" || job.state === "queued") && onTerminate ? (

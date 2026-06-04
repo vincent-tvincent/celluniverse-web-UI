@@ -47,6 +47,7 @@ import {
   listInitialCsvPresets,
   listJobs,
   listLocalDatasets,
+  resumeJob,
   startJob,
   updateDatasetRoot,
   updatePreparedJob,
@@ -170,6 +171,11 @@ export default function Dashboard({
     mutationFn: cancelJob,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["jobs"] }),
   });
+
+  const resumeMutation = useMutation({
+    mutationFn: resumeJob,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["jobs"] }),
+  });
   const archiveMutation = useMutation({
     mutationFn: archiveJob,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["jobs"] }),
@@ -220,6 +226,10 @@ export default function Dashboard({
   const handleLifecycle = (job: JobStatus) => {
     if (job.state === "prepared") {
       startMutation.mutate(job.id);
+      return;
+    }
+    if (job.resumeAvailable) {
+      resumeMutation.mutate(job.id);
       return;
     }
     if (job.state === "running" || job.state === "queued") {
@@ -1380,6 +1390,7 @@ export function DangerConfirmDialog({ intent, onClose }: { intent: ConfirmIntent
 
 function getLifecycleLabel(job: JobStatus): { label: string; danger: boolean } | null {
   if (job.state === "prepared") return { label: "Start", danger: false };
+  if (job.resumeAvailable) return { label: "Resume", danger: false };
   if (job.state === "running" || job.state === "queued") return { label: "Stop", danger: true };
   return null;
 }

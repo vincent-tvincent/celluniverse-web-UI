@@ -66,6 +66,9 @@ class JobStatus(BaseModel):
     queuePosition: int | None = None
     partialOutputsAvailable: bool = False
     outputReady: dict[str, Any] = Field(default_factory=dict)
+    resumeAvailable: bool = False
+    resumeFromFrame: int | None = None
+    resumeSourceDir: str | None = None
 
 
 class ClientConfig(BaseModel):

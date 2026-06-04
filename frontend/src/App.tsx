@@ -17,6 +17,7 @@ import {
   getLogs,
   getManifest,
   listJobs,
+  resumeJob,
   startJob,
   cancelJob,
   toApiUrl,
@@ -198,6 +199,16 @@ function LiveMonitor({
   });
   const cancelMutation = useMutation({
     mutationFn: cancelJob,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      if (selectedJobId) {
+        void queryClient.invalidateQueries({ queryKey: ["job", selectedJobId] });
+      }
+    },
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: resumeJob,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["jobs"] });
       if (selectedJobId) {
@@ -755,8 +766,9 @@ function LiveMonitor({
                 <StatusPanel
                   job={jobQuery.data}
                   loading={jobQuery.isLoading}
-                  actionPending={startMutation.isPending || cancelMutation.isPending}
+                  actionPending={startMutation.isPending || cancelMutation.isPending || resumeMutation.isPending}
                   onStart={(jobId) => startMutation.mutate(jobId)}
+                  onResume={(jobId) => resumeMutation.mutate(jobId)}
                   onTerminate={(job) => {
                     const sequence = randomSequence();
                     setConfirmIntent({

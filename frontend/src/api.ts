@@ -81,6 +81,10 @@ export function cancelJob(jobId: string): Promise<JobStatus> {
   return requestJson<JobStatus>(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
 }
 
+export function resumeJob(jobId: string): Promise<JobStatus> {
+  return requestJson<JobStatus>(`/jobs/${encodeURIComponent(jobId)}/resume`, { method: "POST" });
+}
+
 export function archiveJob(jobId: string): Promise<JobStatus> {
   return requestJson<JobStatus>(`/jobs/${encodeURIComponent(jobId)}`, { method: "DELETE" });
 }
