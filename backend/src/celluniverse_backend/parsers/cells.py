@@ -193,8 +193,9 @@ def build_lineage_layout(lineage: dict[str, Any], background: str = "#070a0f") -
         {"frame": frame, "radius": inner_radius + max(0, frame - first_frame) * ring_spacing}
         for frame in range(first_frame, last_frame + 1)
     ]
+    layout_edges = _build_lineage_layout_edges(lineage.get("edges", []), layout_nodes, ring_spacing)
     return {
-        "mode": "radial-time-v1",
+        "mode": "radial-time-v2",
         "background": background,
         "center": {"x": 0, "y": 0},
         "innerRadius": inner_radius,
@@ -203,8 +204,31 @@ def build_lineage_layout(lineage: dict[str, Any], background: str = "#070a0f") -
         "lastFrame": last_frame,
         "rings": rings,
         "nodes": layout_nodes,
-        "edges": lineage.get("edges", []),
+        "edges": layout_edges,
     }
+
+
+def _build_lineage_layout_edges(
+    edges: list[dict[str, Any]],
+    layout_nodes: dict[str, dict[str, Any]],
+    ring_spacing: int,
+) -> list[dict[str, Any]]:
+    layout_edges: list[dict[str, Any]] = []
+    for edge in edges:
+        source = layout_nodes.get(str(edge.get("source")))
+        target = layout_nodes.get(str(edge.get("target")))
+        routed = dict(edge)
+        if source and target:
+            outward = max(0.0, float(target["radius"]) - float(source["radius"]))
+            # Split branches close to their parent instead of drawing every
+            # sibling edge on the same long radial segment until child birth.
+            split = min(
+                outward,
+                max(float(ring_spacing) * 0.75, min(float(ring_spacing) * 1.5, outward * 0.28)),
+            )
+            routed["routeRadius"] = float(source["radius"]) + split
+        layout_edges.append(routed)
+    return layout_edges
 
 
 def lineage_parts(name: str) -> tuple[str, str]:
@@ -338,21 +362,38 @@ def _assign_radial_angles(nodes: dict[str, dict[str, Any]], roots: list[str]) ->
         return {}
     angles: dict[str, float] = {}
     sector_width = (math.pi * 2) / max(1, len(roots))
-    gap = min(math.radians(8), sector_width * 0.2)
+    gap = min(math.radians(18), sector_width * 0.24)
     for root_index, root in enumerate(roots):
         start = -math.pi + root_index * sector_width + gap / 2
         end = -math.pi + (root_index + 1) * sector_width - gap / 2
-        leaves = _collect_leaves(nodes, root)
-        if not leaves:
-            leaves = [root]
-        for leaf_index, leaf in enumerate(sorted(leaves, key=natural_key)):
-            if len(leaves) == 1:
-                angle = (start + end) / 2
-            else:
-                angle = start + (end - start) * (leaf_index / (len(leaves) - 1))
-            angles[leaf] = angle
-        _assign_internal_angles(nodes, root, angles, (start + end) / 2)
+        ordered_nodes = _ordered_subtree_lanes(nodes, root) or [root]
+        width = end - start
+        for lane_index, node_id in enumerate(ordered_nodes):
+            # Use all lineage nodes as angular lanes, not only leaves. A previous
+            # leaf-only layout could place internal branch nodes on exactly the
+            # same angle as a leaf in a neighboring branch, causing overlaid
+            # branch segments in dense trees such as cell_0 and cell_1.
+            angle = start + width * ((lane_index + 0.5) / len(ordered_nodes))
+            angles[node_id] = angle
     return angles
+
+
+def _ordered_subtree_lanes(nodes: dict[str, dict[str, Any]], node_id: str) -> list[str]:
+    node = nodes.get(node_id)
+    if not node:
+        return []
+    children = sorted(node.get("children", []), key=natural_key)
+    if not children:
+        return [node_id]
+    lanes: list[str] = []
+    midpoint = len(children) // 2
+    for index, child in enumerate(children):
+        if index == midpoint:
+            lanes.append(node_id)
+        lanes.extend(_ordered_subtree_lanes(nodes, child))
+    if node_id not in lanes:
+        lanes.append(node_id)
+    return lanes
 
 
 def _collect_leaves(nodes: dict[str, dict[str, Any]], node_id: str) -> list[str]:

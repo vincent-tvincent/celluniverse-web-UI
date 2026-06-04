@@ -11,7 +11,7 @@ from celluniverse_backend.parsers.cells import (
 )
 from celluniverse_backend.storage.json_store import read_json, write_json_atomic
 
-LINEAGE_DERIVATION_VERSION = 2
+LINEAGE_DERIVATION_VERSION = 3
 
 
 def ensure_lineage_artifacts(job_dir: Path, job_id: str, background: str = "#070a0f") -> dict[str, Any]:

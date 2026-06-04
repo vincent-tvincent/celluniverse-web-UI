@@ -49,21 +49,22 @@ export default function LineagePanel({
   const [scale, setScale] = useState(0.9);
   const dragRef = useRef<{ id: number; x: number; y: number; pan: PanState } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const sampledRings = useMemo(() => sampleRings(layout?.rings ?? []), [layout?.rings]);
-  const edgePaths = useMemo(() => buildEdgePaths(layout, snapshot), [layout, snapshot]);
+  const displayLayout = useMemo(() => resolveLineageLayout(layout, graph), [layout, graph]);
+  const sampledRings = useMemo(() => sampleRings(displayLayout?.rings ?? []), [displayLayout?.rings]);
+  const edgePaths = useMemo(() => buildEdgePaths(displayLayout, snapshot), [displayLayout, snapshot]);
   const extent = useMemo(
-    () => Math.max(220, ...(layout?.rings ?? []).map((ring) => ring.radius + 80)),
-    [layout?.rings],
+    () => Math.max(220, ...(displayLayout?.rings ?? []).map((ring) => ring.radius + 80)),
+    [displayLayout?.rings],
   );
   const visibleLayoutNodes = useMemo(() => {
-    if (!layout) {
+    if (!displayLayout) {
       return [];
     }
     return [...visibleNodes]
-      .map((nodeId) => layout.nodes[nodeId])
+      .map((nodeId) => displayLayout.nodes[nodeId])
       .filter(Boolean)
       .sort((a, b) => a.radius - b.radius || a.id.localeCompare(b.id));
-  }, [layout, visibleNodes]);
+  }, [displayLayout, visibleNodes]);
 
   const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (event.button !== 2 && event.button !== 1) {
@@ -303,6 +304,79 @@ function NodeDetails({
   );
 }
 
+function resolveLineageLayout(
+  layout: LineageLayout | undefined,
+  graph: LineageGraph | undefined,
+): LineageLayout | undefined {
+  if (!layout || !graph || !graph.nodes.length) {
+    return layout;
+  }
+  const nodes = Object.fromEntries(
+    Object.entries(layout.nodes).map(([nodeId, node]) => [nodeId, { ...node }]),
+  );
+  const graphNodes = new Map(graph.nodes.map((node) => [node.id, node]));
+  const roots = (graph.roots.length ? graph.roots : graph.nodes.filter((node) => !node.parentId).map((node) => node.id))
+    .filter((nodeId) => nodes[nodeId])
+    .sort(compareLineageIds);
+  if (!roots.length) {
+    return layout;
+  }
+  const sectorWidth = (Math.PI * 2) / roots.length;
+  const gap = Math.min((Math.PI / 180) * 18, sectorWidth * 0.24);
+  for (const [rootIndex, root] of roots.entries()) {
+    const start = -Math.PI + rootIndex * sectorWidth + gap / 2;
+    const end = -Math.PI + (rootIndex + 1) * sectorWidth - gap / 2;
+    const lanes = orderedLineageLanes(root, graphNodes, nodes, new Set()) || [root];
+    const width = end - start;
+    lanes.forEach((nodeId, laneIndex) => {
+      const node = nodes[nodeId];
+      if (!node) {
+        return;
+      }
+      const angle = start + width * ((laneIndex + 0.5) / lanes.length);
+      node.angle = angle;
+      node.x = node.radius * Math.cos(angle);
+      node.y = node.radius * Math.sin(angle);
+    });
+  }
+  return { ...layout, nodes };
+}
+
+function orderedLineageLanes(
+  nodeId: string,
+  graphNodes: Map<string, LineageNode>,
+  layoutNodes: Record<string, LineageLayout["nodes"][string]>,
+  seen: Set<string>,
+): string[] {
+  if (seen.has(nodeId) || !layoutNodes[nodeId]) {
+    return [];
+  }
+  seen.add(nodeId);
+  const graphNode = graphNodes.get(nodeId);
+  const children = (graphNode?.children ?? [])
+    .filter((childId) => layoutNodes[childId])
+    .sort(compareLineageIds);
+  if (!children.length) {
+    return [nodeId];
+  }
+  const lanes: string[] = [];
+  const midpoint = Math.floor(children.length / 2);
+  children.forEach((childId, index) => {
+    if (index === midpoint) {
+      lanes.push(nodeId);
+    }
+    lanes.push(...orderedLineageLanes(childId, graphNodes, layoutNodes, seen));
+  });
+  if (!lanes.includes(nodeId)) {
+    lanes.push(nodeId);
+  }
+  return lanes;
+}
+
+function compareLineageIds(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
 function buildEdgePaths(
   layout: LineageLayout | undefined,
   snapshot: LineageFrameSnapshot | undefined,
@@ -317,15 +391,19 @@ function buildEdgePaths(
     if (!source || !target) {
       return [];
     }
-    const radialX = target.radius * Math.cos(source.angle);
-    const radialY = target.radius * Math.sin(source.angle);
+    const routeRadius = lineageRouteRadius(edge.routeRadius, source.radius, target.radius, layout.ringSpacing);
+    const radialX = routeRadius * Math.cos(source.angle);
+    const radialY = routeRadius * Math.sin(source.angle);
+    const arcX = routeRadius * Math.cos(target.angle);
+    const arcY = routeRadius * Math.sin(target.angle);
     const delta = normalizeAngle(target.angle - source.angle);
     const largeArc = Math.abs(delta) > Math.PI ? 1 : 0;
     const sweep = delta >= 0 ? 1 : 0;
     const path = [
       `M ${source.x.toFixed(2)} ${source.y.toFixed(2)}`,
       `L ${radialX.toFixed(2)} ${radialY.toFixed(2)}`,
-      `A ${target.radius.toFixed(2)} ${target.radius.toFixed(2)} 0 ${largeArc} ${sweep} ${target.x.toFixed(2)} ${target.y.toFixed(2)}`,
+      `A ${routeRadius.toFixed(2)} ${routeRadius.toFixed(2)} 0 ${largeArc} ${sweep} ${arcX.toFixed(2)} ${arcY.toFixed(2)}`,
+      `L ${target.x.toFixed(2)} ${target.y.toFixed(2)}`,
     ].join(" ");
     return [{
       id: edge.id,
@@ -334,6 +412,20 @@ function buildEdgePaths(
       active: activeNodes.has(edge.target),
     }];
   });
+}
+
+function lineageRouteRadius(
+  routeRadius: number | undefined,
+  sourceRadius: number,
+  targetRadius: number,
+  ringSpacing: number,
+): number {
+  if (typeof routeRadius === "number" && Number.isFinite(routeRadius)) {
+    return clamp(routeRadius, sourceRadius, targetRadius);
+  }
+  const outward = Math.max(0, targetRadius - sourceRadius);
+  const split = Math.min(outward, Math.max(ringSpacing * 0.75, Math.min(ringSpacing * 1.5, outward * 0.28)));
+  return sourceRadius + split;
 }
 
 function sampleRings(rings: LineageLayout["rings"]): Array<LineageLayout["rings"][number] & { label: boolean }> {

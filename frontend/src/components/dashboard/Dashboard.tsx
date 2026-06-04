@@ -8,6 +8,7 @@ import {
   Download,
   Edit3,
   Eye,
+  EyeOff,
   FileCog,
   FileText,
   FolderOpen,
@@ -18,6 +19,7 @@ import {
   LoaderCircle,
   Menu,
   MonitorPlay,
+  Moon,
   MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
@@ -27,6 +29,7 @@ import {
   Search,
   Settings,
   Square,
+  Sun,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -65,6 +68,7 @@ import type {
   LocalDataset,
   ParameterField,
 } from "../../types";
+import { useViewerStore } from "../../store";
 
 export type DashboardTab = "jobs" | "new" | "datasets" | "outputs" | "settings";
 type DisplayMode = "block" | "list";
@@ -1154,6 +1158,14 @@ function SettingsPanel({
 }) {
   const [path, setPath] = useState("");
   const [sourceRole, setSourceRole] = useState<DataSourceRole>("dataset");
+  const default3dBackgroundMode = useViewerStore((state) => state.default3dBackgroundMode);
+  const defaultRealEnabled = useViewerStore((state) => state.defaultRealEnabled);
+  const defaultSynthEnabled = useViewerStore((state) => state.defaultSynthEnabled);
+  const defaultCellsEnabled = useViewerStore((state) => state.defaultCellsEnabled);
+  const setDefault3dBackgroundMode = useViewerStore((state) => state.setDefault3dBackgroundMode);
+  const setDefaultRealEnabled = useViewerStore((state) => state.setDefaultRealEnabled);
+  const setDefaultSynthEnabled = useViewerStore((state) => state.setDefaultSynthEnabled);
+  const setDefaultCellsEnabled = useViewerStore((state) => state.setDefaultCellsEnabled);
   const enabledSources = dataSources.filter((source) => source.enabled);
   const presetSources = dataSources.filter((source) => source.preset);
   const csvSources = dataSources.filter((source) => source.sourceRole === "initial-csv");
@@ -1187,6 +1199,33 @@ function SettingsPanel({
           </dl>
         </section>
       </div>
+
+      <section className="settings-block viewer-defaults-block">
+        <h3>Viewer Defaults</h3>
+        <div className="viewer-defaults-grid">
+          <span className="viewer-defaults-label viewer-defaults-label-background">3D background</span>
+          <span className="viewer-defaults-label viewer-defaults-label-layers">Initial layer visibility</span>
+          <button
+            type="button"
+            className={`toggle-button ${default3dBackgroundMode === "bright" ? "active" : ""}`}
+            aria-pressed={default3dBackgroundMode === "bright"}
+            onClick={() => setDefault3dBackgroundMode("bright")}
+          >
+            <Sun size={14} /> Bright
+          </button>
+          <button
+            type="button"
+            className={`toggle-button ${default3dBackgroundMode === "dark" ? "active" : ""}`}
+            aria-pressed={default3dBackgroundMode === "dark"}
+            onClick={() => setDefault3dBackgroundMode("dark")}
+          >
+            <Moon size={14} /> Dark
+          </button>
+          <ViewerDefaultToggle label="Real" enabled={defaultRealEnabled} onChange={setDefaultRealEnabled} />
+          <ViewerDefaultToggle label="Synthetic" enabled={defaultSynthEnabled} onChange={setDefaultSynthEnabled} />
+          <ViewerDefaultToggle label="Cell outlines" enabled={defaultCellsEnabled} onChange={setDefaultCellsEnabled} />
+        </div>
+      </section>
 
       <section className="data-source-manager">
         <div className="settings-section-bar">
@@ -1229,6 +1268,28 @@ function SettingsPanel({
         </div>
       </section>
     </div>
+  );
+}
+
+function ViewerDefaultToggle({
+  label,
+  enabled,
+  onChange,
+}: {
+  label: string;
+  enabled: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`toggle-button ${enabled ? "active" : ""}`}
+      aria-pressed={enabled}
+      onClick={() => onChange(!enabled)}
+    >
+      {enabled ? <Eye size={15} /> : <EyeOff size={15} />}
+      {label}
+    </button>
   );
 }
 

@@ -165,6 +165,8 @@ function LiveMonitor({
     setSynthContrastLimits,
     pointAlphaByBrightness,
     setPointAlphaByBrightness,
+    default3dBackgroundMode,
+    setDefault3dBackgroundMode,
     logStream,
     setLogStream,
     autoRefreshEnabled,
@@ -894,6 +896,8 @@ function LiveMonitor({
                 focusRequestId={cellFocusRequest?.requestId ?? 0}
                 labeledCellIds={labeledCellIds}
                 frame={activeFrame?.t ?? frame}
+                backgroundMode={default3dBackgroundMode}
+                onBackgroundModeChange={setDefault3dBackgroundMode}
                 onFirstRender={handleVolumeFirstRender}
                 onHoverSample={setHoverSample}
               />

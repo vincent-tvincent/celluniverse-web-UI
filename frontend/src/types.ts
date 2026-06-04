@@ -222,6 +222,7 @@ export type LineageEdge = {
   target: string;
   type: "division";
   frame: number;
+  routeRadius?: number;
 };
 
 export type LineageGraph = {

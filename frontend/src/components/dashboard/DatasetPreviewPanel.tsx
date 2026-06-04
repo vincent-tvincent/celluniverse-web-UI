@@ -28,7 +28,7 @@ import ViewerToolbar from "../layout/ViewerToolbar";
 import LayerPanel from "../panels/LayerPanel";
 import PanelHeading from "../panels/PanelHeading";
 import ViewModePanel from "../panels/ViewModePanel";
-import type { ViewMode } from "../../store";
+import { useViewerStore, type ViewMode } from "../../store";
 
 const EMPTY_CELLS: CellRecord[] = [];
 const EMPTY_IDS: string[] = [];
@@ -46,13 +46,16 @@ type DatasetPreviewPanelProps = {
 
 export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJob }: DatasetPreviewPanelProps) {
   const workspaceRef = useRef<HTMLElement | null>(null);
+  const default3dBackgroundMode = useViewerStore((state) => state.default3dBackgroundMode);
+  const setDefault3dBackgroundMode = useViewerStore((state) => state.setDefault3dBackgroundMode);
+  const defaultRealEnabled = useViewerStore((state) => state.defaultRealEnabled);
   const [mode, setMode] = useState<ViewMode>("volume");
   const [frame, setFrameState] = useState(0);
   const [slice, setSlice] = useState(0);
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
   const [panelLayout, setPanelLayout] = useState(DEFAULT_PANEL_LAYOUT);
-  const [realEnabled, setRealEnabled] = useState(true);
+  const [realEnabled, setRealEnabled] = useState(() => defaultRealEnabled);
   const [realMap, setRealMap] = useState<ColorMapId>("viridis");
   const [realOpacity, setRealOpacity] = useState(0.9);
   const [realContrastLimits, setRealContrastLimits] = useState<ContrastLimits>(DEFAULT_CLEAN_CONTRAST_LIMITS);
@@ -431,6 +434,8 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
                 focusRequestId={0}
                 labeledCellIds={EMPTY_IDS}
                 frame={activeFrameNumber ?? frame}
+                backgroundMode={default3dBackgroundMode}
+                onBackgroundModeChange={setDefault3dBackgroundMode}
                 onFirstRender={handleVolumeFirstRender}
                 onHoverSample={setHoverSample}
               />

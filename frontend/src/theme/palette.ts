@@ -21,8 +21,6 @@ export const uiPalette = {
   cellNormalFill: "#00df82",
   // Fill for trash/rejected cell markers and overlay accents.
   cellTrashFill: "#ff765e",
-  // Muted text shown inside empty viewer states.
-  emptyText: "rgba(255,255,255,0.58)",
 } as const;
 
 export type ColorMapId =

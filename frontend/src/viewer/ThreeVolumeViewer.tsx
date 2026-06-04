@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { Moon, Sun } from "lucide-react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -34,6 +34,8 @@ type Props = {
   focusRequestId: number;
   labeledCellIds: string[];
   frame: number;
+  backgroundMode: ViewerBackgroundMode;
+  onBackgroundModeChange: (mode: ViewerBackgroundMode) => void;
   onFirstRender?: () => void;
   onHoverSample?: (sample: ViewerHoverSample | null) => void;
 };
@@ -50,7 +52,7 @@ type PointCloudData = {
 };
 
 type InterleaveRole = "real" | "synth" | "none";
-type ViewerBackgroundMode = "bright" | "dark";
+export type ViewerBackgroundMode = "bright" | "dark";
 
 type CameraViewState = {
   position: [number, number, number];
@@ -88,13 +90,14 @@ export default function ThreeVolumeViewer({
   focusRequestId,
   labeledCellIds,
   frame,
+  backgroundMode,
+  onBackgroundModeChange,
   onFirstRender,
   onHoverSample,
 }: Props) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const cameraViewRef = useRef<CameraViewState | null>(null);
   const appliedFocusRequestRef = useRef(0);
-  const [backgroundMode, setBackgroundMode] = useState<ViewerBackgroundMode>("dark");
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -333,7 +336,7 @@ export default function ThreeVolumeViewer({
           className={backgroundMode === "bright" ? "active" : ""}
           aria-pressed={backgroundMode === "bright"}
           title="Bright background"
-          onClick={() => setBackgroundMode("bright")}
+          onClick={() => onBackgroundModeChange("bright")}
         >
           <Sun size={14} />
           Bright
@@ -343,7 +346,7 @@ export default function ThreeVolumeViewer({
           className={backgroundMode === "dark" ? "active" : ""}
           aria-pressed={backgroundMode === "dark"}
           title="Dark background"
-          onClick={() => setBackgroundMode("dark")}
+          onClick={() => onBackgroundModeChange("dark")}
         >
           <Moon size={14} />
           Dark

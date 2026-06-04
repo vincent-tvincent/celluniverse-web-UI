@@ -594,6 +594,8 @@ export const ViewerEmptyStates: Story = {
           focusRequestId={0}
           labeledCellIds={[]}
           frame={0}
+          backgroundMode="dark"
+          onBackgroundModeChange={() => {}}
         />
       </div>
     </div>

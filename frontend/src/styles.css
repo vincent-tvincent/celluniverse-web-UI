@@ -2467,6 +2467,14 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   gap: 10px;
 }
 
+.dashboard-card > .item-actions,
+.dashboard-card > .job-actions,
+.dashboard-card > .data-source-actions,
+.upload-scan-panel > .item-actions {
+  align-self: end;
+  margin-top: auto;
+}
+
 .dashboard-list {
   display: grid;
   gap: 8px;
@@ -3009,6 +3017,38 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   margin: 4px 0 0;
 }
 
+.viewer-defaults-block {
+  display: grid;
+  gap: 10px;
+}
+
+.viewer-defaults-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+}
+
+.viewer-defaults-label {
+  min-width: 0;
+  color: var(--color-text-soft);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.viewer-defaults-label-background {
+  grid-column: span 2;
+}
+
+.viewer-defaults-label-layers {
+  grid-column: span 3;
+}
+
+.viewer-defaults-grid .toggle-button {
+  height: 36px;
+}
+
 .data-source-manager {
   display: grid;
   gap: 12px;
@@ -3281,6 +3321,15 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   .settings-section-bar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .viewer-defaults-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .viewer-defaults-label-background,
+  .viewer-defaults-label-layers {
+    grid-column: auto;
   }
 
   .dashboard-nav {

@@ -58,6 +58,7 @@ export default function CanvasSliceViewer({
   } | null>(null);
   const baseVolume = real ?? synth;
   const baseSlice = realSlice ?? synthSlice;
+  const hasImage = Boolean(baseSlice || baseVolume);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -104,7 +105,6 @@ export default function CanvasSliceViewer({
           });
       if (!image) {
         hitRef.current = null;
-        drawEmptyState(ctx, rect.width, rect.height);
         onRenderComplete?.();
         return;
       }
@@ -195,13 +195,16 @@ export default function CanvasSliceViewer({
   };
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="slice-canvas"
-      aria-label="2D TIFF slice preview"
-      onPointerMove={handlePointerMove}
-      onPointerLeave={() => onHoverSample?.(null)}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className="slice-canvas"
+        aria-label="2D TIFF slice preview"
+        onPointerMove={handlePointerMove}
+        onPointerLeave={() => onHoverSample?.(null)}
+      />
+      {!hasImage ? <div className="viewer-empty">Waiting for TIFF output</div> : null}
+    </>
   );
 }
 
@@ -244,11 +247,3 @@ function nearestLoadedSliceIndex(volume: VolumeData, z: number): number {
   return bestIndex;
 }
 
-function drawEmptyState(ctx: CanvasRenderingContext2D, width: number, height: number) {
-  ctx.save();
-  ctx.fillStyle = uiPalette.emptyText;
-  ctx.font = "500 14px Inter, system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("Waiting for TIFF output", width / 2, height / 2);
-  ctx.restore();
-}
