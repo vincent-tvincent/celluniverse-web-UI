@@ -1,8 +1,12 @@
 export const uiPalette = {
-  // Deep neutral background used behind microscopy slice and volume views.
+  // Pale neutral background used behind microscopy slice and volume views.
   viewerBackground: "#fffefa",
+  // Dark neutral background for high-contrast 3D inspection.
+  viewerBackgroundDark: "#090d13",
   // Subtle bounding-box guide around the rendered 3D volume.
   volumeBox: "#60616d",
+  // Bounding-box guide for dark-background 3D inspection.
+  volumeBoxDark: "#bfc8ff",
   // Default color for valid cell ellipsoid overlays.
   cellNormal: "#00df82",
   // Alert color for cells marked as trash or rejected output.

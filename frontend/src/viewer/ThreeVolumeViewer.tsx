@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { Moon, Sun } from "lucide-react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { defaultViewerConfig, type ViewerRuntimeConfig } from "../config";
 import { uiPalette } from "../theme/palette";
@@ -49,6 +50,7 @@ type PointCloudData = {
 };
 
 type InterleaveRole = "real" | "synth" | "none";
+type ViewerBackgroundMode = "bright" | "dark";
 
 type CameraViewState = {
   position: [number, number, number];
@@ -92,6 +94,7 @@ export default function ThreeVolumeViewer({
   const mountRef = useRef<HTMLDivElement | null>(null);
   const cameraViewRef = useRef<CameraViewState | null>(null);
   const appliedFocusRequestRef = useRef(0);
+  const [backgroundMode, setBackgroundMode] = useState<ViewerBackgroundMode>("bright");
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -101,7 +104,8 @@ export default function ThreeVolumeViewer({
     }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(uiPalette.viewerBackground);
+    const darkBackground = backgroundMode === "dark";
+    scene.background = new THREE.Color(darkBackground ? uiPalette.viewerBackgroundDark : uiPalette.viewerBackground);
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -200,7 +204,7 @@ export default function ThreeVolumeViewer({
       new THREE.Vector3(-worldWidth / 2, -worldHeight / 2, -worldDepth / 2),
       new THREE.Vector3(worldWidth / 2, worldHeight / 2, worldDepth / 2),
     );
-    const helper = new THREE.Box3Helper(box, new THREE.Color(uiPalette.volumeBox));
+    const helper = new THREE.Box3Helper(box, new THREE.Color(darkBackground ? uiPalette.volumeBoxDark : uiPalette.volumeBox));
     group.add(helper);
 
     const labeledCells = cells.filter((cell) => labeledCellIds.includes(cell.name));
@@ -318,10 +322,33 @@ export default function ThreeVolumeViewer({
     frame,
     onFirstRender,
     onHoverSample,
+    backgroundMode,
   ]);
 
   return (
-    <div className="volume-stage" ref={mountRef}>
+    <div className="volume-stage" ref={mountRef} data-background={backgroundMode}>
+      <div className="volume-background-switch segmented" aria-label="3D viewer background">
+        <button
+          type="button"
+          className={backgroundMode === "bright" ? "active" : ""}
+          aria-pressed={backgroundMode === "bright"}
+          title="Bright background"
+          onClick={() => setBackgroundMode("bright")}
+        >
+          <Sun size={14} />
+          Bright
+        </button>
+        <button
+          type="button"
+          className={backgroundMode === "dark" ? "active" : ""}
+          aria-pressed={backgroundMode === "dark"}
+          title="Dark background"
+          onClick={() => setBackgroundMode("dark")}
+        >
+          <Moon size={14} />
+          Dark
+        </button>
+      </div>
       {!real && !synth && !realPointCloud && !synthPointCloud ? (
         <div className="viewer-empty">Waiting for TIFF output</div>
       ) : null}

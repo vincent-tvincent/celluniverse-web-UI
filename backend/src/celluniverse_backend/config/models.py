@@ -67,6 +67,7 @@ class PointCloudPreviewConfig(BaseModel):
     maxSlices: int = 48
     realIntensityPercentile: float = 35.0
     synthIntensityPercentile: float = 20.0
+    datasetXyDensityMultiplier: float = 2.0
 
 
 class PreviewConfig(BaseModel):

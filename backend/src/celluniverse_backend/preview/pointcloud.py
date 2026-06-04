@@ -51,6 +51,7 @@ def ensure_pointcloud_preview(
     max_points: int = DEFAULT_MAX_POINTS,
     max_slices: int = DEFAULT_MAX_SLICES,
     intensity_percentile: float = DEFAULT_INTENSITY_PERCENTILE,
+    xy_density_multiplier: float = 1.0,
 ) -> Path:
     if _preview_cache_matches(
         preview_path,
@@ -58,6 +59,7 @@ def ensure_pointcloud_preview(
         max_points=max_points,
         max_slices=max_slices,
         intensity_percentile=intensity_percentile,
+        xy_density_multiplier=xy_density_multiplier,
     ):
         return preview_path
 
@@ -69,6 +71,7 @@ def ensure_pointcloud_preview(
         max_points=max_points,
         max_slices=max_slices,
         intensity_percentile=intensity_percentile,
+        xy_density_multiplier=xy_density_multiplier,
     )
     tmp_path.replace(preview_path)
     return preview_path
@@ -81,6 +84,7 @@ def build_pointcloud_preview(
     max_points: int,
     max_slices: int,
     intensity_percentile: float,
+    xy_density_multiplier: float = 1.0,
 ) -> None:
     with source_tiff.open("rb") as handle:
         _endian, pages = _read_tiff_pages(handle)
@@ -89,7 +93,13 @@ def build_pointcloud_preview(
         first = pages[0]
         _validate_supported_pages(pages)
         selected_indices = _select_slice_indices(len(pages), max_slices)
-        xy_step = _choose_xy_step(first.width, first.height, len(selected_indices), max_points)
+        xy_step = _choose_xy_step(
+            first.width,
+            first.height,
+            len(selected_indices),
+            max_points,
+            xy_density_multiplier=xy_density_multiplier,
+        )
         threshold = _compute_threshold(handle, pages, selected_indices, xy_step, intensity_percentile)
         candidates = _count_candidates(handle, pages, selected_indices, xy_step, threshold)
         keep_stride = max(1, math.ceil(candidates / max(1, max_points)))
@@ -118,6 +128,7 @@ def build_pointcloud_preview(
                 "depth": len(pages),
                 "selectedSlices": len(selected_indices),
                 "xyStep": xy_step,
+                "xyDensityMultiplier": xy_density_multiplier,
                 "threshold": threshold,
                 "intensityMax": intensity_max,
                 "bitsPerSample": first.bits_per_sample,
@@ -149,6 +160,7 @@ def _preview_cache_matches(
     max_points: int,
     max_slices: int,
     intensity_percentile: float,
+    xy_density_multiplier: float,
 ) -> bool:
     if not preview_path.exists() or preview_path.stat().st_mtime < source_tiff.stat().st_mtime:
         return False
@@ -160,6 +172,7 @@ def _preview_cache_matches(
         and metadata.get("maxPoints") == max_points
         and metadata.get("maxSlices") == max_slices
         and abs(float(metadata.get("intensityPercentile", -1.0)) - intensity_percentile) < 1e-6
+        and abs(float(metadata.get("xyDensityMultiplier", 1.0)) - xy_density_multiplier) < 1e-6
     )
 
 
@@ -294,9 +307,18 @@ def _select_slice_indices(depth: int, max_slices: int) -> list[int]:
     return selected
 
 
-def _choose_xy_step(width: int, height: int, selected_slices: int, max_points: int) -> int:
+def _choose_xy_step(
+    width: int,
+    height: int,
+    selected_slices: int,
+    max_points: int,
+    *,
+    xy_density_multiplier: float = 1.0,
+) -> int:
     voxel_count = max(1, width * height * selected_slices)
-    return max(1, math.ceil(math.sqrt(voxel_count / (max(1, max_points) * 7))))
+    base_step = math.ceil(math.sqrt(voxel_count / (max(1, max_points) * 7)))
+    density = max(1.0, float(xy_density_multiplier))
+    return max(1, math.floor(base_step / density))
 
 
 def _compute_threshold(

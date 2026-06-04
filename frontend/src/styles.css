@@ -398,6 +398,7 @@ button {
   padding: 14px;
   background: var(--color-panel);
   border: 1px solid var(--border-card);
+  box-shadow: var(--shadow-panel);
 }
 
 .side-panel-collapse-button {
@@ -1243,6 +1244,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   border-radius: var(--radius-panel);
   border: 1px solid var(--border-accent-muted);
   background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
 }
 
 .slider-field legend {
@@ -1430,6 +1432,26 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   display: block;
 }
 
+.volume-background-switch {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  width: auto;
+  grid-template-columns: repeat(2, minmax(74px, auto));
+  box-shadow: var(--shadow-toast);
+}
+
+.volume-background-switch button {
+  min-width: 74px;
+  height: 30px;
+  padding: 0 9px;
+}
+
+.volume-stage[data-background="dark"] .viewer-empty {
+  color: var(--color-text-panel);
+}
+
 .viewer-empty {
   position: absolute;
   inset: 0;
@@ -1450,7 +1472,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   align-items: center;
   gap: 8px;
   border-radius: var(--radius-control);
-  color: var(--color-text-soft);
+  color: var(--color-loading-title);
   background: var(--surface-badge);
   border: 1px solid var(--border-subtle);
   font-size: 12px;
@@ -1852,6 +1874,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 }
 
 .viewer-loading-card strong {
+  color: var(--color-loading-title);
   font-size: 14px;
 }
 
@@ -2435,6 +2458,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   background: var(--color-panel);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
 }
 
 .dashboard-card {

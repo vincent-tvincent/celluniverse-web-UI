@@ -80,6 +80,7 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
                 max_points=point_cloud_config.maxPoints,
                 max_slices=point_cloud_config.maxSlices,
                 intensity_percentile=point_cloud_config.realIntensityPercentile,
+                xy_density_multiplier=point_cloud_config.datasetXyDensityMultiplier,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
