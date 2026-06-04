@@ -1609,7 +1609,7 @@ export function DangerConfirmDialog({ intent, onClose }: { intent: ConfirmIntent
         </label>
         <div className="form-actions">
           <button className="cancel-button" type="button" disabled={!canConfirm} onClick={() => { intent.onConfirm(); onClose(); }}>{intent.confirmLabel}</button>
-          <button className="secondary-button" type="button" onClick={onClose}>Cancel</button>
+          <button className="secondary-button confirm-dialog-cancel-button" type="button" onClick={onClose}>Cancel</button>
         </div>
       </div>
     </div>

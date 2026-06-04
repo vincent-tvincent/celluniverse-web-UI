@@ -3239,6 +3239,18 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   font-size: 13px;
 }
 
+.confirm-dialog .confirm-dialog-cancel-button {
+  color: var(--color-strong-action-text);
+  background: var(--surface-strong-action);
+  border-color: var(--border-strong-action);
+}
+
+.confirm-dialog .confirm-dialog-cancel-button:hover:not(:disabled) {
+  color: var(--color-strong-action-text-hover);
+  background: var(--surface-strong-action-hover);
+  border-color: var(--border-strong-action-hover);
+}
+
 .dataset-preview-shell {
   background: var(--color-bg);
   color: var(--color-text-strong);
