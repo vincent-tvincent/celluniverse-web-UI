@@ -18,7 +18,7 @@
   },
   "runtime": {
     "runtimeRoot": "/home/blue-lobster/p2/UCI/CS295p/celluniverse-web-UI/backend/runtime",
-    "maxConcurrentJobs": 1,
+    "maxConcurrentJobs": 10,
     "keepJobDays": 14
   },
   "security": {

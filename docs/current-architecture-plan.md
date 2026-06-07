@@ -806,7 +806,7 @@ Example temporary deployment config:
   },
   "runtime": {
     "runtimeRoot": "/run/media/blue-lobster/disk3/celluniverse_web_runtime",
-    "maxConcurrentJobs": 1,
+    "maxConcurrentJobs": 10,
     "keepJobDays": 14
   },
   "security": {
@@ -1002,7 +1002,7 @@ Protect the machine from accidental huge jobs:
 ```json
 {
   "runtime": {
-    "maxConcurrentJobs": 1
+    "maxConcurrentJobs": 10
   },
   "limits": {
     "maxFrameCount": 200,

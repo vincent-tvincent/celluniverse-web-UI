@@ -47,7 +47,7 @@ class CellUniverseConfig(BaseModel):
 
 class RuntimeConfig(BaseModel):
     runtimeRoot: Path = Path("/home/blue-lobster/p2/UCI/CS295p/celluniverse-web-UI/backend/runtime")
-    maxConcurrentJobs: int = Field(default=1, ge=1)
+    maxConcurrentJobs: int = Field(default=10, ge=1)
     keepJobDays: int = 14
 
 

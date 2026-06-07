@@ -89,8 +89,8 @@ export CELLUNIVERSE_BACKEND_CONFIG="$PWD/config/backend.config.local.json"
 
 ### Parallel Jobs
 
-Jobs are queued when all scheduler slots are busy. The default is one active
-job because each CellUniverse process can already use many CPU threads.
+Jobs are queued when all scheduler slots are busy. The default is 10 active
+jobs.
 
 To allow more jobs to run at the same time, set `runtime.maxConcurrentJobs` in
 your local backend config:
@@ -99,7 +99,7 @@ your local backend config:
 {
   "runtime": {
     "runtimeRoot": "/path/to/celluniverse_web_runtime",
-    "maxConcurrentJobs": 2,
+    "maxConcurrentJobs": 10,
     "keepJobDays": 14
   }
 }
