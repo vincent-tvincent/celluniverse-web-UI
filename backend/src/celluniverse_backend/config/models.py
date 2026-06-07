@@ -47,7 +47,7 @@ class CellUniverseConfig(BaseModel):
 
 class RuntimeConfig(BaseModel):
     runtimeRoot: Path = Path("/home/blue-lobster/p2/UCI/CS295p/celluniverse-web-UI/backend/runtime")
-    maxConcurrentJobs: int = 1
+    maxConcurrentJobs: int = Field(default=1, ge=1)
     keepJobDays: int = 14
 
 
@@ -78,7 +78,6 @@ class PreviewConfig(BaseModel):
 
 
 class LimitsConfig(BaseModel):
-    maxConcurrentJobs: int = 1
     maxFrameCount: int = 200
     maxUploadSizeMb: int = 500
     maxRuntimeMinutes: int = 720

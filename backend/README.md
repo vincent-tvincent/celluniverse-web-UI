@@ -72,6 +72,7 @@ server.publicBaseUrl
 celluniverse.celluniverseCppRoot
 celluniverse.buildDir
 runtime.runtimeRoot
+runtime.maxConcurrentJobs
 security.allowedInputRoots
 security.allowedInitialCsvRoots
 security.allowedConfigRoots
@@ -85,6 +86,27 @@ export CELLUNIVERSE_BACKEND_CONFIG="$PWD/config/backend.config.local.json"
 ```
 
 `backend.config.local.json` is gitignored.
+
+### Parallel Jobs
+
+Jobs are queued when all scheduler slots are busy. The default is one active
+job because each CellUniverse process can already use many CPU threads.
+
+To allow more jobs to run at the same time, set `runtime.maxConcurrentJobs` in
+your local backend config:
+
+```json
+{
+  "runtime": {
+    "runtimeRoot": "/path/to/celluniverse_web_runtime",
+    "maxConcurrentJobs": 2,
+    "keepJobDays": 14
+  }
+}
+```
+
+Use this together with `celluniverse.threads` and `limits.maxThreads` so the
+machine is not overloaded.
 
 ## Deployment Modes
 

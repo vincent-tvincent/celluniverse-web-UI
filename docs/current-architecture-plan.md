@@ -1001,8 +1001,10 @@ Protect the machine from accidental huge jobs:
 
 ```json
 {
+  "runtime": {
+    "maxConcurrentJobs": 1
+  },
   "limits": {
-    "maxConcurrentJobs": 1,
     "maxFrameCount": 200,
     "maxUploadSizeMb": 500,
     "maxRuntimeMinutes": 720,

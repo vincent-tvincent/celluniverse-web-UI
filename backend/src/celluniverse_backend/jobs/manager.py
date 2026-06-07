@@ -43,6 +43,8 @@ class JobManager:
         self.jobs_root.mkdir(parents=True, exist_ok=True)
         self._queue: queue.Queue[str] = queue.Queue()
         self._processes: dict[str, subprocess.Popen[Any]] = {}
+        self._active_jobs: set[str] = set()
+        self._job_threads: dict[str, threading.Thread] = {}
         self._status_lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -56,7 +58,9 @@ class JobManager:
 
     def stop(self) -> None:
         self._stop.set()
-        for job_id in list(self._processes):
+        with self._status_lock:
+            active_job_ids = list(self._active_jobs)
+        for job_id in active_job_ids:
             self.cancel_job(job_id)
 
     def create_job(self, request: CreateJobRequest) -> JobStatus:
@@ -328,8 +332,7 @@ class JobManager:
 
     def _worker_loop(self) -> None:
         while not self._stop.is_set():
-            active = sum(1 for process in self._processes.values() if process.poll() is None)
-            if active >= self.config.runtime.maxConcurrentJobs:
+            if self._active_job_count() >= self.config.runtime.maxConcurrentJobs:
                 time.sleep(1)
                 continue
             try:
@@ -339,12 +342,55 @@ class JobManager:
             status = self.get_status(job_id)
             if status.get("state") != JobState.queued.value:
                 continue
+            with self._status_lock:
+                if job_id in self._active_jobs:
+                    continue
+                self._active_jobs.add(job_id)
+                thread = threading.Thread(
+                    target=self._run_job_safely,
+                    args=(job_id,),
+                    name=f"celluniverse-job-{job_id}",
+                    daemon=True,
+                )
+                self._job_threads[job_id] = thread
+            thread.start()
+
+    def _active_job_count(self) -> int:
+        with self._status_lock:
+            return len(self._active_jobs)
+
+    def _run_job_safely(self, job_id: str) -> None:
+        try:
             self._run_job(job_id)
+        except Exception as exc:
+            process = self._processes.get(job_id)
+            if process and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+            status = self.get_status(job_id)
+            if status and status.get("state") != JobState.cancelled.value:
+                status.update({
+                    "state": JobState.failed.value,
+                    "finishedAt": utc_now(),
+                    "error": str(exc),
+                })
+                self._write_status_dict(job_id, status)
+                self._event(job_id, "job.failed", {"jobId": job_id, "error": str(exc)})
+        finally:
+            with self._status_lock:
+                self._active_jobs.discard(job_id)
+                self._processes.pop(job_id, None)
+                self._job_threads.pop(job_id, None)
 
     def _run_job(self, job_id: str) -> None:
         job_dir = self.job_dir(job_id)
         request = CreateJobRequest.model_validate(read_json(job_dir / "request.json"))
         status = self.get_status(job_id)
+        if status.get("state") != JobState.queued.value:
+            return
         status.update({"state": JobState.running.value, "startedAt": utc_now()})
         self._write_status_dict(job_id, status)
         self._event(job_id, "job.started", {"jobId": job_id})
@@ -371,6 +417,14 @@ class JobManager:
             stderr_path=stderr_path,
         )
         self._processes[job_id] = process
+        status = self.get_status(job_id)
+        if status.get("state") != JobState.running.value:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            return
         status["pid"] = process.pid
         self._write_status_dict(job_id, status)
         self._event(job_id, "process.started", {"jobId": job_id, "pid": process.pid, "argv": argv})
