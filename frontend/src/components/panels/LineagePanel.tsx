@@ -25,6 +25,9 @@ type LineagePanelProps = {
 
 type PanState = { x: number; y: number };
 
+const LINEAGE_MIN_ZOOM = 0.18;
+const LINEAGE_MAX_ZOOM = 18;
+
 export default function LineagePanel({
   graph,
   layout,
@@ -110,7 +113,7 @@ export default function LineagePanel({
       event.preventDefault();
       event.stopPropagation();
       const factor = wheelZoomFactor(event);
-      const nextScale = clamp(scale * factor, 0.18, 5.5);
+      const nextScale = clamp(scale * factor, LINEAGE_MIN_ZOOM, LINEAGE_MAX_ZOOM);
       const cursor = svgPointFromCursor(svg, event.clientX, event.clientY, extent);
       const worldX = (cursor.x - pan.x) / scale;
       const worldY = (cursor.y - pan.y) / scale;
@@ -225,10 +228,10 @@ export default function LineagePanel({
           </g>
         </svg>
         <div className="lineage-controls">
-          <button type="button" onClick={() => setScale((value) => clamp(value * 1.16, 0.18, 5.5))}>
+          <button type="button" onClick={() => setScale((value) => clamp(value * 1.16, LINEAGE_MIN_ZOOM, LINEAGE_MAX_ZOOM))}>
             <Plus size={14} />
           </button>
-          <button type="button" onClick={() => setScale((value) => clamp(value / 1.16, 0.18, 5.5))}>
+          <button type="button" onClick={() => setScale((value) => clamp(value / 1.16, LINEAGE_MIN_ZOOM, LINEAGE_MAX_ZOOM))}>
             <Minus size={14} />
           </button>
           <button type="button" onClick={resetView}>

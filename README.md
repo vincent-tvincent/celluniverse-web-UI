@@ -2,6 +2,12 @@
 
 Web UI and backend orchestration layer for the CellUniverse C++ compute engine.
 
+In particular, frontend agents are expected to read the visual-language and
+token documentation before changing UI code. This keeps new pages, controls,
+colors, shadows, layouts, and workflows from drifting away from the established
+scientific-operations interface even when the contributor delegates most of the
+implementation details to an AI agent.
+
 ## Project Layout
 
 ```text
@@ -162,3 +168,13 @@ only the request you need.
 Copyable curl templates are also available:
 
 [docs/template/backend-api-curl-templates.md](docs/template/backend-api-curl-templates.md)
+
+## Why `AGENTS.md` Exists
+This project is open to future open-source contributions from developers who
+work primarily through LLM-powered coding agents or developer with good sense on 
+visual design but may need assistance from AI on coding. The root `AGENTS.md` file and
+the design/architecture documents under `docs/` are part of the project contract
+for those agents. They constrain how AI assistants read, modify, and verify the
+codebase so a useful deliverable can be produced with a minimum amount of prompt
+text while still respecting CellUniverse's visual language, interaction
+patterns, and user experience.
