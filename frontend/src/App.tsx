@@ -399,6 +399,16 @@ function LiveMonitor({
     (realEnabled && Boolean(realPointCloudUrl) && realPointCloudQuery.isLoading) ||
     (synthEnabled && Boolean(synthPointCloudUrl) && synthPointCloudQuery.isLoading)
   );
+  const cellsQuery = useQuery({
+    queryKey: ["cells", selectedJobId, activeFrame?.t],
+    queryFn: () => getFrameCells(selectedJobId, activeFrame!.t),
+    enabled: Boolean(selectedJobId && activeFrame),
+  });
+  const frameCells = cellsQuery.data ?? EMPTY_CELLS;
+  const cellDataSignature = useMemo(
+    () => (cellsEnabled ? cellRecordsSignature(frameCells) : "hidden"),
+    [cellsEnabled, frameCells],
+  );
   const volumeRenderKey = useMemo(() => {
     if (
       mode !== "volume" ||
@@ -416,6 +426,7 @@ function LiveMonitor({
       realEnabled,
       synthEnabled,
       cellsEnabled,
+      cellDataSignature,
       realMap,
       synthMap,
       realOpacity,
@@ -429,6 +440,7 @@ function LiveMonitor({
   }, [
     activeFrame?.t,
     cellsEnabled,
+    cellDataSignature,
     configQuery.data,
     mode,
     realEnabled,
@@ -472,6 +484,7 @@ function LiveMonitor({
           realEnabled,
           synthEnabled,
           cellsEnabled,
+          cellDataSignature,
           realMap,
           synthMap,
           realOpacity,
@@ -481,13 +494,6 @@ function LiveMonitor({
         ].join("|")
       : volumeRenderKey
     : "";
-
-  const cellsQuery = useQuery({
-    queryKey: ["cells", selectedJobId, activeFrame?.t],
-    queryFn: () => getFrameCells(selectedJobId, activeFrame!.t),
-    enabled: Boolean(selectedJobId && activeFrame),
-  });
-  const frameCells = cellsQuery.data ?? EMPTY_CELLS;
 
   const lineageQuery = useQuery({
     queryKey: ["lineage", selectedJobId],
@@ -1066,6 +1072,26 @@ function getSlicePreviewUrl(
   return `/api/jobs/${encodeURIComponent(jobId)}/slices/${layer}/${frame}/${requestedSlice}.cusl?max_xy=${previewConfig.maxXY}`;
 }
 
+function cellRecordsSignature(cells: CellRecord[]): string {
+  if (!cells.length) {
+    return "0";
+  }
+  const first = cells[0];
+  const last = cells[cells.length - 1];
+  const checksum = cells.reduce((sum, cell) => {
+    const x = Number(cell.x) || 0;
+    const y = Number(cell.y) || 0;
+    const z = Number(cell.z) || 0;
+    return sum + x * 3 + y * 5 + z * 7;
+  }, 0);
+  return [
+    cells.length,
+    first?.name ?? "",
+    last?.name ?? "",
+    Math.round(checksum * 100),
+  ].join(":");
+}
+
 function mergeStatusReadyFrames(
   manifestFrames: JobManifest["frames"],
   job: JobStatus | undefined,
@@ -1080,7 +1106,13 @@ function mergeStatusReadyFrames(
     framesByTime.set(frame.t, { t: frame.t, layers: { ...frame.layers } });
   }
 
-  for (const frameNumber of job.outputReady?.tiffFrames ?? []) {
+  const checkpointFrames = new Set(job.outputReady?.checkpointFrames ?? []);
+  const tiffFrames = job.outputReady?.tiffFrames ?? [];
+  const readyTiffFrames = checkpointFrames.size
+    ? tiffFrames.filter((frameNumber) => checkpointFrames.has(frameNumber))
+    : tiffFrames;
+
+  for (const frameNumber of readyTiffFrames) {
     const frame = framesByTime.get(frameNumber) ?? { t: frameNumber, layers: {} };
     if (!frame.layers.realTiff) {
       frame.layers.realTiff = {
