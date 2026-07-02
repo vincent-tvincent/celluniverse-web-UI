@@ -12,7 +12,7 @@
           "label": "Parallel Threads",
           "type": "integer",
           "min": 1,
-          "max": 128,
+          "max": 32,
           "default": 32,
           "ui": "number"
         },
@@ -20,7 +20,10 @@
           "path": "simulation.preprocess_mode",
           "label": "Preprocessing",
           "type": "enum",
-          "values": ["none", "n2v2"],
+          "values": [
+            "none",
+            "n2v2"
+          ],
           "default": "none",
           "ui": "select"
         },
@@ -28,7 +31,12 @@
           "path": "pipeline.mode",
           "label": "Pipeline",
           "type": "enum",
-          "values": ["standard", "cell_lumen_fusion", "preprocess_only"],
+          "values": [
+            "standard",
+            "cell_lumen_fusion",
+            "celluniverse3",
+            "preprocess_only"
+          ],
           "default": "standard",
           "ui": "select",
           "virtual": true

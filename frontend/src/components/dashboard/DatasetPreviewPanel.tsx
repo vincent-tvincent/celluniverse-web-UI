@@ -10,6 +10,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Database, Download, FileCog, PanelLeftOpen, RotateCcw } from "lucide-react";
 import { getLocalDatasetPreview, getUploadedDatasetPreview, toApiUrl } from "../../api";
+import type { JsonLoadProgress } from "../../api";
 import { previewConfigSignature, useViewerConfig, type PreviewConfig } from "../../config";
 import type { CellRecord, DatasetPreviewManifest, LayerEntry } from "../../types";
 import type { ColorMapId } from "../../viewer/colorMaps";
@@ -67,10 +68,20 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
   const [renderedVolumeKey, setRenderedVolumeKey] = useState("");
   const [hoverSample, setHoverSample] = useState<ViewerHoverSample | null>(null);
   const [delayedViewerLoading, setDelayedViewerLoading] = useState(false);
+  const [manifestLoadProgress, setManifestLoadProgress] = useState<JsonLoadProgress | null>(null);
 
   const manifestQuery = useQuery({
     queryKey: ["dataset-preview", kind, datasetId],
-    queryFn: () => kind === "upload" ? getUploadedDatasetPreview(datasetId) : getLocalDatasetPreview(datasetId),
+    queryFn: async () => {
+      setManifestLoadProgress({ loaded: 0 });
+      try {
+        return kind === "upload"
+          ? await getUploadedDatasetPreview(datasetId, setManifestLoadProgress)
+          : await getLocalDatasetPreview(datasetId, setManifestLoadProgress);
+      } finally {
+        setManifestLoadProgress(null);
+      }
+    },
   });
   const configQuery = useViewerConfig();
   const manifest = manifestQuery.data;
@@ -197,7 +208,13 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
   const slicePreviewLoading = realEnabled && Boolean(realSliceUrl) && realSliceQuery.isLoading;
   const pointCloudLoading = realEnabled && Boolean(realPointCloudUrl) && realPointCloudQuery.isLoading;
   const activeSliceWaiting = Boolean(activeFrame && realEnabled && Boolean(realSliceUrl) && !realSliceQuery.data);
-  const activeVolumeWaiting = Boolean(activeFrame && !realVolume && !realPointCloudQuery.data);
+  const realPreloadError = realUrl ? Boolean(preload.errors[getPreloadKey(realUrl, previewSignature)]) : false;
+  const realVolumeWaiting = realEnabled && (
+    realPointCloudUrl
+      ? !realPointCloudQuery.data && !realPointCloudQuery.isError
+      : Boolean(realUrl) && !realVolume && !realPreloadError
+  );
+  const activeVolumeWaiting = Boolean(activeFrame && realVolumeWaiting);
   const rawLoadingVisible = metadataLoading || (
     mode === "slice"
       ? activeSliceWaiting || slicePreviewLoading
@@ -464,6 +481,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
               <ViewerLoadingOverlay
                 preload={preload}
                 metadataLoading={metadataLoading}
+                metadataProgress={manifestLoadProgress}
                 pointCloudLoading={mode === "slice" ? slicePreviewLoading : pointCloudLoading}
                 previewLoadingLabel={mode === "slice" ? "loading 2D slice" : "loading point cloud preview"}
                 previewLoadingDetail={mode === "slice" ? "fetching backend slice preview" : "downloading compact backend preview"}

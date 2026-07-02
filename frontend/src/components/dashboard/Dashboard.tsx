@@ -987,8 +987,12 @@ function NewJobPanel({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const pipelineMode = typeof overrides["pipeline.mode"] === "string" ? String(overrides["pipeline.mode"]) : undefined;
   const moduleQuery = useQuery({ queryKey: ["parameter-module", moduleId], queryFn: () => getParameterModule(moduleId) });
-  const yamlQuery = useQuery({ queryKey: ["base-yaml", moduleId], queryFn: () => getBaseYaml(moduleId) });
+  const yamlQuery = useQuery({
+    queryKey: ["base-yaml", moduleId, pipelineMode ?? "default"],
+    queryFn: () => getBaseYaml(moduleId, pipelineMode),
+  });
   const editQuery = useQuery({
     queryKey: ["job-request", editingJobId],
     queryFn: () => getJobRequest(editingJobId!),
@@ -1088,7 +1092,8 @@ function NewJobPanel({
     }
     try {
       const initialUpload = initialCsvFile ? await uploadInitialCsv(initialCsvFile) : null;
-      const configUpload = yamlText.trim()
+      const shouldUploadConfigYaml = yamlTouched && yamlText.trim();
+      const configUpload = shouldUploadConfigYaml
         ? await uploadConfigYaml(new File([yamlText], "job-config.yaml", { type: "text/yaml" }))
         : null;
       const payload: CreateJobPayload = {

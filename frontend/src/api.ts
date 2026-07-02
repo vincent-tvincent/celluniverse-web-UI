@@ -20,6 +20,11 @@ import type {
 
 const API_BASE = "/api";
 
+export type JsonLoadProgress = {
+  loaded: number;
+  total?: number;
+};
+
 export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -33,6 +38,54 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
     throw new Error(`${response.status} ${response.statusText}: ${detail}`);
   }
   return response.json() as Promise<T>;
+}
+
+async function requestJsonWithProgress<T>(
+  path: string,
+  onProgress?: (progress: JsonLoadProgress) => void,
+): Promise<T> {
+  if (!onProgress) {
+    return requestJson<T>(path);
+  }
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`${response.status} ${response.statusText}: ${detail}`);
+  }
+
+  const totalHeader = response.headers.get("content-length");
+  const parsedTotal = totalHeader ? Number.parseInt(totalHeader, 10) : undefined;
+  const total = parsedTotal && Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : undefined;
+  if (!response.body) {
+    const text = await response.text();
+    onProgress({ loaded: total ?? text.length, total });
+    return JSON.parse(text) as T;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  onProgress({ loaded, total });
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress({ loaded, total });
+  }
+  const buffer = new Uint8Array(loaded);
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  });
+  return JSON.parse(new TextDecoder().decode(buffer)) as T;
 }
 
 export function listJobs(options?: { includeArchived?: boolean }): Promise<JobStatus[]> {
@@ -111,12 +164,24 @@ export function listLocalDatasets(): Promise<LocalDataset[]> {
   return requestJson<LocalDataset[]>("/datasets/local");
 }
 
-export function getUploadedDatasetPreview(uploadId: string): Promise<DatasetPreviewManifest> {
-  return requestJson<DatasetPreviewManifest>(`/datasets/uploads/${encodeURIComponent(uploadId)}/preview`);
+export function getUploadedDatasetPreview(
+  uploadId: string,
+  onProgress?: (progress: JsonLoadProgress) => void,
+): Promise<DatasetPreviewManifest> {
+  return requestJsonWithProgress<DatasetPreviewManifest>(
+    `/datasets/uploads/${encodeURIComponent(uploadId)}/preview`,
+    onProgress,
+  );
 }
 
-export function getLocalDatasetPreview(datasetId: string): Promise<DatasetPreviewManifest> {
-  return requestJson<DatasetPreviewManifest>(`/datasets/local/${encodeURIComponent(datasetId)}/preview`);
+export function getLocalDatasetPreview(
+  datasetId: string,
+  onProgress?: (progress: JsonLoadProgress) => void,
+): Promise<DatasetPreviewManifest> {
+  return requestJsonWithProgress<DatasetPreviewManifest>(
+    `/datasets/local/${encodeURIComponent(datasetId)}/preview`,
+    onProgress,
+  );
 }
 
 export function deleteDatasetUpload(uploadId: string): Promise<DeleteDatasetUploadResponse> {
@@ -155,8 +220,9 @@ export function getParameterModule(moduleId: string): Promise<ParameterModule> {
   return requestJson<ParameterModule>(`/config/exposed-parameter-modules/${encodeURIComponent(moduleId)}`);
 }
 
-export function getBaseYaml(moduleId: string): Promise<{ moduleId: string; path: string; content: string }> {
-  return requestJson<{ moduleId: string; path: string; content: string }>(`/config/base-yaml/${encodeURIComponent(moduleId)}`);
+export function getBaseYaml(moduleId: string, pipelineMode?: string): Promise<{ moduleId: string; path: string; content: string }> {
+  const query = pipelineMode ? `?pipelineMode=${encodeURIComponent(pipelineMode)}` : "";
+  return requestJson<{ moduleId: string; path: string; content: string }>(`/config/base-yaml/${encodeURIComponent(moduleId)}${query}`);
 }
 
 export async function uploadDataset(
@@ -214,8 +280,14 @@ export async function uploadConfigYaml(file: File): Promise<{ uploadId: string; 
   });
 }
 
-export function getManifest(jobId: string): Promise<JobManifest> {
-  return requestJson<JobManifest>(`/jobs/${encodeURIComponent(jobId)}/manifest`);
+export function getManifest(
+  jobId: string,
+  onProgress?: (progress: JsonLoadProgress) => void,
+): Promise<JobManifest> {
+  return requestJsonWithProgress<JobManifest>(
+    `/jobs/${encodeURIComponent(jobId)}/manifest`,
+    onProgress,
+  );
 }
 
 export function getFrameCells(jobId: string, frame: number): Promise<CellRecord[]> {

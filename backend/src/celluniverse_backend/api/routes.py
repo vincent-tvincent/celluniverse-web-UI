@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from celluniverse_backend.config.exposed import ExposedParameterRegistry
 from celluniverse_backend.config.models import BackendConfig
+from celluniverse_backend.config.merge import PIPELINE_BASE_CONFIGS
 from celluniverse_backend.contracts.models import (
     ClientConfig,
     CreateJobRequest,
@@ -135,14 +136,21 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         return dataset_service.list_initial_csv_presets()
 
     @router.get("/config/base-yaml/{module_id}")
-    def get_base_yaml(module_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
+    def get_base_yaml(
+        module_id: str,
+        pipelineMode: str | None = Query(default=None),
+        _: None = Depends(require_auth),
+    ) -> dict[str, Any]:
         try:
             module = exposed.load_module(module_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        base = Path(module.baseConfig)
-        if not base.is_absolute():
-            base = config.celluniverse.celluniverseCppRoot / base
+        if pipelineMode and pipelineMode in PIPELINE_BASE_CONFIGS:
+            base = config.celluniverse.config_dir / PIPELINE_BASE_CONFIGS[pipelineMode]
+        else:
+            base = Path(module.baseConfig)
+            if not base.is_absolute():
+                base = config.celluniverse.celluniverseCppRoot / base
         try:
             if base.is_absolute():
                 # The relative module default resolves inside the configured CellUniverse root.

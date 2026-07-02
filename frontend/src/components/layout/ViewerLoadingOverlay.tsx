@@ -1,9 +1,11 @@
+import type { JsonLoadProgress } from "../../api";
 import type { VolumePreloadState } from "../../viewer/useVolumePreload";
 import { formatPreloadLabel } from "./preloadFormat";
 
 type ViewerLoadingOverlayProps = {
   preload: VolumePreloadState;
   metadataLoading: boolean;
+  metadataProgress?: JsonLoadProgress | null;
   pointCloudLoading: boolean;
   previewLoadingLabel: string;
   previewLoadingDetail: string;
@@ -16,6 +18,7 @@ type ViewerLoadingOverlayProps = {
 export default function ViewerLoadingOverlay({
   preload,
   metadataLoading,
+  metadataProgress,
   pointCloudLoading,
   previewLoadingLabel,
   previewLoadingDetail,
@@ -38,7 +41,7 @@ export default function ViewerLoadingOverlay({
   const detail = preload.isLoading
     ? `${preload.readyFiles}/${preload.totalFiles} cached`
     : metadataLoading
-      ? "refreshing manifest"
+      ? formatMetadataProgress(metadataProgress) ?? "refreshing manifest"
     : pointCloudLoading
       ? previewLoadingDetail
     : renderPending
@@ -56,4 +59,26 @@ export default function ViewerLoadingOverlay({
       </div>
     </div>
   );
+}
+
+function formatMetadataProgress(progress?: JsonLoadProgress | null): string | null {
+  if (!progress) {
+    return null;
+  }
+  const loaded = formatMegabytes(progress.loaded);
+  if (progress.total && progress.total >= progress.loaded) {
+    return `${loaded} of ${formatMegabytes(progress.total)} completed`;
+  }
+  return `${loaded} completed`;
+}
+
+function formatMegabytes(bytes: number): string {
+  const value = Math.max(0, bytes) / (1024 * 1024);
+  if (value >= 100) {
+    return `${Math.round(value).toLocaleString()} MB`;
+  }
+  if (value >= 10) {
+    return `${value.toFixed(1)} MB`;
+  }
+  return `${value.toFixed(2)} MB`;
 }

@@ -62,7 +62,7 @@ class DatasetService:
 
     def _scan_dataset_root(self, root: Path, root_id: str, candidates: dict[str, dict[str, object]]) -> None:
         stack: list[tuple[Path, int]] = [(root, 0)]
-        max_depth = 4
+        max_depth = 6
         while stack and len(candidates) < 500:
             current, depth = stack.pop()
             if current.name.startswith(".") or current.is_symlink():

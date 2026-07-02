@@ -394,7 +394,7 @@ function buildEdgePaths(
     if (!source || !target) {
       return [];
     }
-    const routeRadius = lineageRouteRadius(edge.routeRadius, source.radius, target.radius, layout.ringSpacing);
+    const routeRadius = lineageRouteRadius(edge, layout, source.radius, target.radius);
     const radialX = routeRadius * Math.cos(source.angle);
     const radialY = routeRadius * Math.sin(source.angle);
     const arcX = routeRadius * Math.cos(target.angle);
@@ -418,17 +418,34 @@ function buildEdgePaths(
 }
 
 function lineageRouteRadius(
-  routeRadius: number | undefined,
+  edge: LineageLayout["edges"][number],
+  layout: LineageLayout,
   sourceRadius: number,
   targetRadius: number,
-  ringSpacing: number,
 ): number {
-  if (typeof routeRadius === "number" && Number.isFinite(routeRadius)) {
-    return clamp(routeRadius, sourceRadius, targetRadius);
+  const splitRadius = radiusForLineageFrame(edge.frame, layout);
+  if (splitRadius != null) {
+    return clamp(splitRadius, sourceRadius, targetRadius);
   }
-  const outward = Math.max(0, targetRadius - sourceRadius);
-  const split = Math.min(outward, Math.max(ringSpacing * 0.75, Math.min(ringSpacing * 1.5, outward * 0.28)));
-  return sourceRadius + split;
+  if (typeof edge.routeRadius === "number" && Number.isFinite(edge.routeRadius)) {
+    return clamp(edge.routeRadius, sourceRadius, targetRadius);
+  }
+  return targetRadius;
+}
+
+function radiusForLineageFrame(frame: number | undefined, layout: LineageLayout): number | null {
+  if (typeof frame !== "number" || !Number.isFinite(frame)) {
+    return null;
+  }
+  const directRing = layout.rings.find((ring) => ring.frame === frame);
+  if (directRing) {
+    return directRing.radius;
+  }
+  if (layout.firstFrame == null || !Number.isFinite(layout.firstFrame)) {
+    return null;
+  }
+  const innerRadius = layout.innerRadius ?? 42;
+  return innerRadius + Math.max(0, frame - layout.firstFrame) * layout.ringSpacing;
 }
 
 function sampleRings(rings: LineageLayout["rings"]): Array<LineageLayout["rings"][number] & { label: boolean }> {

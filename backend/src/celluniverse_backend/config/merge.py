@@ -13,6 +13,11 @@ class ConfigValidationError(ValueError):
     pass
 
 
+PIPELINE_BASE_CONFIGS = {
+    "celluniverse3": "config_celluniverse3_server_ram.yaml",
+}
+
+
 def _set_nested(data: dict[str, Any], dotted_path: str, value: Any) -> None:
     parts = dotted_path.split(".")
     current = data
@@ -56,14 +61,93 @@ def _apply_pipeline(data: dict[str, Any], mode: str) -> None:
         _set_nested(data, "cell_lumen.enabled", False)
         _set_nested(data, "cell_lumen.fusionEnabled", False)
         _set_nested(data, "simulation.quit_after_preprocessing", False)
+        _set_nested(data, "simulation.celluniverse2_enabled", False)
+        _set_nested(data, "simulation.celluniverse3_enabled", False)
     elif mode == "cell_lumen_fusion":
         _set_nested(data, "cell_lumen.enabled", True)
         _set_nested(data, "cell_lumen.fusionEnabled", True)
         _set_nested(data, "simulation.quit_after_preprocessing", False)
+        _set_nested(data, "simulation.celluniverse2_enabled", False)
+        _set_nested(data, "simulation.celluniverse3_enabled", False)
+    elif mode == "celluniverse3":
+        _set_nested(data, "cell_lumen.enabled", False)
+        _set_nested(data, "cell_lumen.fusionEnabled", False)
+        _set_nested(data, "simulation.quit_after_preprocessing", False)
+        _set_nested(data, "simulation.celluniverse2_enabled", True)
+        _set_nested(data, "simulation.celluniverse3_enabled", True)
     elif mode == "preprocess_only":
         _set_nested(data, "simulation.quit_after_preprocessing", True)
+        _set_nested(data, "simulation.celluniverse2_enabled", False)
+        _set_nested(data, "simulation.celluniverse3_enabled", False)
     else:
         raise ConfigValidationError(f"unknown pipeline mode: {mode}")
+
+
+def _read_yaml_mapping(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    if not isinstance(data, dict):
+        raise ConfigValidationError(f"config YAML must be a mapping: {path}")
+    return data
+
+
+def _resolve_base_config_path(path: Path, base_config: str, config_search_dir: Path | None = None) -> Path:
+    base_path = Path(base_config)
+    if base_path.is_absolute():
+        return base_path
+    local_path = path.parent / base_path
+    if local_path.exists() or config_search_dir is None:
+        return local_path
+    search_path = config_search_dir / base_path
+    if search_path.exists():
+        return search_path
+    return local_path
+
+
+def _copy_base_config_chain(
+    config_path: Path,
+    destination_dir: Path,
+    config_search_dir: Path | None = None,
+    seen: set[Path] | None = None,
+) -> None:
+    seen = seen or set()
+    resolved = config_path.resolve()
+    if resolved in seen:
+        raise ConfigValidationError(f"cyclic base_config reference: {config_path}")
+    seen.add(resolved)
+
+    data = _read_yaml_mapping(config_path)
+    base_config = data.get("base_config")
+    if not base_config:
+        return
+    if not isinstance(base_config, str):
+        raise ConfigValidationError(f"base_config must be a string in {config_path}")
+
+    base_path = _resolve_base_config_path(config_path, base_config, config_search_dir)
+    if not base_path.exists():
+        raise ConfigValidationError(f"base config does not exist: {base_path}")
+    if base_path.name == "effective-config.yaml":
+        raise ConfigValidationError("base_config may not point to effective-config.yaml")
+
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(base_path, destination_dir / base_path.name)
+    _copy_base_config_chain(base_path, destination_dir, config_search_dir, seen)
+
+
+def _select_base_config(
+    base_config: Path,
+    overrides: dict[str, Any],
+    config_search_dir: Path | None = None,
+    use_pipeline_base_config: bool = True,
+) -> Path:
+    mode = overrides.get("pipeline.mode")
+    if not use_pipeline_base_config or not isinstance(mode, str) or mode not in PIPELINE_BASE_CONFIGS:
+        return base_config
+    selected_root = config_search_dir or base_config.parent
+    selected = selected_root / PIPELINE_BASE_CONFIGS[mode]
+    if not selected.exists():
+        raise ConfigValidationError(f"pipeline {mode} base config does not exist: {selected}")
+    return selected
 
 
 def materialize_effective_config(
@@ -71,7 +155,11 @@ def materialize_effective_config(
     destination: Path,
     module: ExposedParameterModule,
     overrides: dict[str, Any],
+    *,
+    config_search_dir: Path | None = None,
+    use_pipeline_base_config: bool = True,
 ) -> None:
+    base_config = _select_base_config(base_config, overrides, config_search_dir, use_pipeline_base_config)
     if not base_config.exists():
         raise ConfigValidationError(f"base config does not exist: {base_config}")
     fields = module.fields_by_path()
@@ -79,10 +167,7 @@ def materialize_effective_config(
     if unknown:
         raise ConfigValidationError(f"override paths are not exposed: {unknown}")
 
-    with base_config.open("r", encoding="utf-8") as handle:
-        data = yaml.safe_load(handle) or {}
-    if not isinstance(data, dict):
-        raise ConfigValidationError("base config YAML must be a mapping")
+    data = _read_yaml_mapping(base_config)
 
     for path, raw_value in overrides.items():
         field = fields[path]
@@ -95,6 +180,7 @@ def materialize_effective_config(
             _set_nested(data, path, value)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
+    _copy_base_config_chain(base_config, destination.parent, config_search_dir)
     with destination.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(data, handle, sort_keys=False)
 

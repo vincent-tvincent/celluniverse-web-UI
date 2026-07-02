@@ -44,6 +44,16 @@ def build_tracking_argv(
     ]
 
 
+def _append_ld_library_path(env: dict[str, str], paths: list[Path]) -> None:
+    values = [str(path) for path in paths if path.exists()]
+    if not values:
+        return
+    existing = env.get("LD_LIBRARY_PATH")
+    if existing:
+        values.append(existing)
+    env["LD_LIBRARY_PATH"] = ":".join(values)
+
+
 def start_celluniverse_process(
     config: BackendConfig,
     argv: list[str],
@@ -55,6 +65,17 @@ def start_celluniverse_process(
     thread_count = str(resolve_threads(config))
     for key in THREAD_ENV_KEYS:
         env[key] = thread_count
+    cpp_root = config.celluniverse.celluniverseCppRoot
+    _append_ld_library_path(
+        env,
+        [
+            cpp_root / "external" / "libtorch" / "lib",
+            cpp_root / "external" / "opencv" / "lib",
+            cpp_root / "build" / "lib",
+            cpp_root / "lib",
+            config.celluniverse.binary.parent,
+        ],
+    )
 
     launch_argv = list(argv)
     if config.celluniverse.cpuSet:

@@ -22,6 +22,7 @@ import {
   cancelJob,
   toApiUrl,
 } from "./api";
+import type { JsonLoadProgress } from "./api";
 import FrameUpdateToast from "./components/layout/FrameUpdateToast";
 import LoadBadge from "./components/layout/LoadBadge";
 import PanelResizer from "./components/layout/PanelResizer";
@@ -222,6 +223,7 @@ function LiveMonitor({
   const [manualSliceOverride, setManualSliceOverride] = useState(false);
   const [sliceRenderPending, setSliceRenderPending] = useState(false);
   const [delayedViewerLoading, setDelayedViewerLoading] = useState(false);
+  const [manifestLoadProgress, setManifestLoadProgress] = useState<JsonLoadProgress | null>(null);
   const [panelLayout, setPanelLayout] = useState(readPanelLayout);
   const [panelVisibility, setPanelVisibility] = useState(readPanelVisibility);
   const [hoverSample, setHoverSample] = useState<ViewerHoverSample | null>(null);
@@ -255,7 +257,14 @@ function LiveMonitor({
 
   const manifestQuery = useQuery({
     queryKey: ["manifest", selectedJobId],
-    queryFn: () => getManifest(selectedJobId),
+    queryFn: async () => {
+      setManifestLoadProgress({ loaded: 0 });
+      try {
+        return await getManifest(selectedJobId, setManifestLoadProgress);
+      } finally {
+        setManifestLoadProgress(null);
+      }
+    },
     enabled: Boolean(selectedJobId),
     refetchInterval: selectedJobId ? scheduledRefreshMs : false,
   });
@@ -566,9 +575,19 @@ function LiveMonitor({
       (synthEnabled && Boolean(synthSliceUrl) && !synthSliceQuery.data)
     ),
   );
-  const activeVolumeWaiting = Boolean(
-    activeFrame && !realVolume && !synthVolume && !realPointCloudQuery.data && !synthPointCloudQuery.data,
+  const realPreloadError = realUrl ? Boolean(preload.errors[getPreloadKey(realUrl, previewSignature)]) : false;
+  const synthPreloadError = synthUrl ? Boolean(preload.errors[getPreloadKey(synthUrl, previewSignature)]) : false;
+  const realVolumeWaiting = realEnabled && (
+    realPointCloudUrl
+      ? !realPointCloudQuery.data && !realPointCloudQuery.isError
+      : Boolean(realUrl) && !realVolume && !realPreloadError
   );
+  const synthVolumeWaiting = synthEnabled && (
+    synthPointCloudUrl
+      ? !synthPointCloudQuery.data && !synthPointCloudQuery.isError
+      : Boolean(synthUrl) && !synthVolume && !synthPreloadError
+  );
+  const activeVolumeWaiting = Boolean(activeFrame && (realVolumeWaiting || synthVolumeWaiting));
   const nonRenderLoadingOverlayVisible = viewerMetadataLoading || (
     mode === "slice"
       ? activeSliceWaiting || slicePreviewLoading
@@ -934,6 +953,7 @@ function LiveMonitor({
               <ViewerLoadingOverlay
                 preload={preload}
                 metadataLoading={viewerMetadataLoading}
+                metadataProgress={manifestLoadProgress}
                 pointCloudLoading={mode === "slice" ? slicePreviewLoading : pointCloudLoading}
                 previewLoadingLabel={mode === "slice" ? "loading 2D slice" : "loading point cloud preview"}
                 previewLoadingDetail={mode === "slice" ? "fetching backend slice preview" : "downloading compact backend preview"}

@@ -58,10 +58,6 @@ class JobManager:
 
     def stop(self) -> None:
         self._stop.set()
-        with self._status_lock:
-            active_job_ids = list(self._active_jobs)
-        for job_id in active_job_ids:
-            self.cancel_job(job_id)
 
     def create_job(self, request: CreateJobRequest) -> JobStatus:
         if request.lastFrame < request.firstFrame:
@@ -311,6 +307,10 @@ class JobManager:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
+        elif status.get("state") == JobState.running.value:
+            pid = status.get("pid")
+            if isinstance(pid, int):
+                self._terminate_process_group(pid)
         status["state"] = JobState.cancelled.value
         status["finishedAt"] = utc_now()
         status["error"] = "Cancelled by user"
@@ -364,12 +364,8 @@ class JobManager:
             self._run_job(job_id)
         except Exception as exc:
             process = self._processes.get(job_id)
-            if process and process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
+            if process:
+                self._terminate_process(process)
             status = self.get_status(job_id)
             if status and status.get("state") != JobState.cancelled.value:
                 status.update({
@@ -419,11 +415,7 @@ class JobManager:
         self._processes[job_id] = process
         status = self.get_status(job_id)
         if status.get("state") != JobState.running.value:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
+            self._terminate_process(process)
             return
         status["pid"] = process.pid
         self._write_status_dict(job_id, status)
@@ -453,6 +445,26 @@ class JobManager:
         self._event(job_id, "job.finished", {"jobId": job_id, "state": status["state"], "exitCode": exit_code})
         self._processes.pop(job_id, None)
 
+    def _terminate_process(self, process: subprocess.Popen[Any]) -> None:
+        if process.poll() is not None:
+            return
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except OSError:
+            process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                return
+            except OSError:
+                process.kill()
+            process.wait(timeout=5)
+
     def _materialize_inputs(self, job_id: str, request: CreateJobRequest) -> None:
         job_dir = self.job_dir(job_id)
         input_path = self._resolve_job_input(job_dir, request)
@@ -460,7 +472,15 @@ class JobManager:
         effective_config = job_dir / "effective-config.yaml"
         module = self.exposed_registry.load_module(request.parameterModuleId)
         base_config = self._resolve_base_config(request, module)
-        materialize_effective_config(base_config, effective_config, module, request.overrides)
+        has_user_config = bool(request.configYamlUploadId or request.configYamlPath)
+        materialize_effective_config(
+            base_config,
+            effective_config,
+            module,
+            request.overrides,
+            config_search_dir=self.config.celluniverse.config_dir,
+            use_pipeline_base_config=not has_user_config,
+        )
 
         argv = build_tracking_argv(
             self.config,
@@ -622,6 +642,61 @@ class JobManager:
         if changed and rebuild_preview:
             build_preview_artifacts(self.job_dir(job_id), job_id)
 
+    def _monitor_existing_pid(self, job_id: str, pid: int) -> None:
+        self._event(job_id, "process.recovered", {"jobId": job_id, "pid": pid})
+        try:
+            while not self._stop.is_set() and self._pid_is_running(pid):
+                self._refresh_progress(job_id)
+                time.sleep(1)
+            if self._stop.is_set():
+                return
+            self._refresh_progress(job_id)
+            status = self.get_status(job_id)
+            if status.get("state") == JobState.running.value:
+                completed = int(status.get("completedFrames") or 0)
+                total = int(status.get("totalFrames") or 0)
+                status["finishedAt"] = utc_now()
+                status["exitCode"] = None
+                if total > 0 and completed >= total:
+                    status["state"] = JobState.completed.value
+                    status["error"] = None
+                else:
+                    status["state"] = JobState.interrupted.value
+                    status["error"] = "Recovered worker exited before completion"
+                self._write_status_dict(job_id, status)
+                self._event(job_id, "job.finished", {"jobId": job_id, "state": status["state"], "exitCode": None})
+        finally:
+            with self._status_lock:
+                self._active_jobs.discard(job_id)
+                self._job_threads.pop(job_id, None)
+
+    def _pid_is_running(self, pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    def _terminate_process_group(self, pid: int) -> None:
+        if not self._pid_is_running(pid):
+            return
+        for sig, wait_seconds in ((signal.SIGTERM, 5.0), (signal.SIGKILL, 0.0)):
+            try:
+                os.killpg(pid, sig)
+            except ProcessLookupError:
+                return
+            except PermissionError:
+                return
+            deadline = time.time() + wait_seconds
+            while wait_seconds > 0 and time.time() < deadline:
+                if not self._pid_is_running(pid):
+                    return
+                time.sleep(0.1)
+
     def _unarchive_state(self, status: dict[str, Any]) -> str:
         archived_from = status.get("archivedFromState")
         if archived_from in {
@@ -656,10 +731,33 @@ class JobManager:
     def _recover_interrupted_jobs(self) -> None:
         for path in self.jobs_root.glob("job_*/status.json"):
             status = read_json(path, {})
+            job_id = path.parent.name
             if status.get("state") == JobState.running.value:
-                status["state"] = JobState.interrupted.value
+                pid = status.get("pid")
+                if isinstance(pid, int) and self._pid_is_running(pid):
+                    with self._status_lock:
+                        self._active_jobs.add(job_id)
+                        thread = threading.Thread(
+                            target=self._monitor_existing_pid,
+                            args=(job_id, pid),
+                            name=f"celluniverse-recovered-{job_id}",
+                            daemon=True,
+                        )
+                        self._job_threads[job_id] = thread
+                    thread.start()
+                    continue
+                self._refresh_progress(job_id, rebuild_preview=False)
+                status = read_json(path, {})
+                completed = int(status.get("completedFrames") or 0)
+                total = int(status.get("totalFrames") or 0)
                 status["finishedAt"] = utc_now()
-                status["error"] = "Backend restarted while job was running"
+                if total > 0 and completed >= total:
+                    status["state"] = JobState.completed.value
+                    status["error"] = None
+                    status["exitCode"] = 0
+                else:
+                    status["state"] = JobState.interrupted.value
+                    status["error"] = "Backend restarted after worker stopped"
                 write_json_atomic(path, status)
             elif status.get("state") == JobState.queued.value:
                 status["state"] = JobState.prepared.value
