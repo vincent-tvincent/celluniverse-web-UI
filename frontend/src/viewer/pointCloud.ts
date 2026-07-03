@@ -14,12 +14,20 @@ export type PointCloudPreviewData = {
 
 const cache = new Map<string, Promise<PointCloudPreviewData>>();
 
-export function loadPointCloudPreview(url: string): Promise<PointCloudPreviewData> {
+export type PointCloudLoadProgress = {
+  loaded: number;
+  total?: number;
+};
+
+export function loadPointCloudPreview(
+  url: string,
+  onProgress?: (progress: PointCloudLoadProgress) => void,
+): Promise<PointCloudPreviewData> {
   const cached = cache.get(url);
   if (cached) {
     return cached;
   }
-  const promise = fetchPointCloudPreview(url).catch((error: Error) => {
+  const promise = fetchPointCloudPreview(url, onProgress).catch((error: Error) => {
     cache.delete(url);
     throw error;
   });
@@ -27,12 +35,55 @@ export function loadPointCloudPreview(url: string): Promise<PointCloudPreviewDat
   return promise;
 }
 
-async function fetchPointCloudPreview(url: string): Promise<PointCloudPreviewData> {
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+async function fetchPointCloudPreview(
+  url: string,
+  onProgress?: (progress: PointCloudLoadProgress) => void,
+): Promise<PointCloudPreviewData> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    return parsePointCloudPreview(await readResponseBuffer(response, onProgress));
+  } finally {
+    window.clearTimeout(timeout);
   }
-  return parsePointCloudPreview(await response.arrayBuffer());
+}
+
+async function readResponseBuffer(
+  response: Response,
+  onProgress?: (progress: PointCloudLoadProgress) => void,
+): Promise<ArrayBuffer> {
+  const totalHeader = response.headers.get("content-length");
+  const parsedTotal = totalHeader ? Number.parseInt(totalHeader, 10) : undefined;
+  const total = parsedTotal && Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : undefined;
+  if (!response.body) {
+    const buffer = await response.arrayBuffer();
+    onProgress?.({ loaded: buffer.byteLength, total: total ?? buffer.byteLength });
+    return buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  onProgress?.({ loaded, total });
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress?.({ loaded, total });
+  }
+
+  const buffer = new Uint8Array(loaded);
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  });
+  return buffer.buffer;
 }
 
 function parsePointCloudPreview(buffer: ArrayBuffer): PointCloudPreviewData {

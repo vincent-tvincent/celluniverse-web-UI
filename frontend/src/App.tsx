@@ -224,6 +224,8 @@ function LiveMonitor({
   const [sliceRenderPending, setSliceRenderPending] = useState(false);
   const [delayedViewerLoading, setDelayedViewerLoading] = useState(false);
   const [manifestLoadProgress, setManifestLoadProgress] = useState<JsonLoadProgress | null>(null);
+  const [realPointCloudProgress, setRealPointCloudProgress] = useState<JsonLoadProgress | null>(null);
+  const [synthPointCloudProgress, setSynthPointCloudProgress] = useState<JsonLoadProgress | null>(null);
   const [panelLayout, setPanelLayout] = useState(readPanelLayout);
   const [panelVisibility, setPanelVisibility] = useState(readPanelVisibility);
   const [hoverSample, setHoverSample] = useState<ViewerHoverSample | null>(null);
@@ -308,8 +310,8 @@ function LiveMonitor({
         latestFrame: latestNewFrame,
         createdAt: Date.now(),
       });
-      if (autoFollowLatestFrameRef.current && latestFrame != null && (previousLatestFrame == null || frame === previousLatestFrame)) {
-        setFrame(latestFrame);
+      if (previousLatestFrame == null || frame === previousLatestFrame) {
+        autoFollowLatestFrameRef.current = true;
       }
     }
   }, [availableFrameNumbers, frame, selectedJobId, setFrame]);
@@ -340,7 +342,7 @@ function LiveMonitor({
       setFrame(target);
       return;
     }
-    if (autoFollowLatestFrameRef.current && jobQuery.data?.state === "running" && frame !== target) {
+    if (jobQuery.data?.state === "running" && frame !== target && !availableFrameNumbers.includes(frame)) {
       setFrame(target);
     }
   }, [availableFrameNumbers, frame, jobQuery.data, setFrame]);
@@ -352,30 +354,35 @@ function LiveMonitor({
   const realPointCloudUrl = getPointCloudLayerUrl(activeFrame?.layers.realPointCloud);
   const synthPointCloudUrl = getPointCloudLayerUrl(activeFrame?.layers.synthPointCloud);
   const usePointCloudPreview = mode === "volume" && Boolean(realPointCloudUrl || synthPointCloudUrl);
+  useEffect(() => setRealPointCloudProgress(null), [realPointCloudUrl]);
+  useEffect(() => setSynthPointCloudProgress(null), [synthPointCloudUrl]);
   const realSliceUrl = getSlicePreviewUrl(selectedJobId, activeFrameNumber, "real", slice, previewConfig, realUrl);
   const synthSliceUrl = getSlicePreviewUrl(selectedJobId, activeFrameNumber, "synth", slice, previewConfig, synthUrl);
-  const preloadTargets = useMemo(
-    () => (previewConfig && !usePointCloudPreview && mode !== "slice"
-      ? buildPreloadTargets(frames, activeFrameNumber, previewConfig, previewSignature, quickPreview)
-      : []),
-    [activeFrameNumber, frames, mode, previewConfig, previewSignature, quickPreview, usePointCloudPreview],
-  );
+  const preloadTargets = useMemo(() => {
+    if (!previewConfig || mode === "slice") {
+      return [];
+    }
+    if (usePointCloudPreview && activeFrame) {
+      return buildSingleFramePreloadTargets(activeFrame, previewConfig, previewSignature);
+    }
+    return buildPreloadTargets(frames, activeFrameNumber, previewConfig, previewSignature, quickPreview);
+  }, [activeFrame, activeFrameNumber, frames, mode, previewConfig, previewSignature, quickPreview, usePointCloudPreview]);
   const preload = useVolumePreload(preloadTargets, previewConfig?.preloadConcurrency ?? 1);
-  const realVolume = !usePointCloudPreview && realUrl && previewConfig
+  const realVolume = realUrl && previewConfig
     ? preload.volumes[getPreloadKey(realUrl, previewSignature)]
     : undefined;
-  const synthVolume = !usePointCloudPreview && synthUrl && previewConfig
+  const synthVolume = synthUrl && previewConfig
     ? preload.volumes[getPreloadKey(synthUrl, previewSignature)]
     : undefined;
   const realPointCloudQuery = useQuery({
     queryKey: ["point-cloud", realPointCloudUrl],
-    queryFn: () => loadPointCloudPreview(toApiUrl(realPointCloudUrl!)),
+    queryFn: () => loadPointCloudPreview(toApiUrl(realPointCloudUrl!), setRealPointCloudProgress),
     enabled: usePointCloudPreview && realEnabled && Boolean(realPointCloudUrl),
     staleTime: Number.POSITIVE_INFINITY,
   });
   const synthPointCloudQuery = useQuery({
     queryKey: ["point-cloud", synthPointCloudUrl],
-    queryFn: () => loadPointCloudPreview(toApiUrl(synthPointCloudUrl!)),
+    queryFn: () => loadPointCloudPreview(toApiUrl(synthPointCloudUrl!), setSynthPointCloudProgress),
     enabled: usePointCloudPreview && synthEnabled && Boolean(synthPointCloudUrl),
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -398,6 +405,10 @@ function LiveMonitor({
   const pointCloudLoading = (
     (realEnabled && Boolean(realPointCloudUrl) && realPointCloudQuery.isLoading) ||
     (synthEnabled && Boolean(synthPointCloudUrl) && synthPointCloudQuery.isLoading)
+  );
+  const pointCloudProgress = combineLoadProgress(
+    realEnabled && Boolean(realPointCloudUrl) && realPointCloudQuery.isLoading ? realPointCloudProgress : null,
+    synthEnabled && Boolean(synthPointCloudUrl) && synthPointCloudQuery.isLoading ? synthPointCloudProgress : null,
   );
   const cellsQuery = useQuery({
     queryKey: ["cells", selectedJobId, activeFrame?.t],
@@ -521,6 +532,18 @@ function LiveMonitor({
     refetchInterval: selectedJobId ? 3000 : false,
   });
 
+  const lastScheduledRefreshAt = Math.max(
+    jobsQuery.dataUpdatedAt,
+    jobQuery.dataUpdatedAt,
+    manifestQuery.dataUpdatedAt,
+    lineageQuery.dataUpdatedAt,
+    lineageLayoutQuery.dataUpdatedAt,
+    lineageFrameQuery.dataUpdatedAt,
+  );
+  const nextScheduledRefreshAt = autoRefreshEnabled && typeof scheduledRefreshMs === "number"
+    ? (lastScheduledRefreshAt || Date.now()) + scheduledRefreshMs
+    : null;
+
   const maxDepth = Math.max(
     realVolume?.depth ?? 0,
     synthVolume?.depth ?? 0,
@@ -585,19 +608,19 @@ function LiveMonitor({
   const synthPreloadError = synthUrl ? Boolean(preload.errors[getPreloadKey(synthUrl, previewSignature)]) : false;
   const realVolumeWaiting = realEnabled && (
     realPointCloudUrl
-      ? !realPointCloudQuery.data && !realPointCloudQuery.isError
+      ? !realPointCloudQuery.data && !realVolume && !realPointCloudQuery.isError && !realPreloadError
       : Boolean(realUrl) && !realVolume && !realPreloadError
   );
   const synthVolumeWaiting = synthEnabled && (
     synthPointCloudUrl
-      ? !synthPointCloudQuery.data && !synthPointCloudQuery.isError
+      ? !synthPointCloudQuery.data && !synthVolume && !synthPointCloudQuery.isError && !synthPreloadError
       : Boolean(synthUrl) && !synthVolume && !synthPreloadError
   );
   const activeVolumeWaiting = Boolean(activeFrame && (realVolumeWaiting || synthVolumeWaiting));
   const nonRenderLoadingOverlayVisible = viewerMetadataLoading || (
     mode === "slice"
       ? activeSliceWaiting || slicePreviewLoading
-      : preload.isLoading || pointCloudLoading || activeVolumeWaiting
+      : pointCloudLoading || activeVolumeWaiting
   );
   const rawViewerLoadingOverlayVisible = nonRenderLoadingOverlayVisible || activeRenderPending;
   const viewerLoadingDelayKey = [
@@ -821,6 +844,7 @@ function LiveMonitor({
                   setUnit={setAutoRefreshUnit}
                   onRefresh={refreshAll}
                   onHide={() => hidePanel("update")}
+                  nextRefreshAt={nextScheduledRefreshAt}
                 />
               ) : (
                 <CollapsedPanel panel="update" title="Update Scheduler" onShow={() => showPanel("update")} />
@@ -950,9 +974,11 @@ function LiveMonitor({
                 configQuery.error ??
                 realSliceQuery.error ??
                 synthSliceQuery.error ??
-                realPointCloudQuery.error ??
-                synthPointCloudQuery.error ??
-                firstPreloadError(preload.errors)
+                (!realVolume && realPointCloudQuery.error)
+                  ? realPointCloudQuery.error
+                  : (!synthVolume && synthPointCloudQuery.error)
+                    ? synthPointCloudQuery.error
+                    : firstPreloadError(preload.errors)
               }
             />
             {viewerLoadingOverlayVisible ? (
@@ -963,6 +989,7 @@ function LiveMonitor({
                 pointCloudLoading={mode === "slice" ? slicePreviewLoading : pointCloudLoading}
                 previewLoadingLabel={mode === "slice" ? "loading 2D slice" : "loading point cloud preview"}
                 previewLoadingDetail={mode === "slice" ? "fetching backend slice preview" : "downloading compact backend preview"}
+                previewProgress={mode === "slice" ? null : pointCloudProgress}
                 activeFrameWaiting={mode === "slice" ? activeSliceWaiting : activeVolumeWaiting}
                 renderPending={activeRenderPending}
                 renderLabel={mode === "slice" ? "rendering 2D slice" : "rendering 3D view"}
@@ -1041,6 +1068,16 @@ function LiveMonitor({
       <DangerConfirmDialog intent={confirmIntent} onClose={() => setConfirmIntent(null)} />
     </main>
   );
+}
+
+function combineLoadProgress(...items: (JsonLoadProgress | null | undefined)[]): JsonLoadProgress | null {
+  const active = items.filter((item): item is JsonLoadProgress => Boolean(item));
+  if (!active.length) {
+    return null;
+  }
+  const loaded = active.reduce((sum, item) => sum + item.loaded, 0);
+  const totals = active.map((item) => item.total).filter((value): value is number => typeof value === "number");
+  return { loaded, total: totals.length === active.length ? totals.reduce((sum, value) => sum + value, 0) : undefined };
 }
 
 function getLayerUrl(layer?: LayerEntry): string | undefined {
@@ -1307,6 +1344,17 @@ function clampNumber(value: number, min: number, max: number): number {
     return min;
   }
   return Math.max(min, Math.min(max, value));
+}
+
+function buildSingleFramePreloadTargets(
+  frame: JobManifest["frames"][number],
+  previewConfig: PreviewConfig,
+  previewSignature: string,
+): VolumePreloadTarget[] {
+  const targets: VolumePreloadTarget[] = [];
+  addPreloadTarget(targets, frame.t, "real", frame.layers.realTiff, previewConfig, previewSignature);
+  addPreloadTarget(targets, frame.t, "synth", frame.layers.synthTiff, previewConfig, previewSignature);
+  return targets;
 }
 
 function buildPreloadTargets(

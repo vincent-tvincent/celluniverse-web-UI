@@ -41,6 +41,7 @@ import {
   deleteArchivedJob,
   deleteDatasetRoot,
   deleteDatasetUpload,
+  downloadFile,
   addDatasetRoot,
   getBaseYaml,
   getJobEffectiveConfig,
@@ -60,6 +61,7 @@ import {
   uploadDataset,
   uploadInitialCsv,
 } from "../../api";
+import type { TransferProgress } from "../../api";
 import type {
   CreateJobPayload,
   DatasetUpload,
@@ -88,6 +90,13 @@ type PendingUpload = {
   folderName?: string;
   totalBytes: number;
   warnings: string[];
+};
+
+type DashboardTransfer = {
+  direction: "upload" | "download";
+  label: string;
+  progress: TransferProgress;
+  error?: string;
 };
 
 export type ConfirmIntent = {
@@ -145,7 +154,9 @@ export default function Dashboard({
   const [confirmIntent, setConfirmIntent] = useState<ConfirmIntent | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<TransferProgress | null>(null);
+  const [transferProgress, setTransferProgress] = useState<DashboardTransfer | null>(null);
+  const transferTokenRef = useRef(0);
   const [jobSearch, setJobSearch] = useState("");
   const [archivedJobSearch, setArchivedJobSearch] = useState("");
   const [datasetSearch, setDatasetSearch] = useState("");
@@ -175,6 +186,45 @@ export default function Dashboard({
     setEditingJobId(null);
     setSeedDatasetId(initialDatasetId);
   }, [initialDatasetId]);
+
+  const showTransferProgress = (direction: DashboardTransfer["direction"], label: string, progress: TransferProgress) => {
+    setTransferProgress({ direction, label, progress });
+  };
+
+  const clearTransferProgressSoon = () => {
+    const token = ++transferTokenRef.current;
+    window.setTimeout(() => {
+      if (transferTokenRef.current === token) {
+        setTransferProgress(null);
+      }
+    }, 1200);
+  };
+
+  const handleDownload = async (path: string, fallbackFilename: string, label: string) => {
+    transferTokenRef.current += 1;
+    const currentToken = transferTokenRef.current;
+    setTransferProgress({ direction: "download", label, progress: { loaded: 0 } });
+    try {
+      await downloadFile(path, fallbackFilename, (progress) => {
+        if (transferTokenRef.current === currentToken) {
+          setTransferProgress({ direction: "download", label, progress });
+        }
+      });
+      if (transferTokenRef.current === currentToken) {
+        clearTransferProgressSoon();
+      }
+    } catch (error) {
+      if (transferTokenRef.current === currentToken) {
+        setTransferProgress({
+          direction: "download",
+          label: "download failed",
+          progress: { loaded: 0 },
+          error: formatError(error),
+        });
+        clearTransferProgressSoon();
+      }
+    }
+  };
 
   const startMutation = useMutation({
     mutationFn: startJob,
@@ -236,17 +286,23 @@ export default function Dashboard({
     onSuccess: refreshDataRoots,
   });
   const uploadMutation = useMutation({
-    mutationFn: (files: File[]) => uploadDataset(files, (loaded, total) => {
-      setUploadProgress(total > 0 ? loaded / total : null);
+    mutationFn: (files: File[]) => uploadDataset(files, (progress) => {
+      setUploadProgress(progress);
+      showTransferProgress("upload", "uploading dataset", progress);
     }),
     onSuccess: () => {
       setPendingUpload(null);
       setUploadProgress(null);
+      clearTransferProgressSoon();
       if (fileInputRef.current) fileInputRef.current.value = "";
       if (folderInputRef.current) folderInputRef.current.value = "";
       void queryClient.invalidateQueries({ queryKey: ["dataset-uploads"] });
     },
-    onError: () => setUploadProgress(null),
+    onError: (error) => {
+      setUploadProgress(null);
+      setTransferProgress({ direction: "upload", label: "upload failed", progress: { loaded: 0 }, error: formatError(error) });
+      clearTransferProgressSoon();
+    },
   });
 
   const requestDanger = (title: string, message: string, confirmLabel: string, onConfirm: () => void) => {
@@ -387,7 +443,8 @@ export default function Dashboard({
         </aside>
 
         <section className="dashboard-main">
-          {delayedDashboardLoading ? <DashboardLoadingOverlay label="Loading dashboard data" detail="refreshing jobs and datasets" /> : null}
+          {transferProgress ? <DashboardTransferOverlay transfer={transferProgress} /> : null}
+          {!transferProgress && delayedDashboardLoading ? <DashboardLoadingOverlay label="Loading dashboard data" detail="refreshing jobs and datasets" /> : null}
           {tab === "jobs" ? (
             <DashboardSection
               title="Jobs"
@@ -411,6 +468,7 @@ export default function Dashboard({
                 onEdit={openEditJob}
                 onClone={handleCloneJob}
                 onArchive={handleArchive}
+                onDownload={(job) => void handleDownload(`/jobs/${encodeURIComponent(job.id)}/download`, `${safeFilename(job.label ?? job.id)}.zip`, `downloading ${job.label ?? job.id}`)}
                 onContextMenu={(event, job) => {
                   event.preventDefault();
                   setContextMenu({ x: event.clientX, y: event.clientY, kind: "job", id: job.id });
@@ -426,6 +484,8 @@ export default function Dashboard({
                 csvPresets={initialCsvQuery.data ?? []}
                 seedDatasetId={seedDatasetId}
                 editingJobId={editingJobId}
+                onTransferProgress={showTransferProgress}
+                onTransferComplete={clearTransferProgressSoon}
                 onDone={(job) => {
                   setEditingJobId(null);
                   setSeedDatasetId("");
@@ -484,7 +544,7 @@ export default function Dashboard({
                   error={uploadMutation.error}
                   progress={uploadProgress}
                   onCancel={() => { setPendingUpload(null); setUploadProgress(null); }}
-                  onUpload={() => { setUploadProgress(0); uploadMutation.mutate(pendingUpload.accepted); }}
+                  onUpload={() => { setUploadProgress({ loaded: 0, total: pendingUpload.totalBytes }); uploadMutation.mutate(pendingUpload.accepted); }}
                 />
               ) : null}
               <DatasetsPanel
@@ -497,6 +557,7 @@ export default function Dashboard({
                 onCreateJob={openCreateForDataset}
                 onPreview={handlePreviewDataset}
                 onDelete={handleDeleteDataset}
+                onDownload={(dataset) => dataset.kind === "upload" ? void handleDownload(`/datasets/uploads/${encodeURIComponent(dataset.upload.uploadId)}/download`, `${safeFilename(dataset.label)}.zip`, `downloading ${dataset.label}`) : undefined}
                 onContextMenu={(event, dataset) => {
                   event.preventDefault();
                   setContextMenu({ x: event.clientX, y: event.clientY, kind: "dataset", id: dataset.id });
@@ -507,7 +568,10 @@ export default function Dashboard({
 
           {tab === "outputs" ? (
             <DashboardSection title="Outputs">
-              <OutputsPanel jobs={jobs} />
+              <OutputsPanel
+                jobs={jobs}
+                onDownload={(job) => void handleDownload(`/jobs/${encodeURIComponent(job.id)}/download`, `${safeFilename(job.label ?? job.id)}.zip`, `downloading ${job.label ?? job.id}`)}
+              />
             </DashboardSection>
           ) : null}
 
@@ -533,6 +597,7 @@ export default function Dashboard({
                 onClone={handleCloneJob}
                 onUnarchive={handleUnarchiveJob}
                 onDelete={handleDeleteArchivedJob}
+                onDownload={(job) => void handleDownload(`/jobs/${encodeURIComponent(job.id)}/download`, `${safeFilename(job.label ?? job.id)}.zip`, `downloading ${job.label ?? job.id}`)}
               />
             </DashboardSection>
           ) : null}
@@ -594,6 +659,16 @@ export default function Dashboard({
             setContextMenu(null);
             handleDeleteDataset(dataset);
           }}
+          onDownloadJob={(job) => {
+            setContextMenu(null);
+            void handleDownload(`/jobs/${encodeURIComponent(job.id)}/download`, `${safeFilename(job.label ?? job.id)}.zip`, `downloading ${job.label ?? job.id}`);
+          }}
+          onDownloadDataset={(dataset) => {
+            setContextMenu(null);
+            if (dataset.kind === "upload") {
+              void handleDownload(`/datasets/uploads/${encodeURIComponent(dataset.upload.uploadId)}/download`, `${safeFilename(dataset.label)}.zip`, `downloading ${dataset.label}`);
+            }
+          }}
         />
       ) : null}
 
@@ -627,6 +702,7 @@ function JobsPanel({
   onEdit,
   onClone,
   onArchive,
+  onDownload,
   onContextMenu,
 }: {
   jobs: JobStatus[];
@@ -641,6 +717,7 @@ function JobsPanel({
   onEdit: (jobId: string) => void;
   onClone: (job: JobStatus) => void;
   onArchive: (job: JobStatus) => void;
+  onDownload: (job: JobStatus) => void;
   onContextMenu: (event: MouseEvent, job: JobStatus) => void;
 }) {
   if (loading && !jobs.length) return <p className="dashboard-muted">Loading jobs</p>;
@@ -660,6 +737,7 @@ function JobsPanel({
           onEdit={onEdit}
           onClone={onClone}
           onArchive={onArchive}
+          onDownload={onDownload}
           onContextMenu={onContextMenu}
         />
       ))}
@@ -679,6 +757,7 @@ function ArchivedJobsPanel({
   onClone,
   onUnarchive,
   onDelete,
+  onDownload,
 }: {
   jobs: JobStatus[];
   view: DisplayMode;
@@ -691,6 +770,7 @@ function ArchivedJobsPanel({
   onClone: (job: JobStatus) => void;
   onUnarchive: (job: JobStatus) => void;
   onDelete: (job: JobStatus) => void;
+  onDownload: (job: JobStatus) => void;
 }) {
   if (loading && !jobs.length) return <p className="dashboard-muted">Loading archived jobs</p>;
   if (error) return <p className="dashboard-error">{formatError(error)}</p>;
@@ -708,6 +788,7 @@ function ArchivedJobsPanel({
           onClone={onClone}
           onUnarchive={onUnarchive}
           onDelete={onDelete}
+          onDownload={onDownload}
         />
       ))}
     </div>
@@ -723,6 +804,7 @@ function ArchivedJobItem({
   onClone,
   onUnarchive,
   onDelete,
+  onDownload,
 }: {
   job: JobStatus;
   view: DisplayMode;
@@ -732,6 +814,7 @@ function ArchivedJobItem({
   onClone: (job: JobStatus) => void;
   onUnarchive: (job: JobStatus) => void;
   onDelete: (job: JobStatus) => void;
+  onDownload: (job: JobStatus) => void;
 }) {
   const rowClass = view === "block" ? "job-card dashboard-card job-item archived-job-item" : "dashboard-row job-item archived-job-item";
   return (
@@ -751,9 +834,9 @@ function ArchivedJobItem({
       </div>
       <div className="item-actions job-actions archived-job-actions">
         <div className="job-action-row job-manage-actions">
-          <a className="action-button" href={`/api/jobs/${encodeURIComponent(job.id)}/download`}>
+          <button className="action-button" type="button" onClick={() => onDownload(job)}>
             <Download size={15} /> Download
-          </a>
+          </button>
           <button className="action-button" type="button" disabled={unarchivePending} onClick={() => onUnarchive(job)}>
             <Archive size={15} /> Unarchive
           </button>
@@ -779,6 +862,7 @@ function JobItem({
   onEdit,
   onClone,
   onArchive,
+  onDownload,
   onContextMenu,
 }: {
   job: JobStatus;
@@ -790,6 +874,7 @@ function JobItem({
   onEdit: (jobId: string) => void;
   onClone: (job: JobStatus) => void;
   onArchive: (job: JobStatus) => void;
+  onDownload: (job: JobStatus) => void;
   onContextMenu: (event: MouseEvent, job: JobStatus) => void;
 }) {
   const progress = Math.round((job.progress ?? 0) * 100);
@@ -842,9 +927,9 @@ function JobItem({
               <Copy size={15} /> Duplicate
             </button>
           )}
-          <a className="action-button" href={`/api/jobs/${encodeURIComponent(job.id)}/download`}>
+          <button className="action-button" type="button" onClick={() => onDownload(job)}>
             <Download size={15} /> Download
-          </a>
+          </button>
           <button className="action-button" type="button" disabled={job.state === "running" || job.state === "queued"} onClick={() => onArchive(job)} title="Archive">
             <Archive size={15} /> Archive
           </button>
@@ -864,6 +949,7 @@ function DatasetsPanel({
   onCreateJob,
   onPreview,
   onDelete,
+  onDownload,
   onContextMenu,
 }: {
   datasets: DatasetSource[];
@@ -875,6 +961,7 @@ function DatasetsPanel({
   onCreateJob: (datasetId: string) => void;
   onPreview: (dataset: DatasetSource) => void;
   onDelete: (dataset: DatasetSource) => void;
+  onDownload: (dataset: DatasetSource) => void;
   onContextMenu: (event: MouseEvent, dataset: DatasetSource) => void;
 }) {
   if (loading && !datasets.length) return <p className="dashboard-muted">Loading datasets</p>;
@@ -891,6 +978,7 @@ function DatasetsPanel({
           onCreateJob={onCreateJob}
           onPreview={onPreview}
           onDelete={onDelete}
+          onDownload={onDownload}
           onContextMenu={onContextMenu}
         />
       ))}
@@ -905,6 +993,7 @@ function DatasetItem({
   onCreateJob,
   onPreview,
   onDelete,
+  onDownload,
   onContextMenu,
 }: {
   dataset: DatasetSource;
@@ -913,6 +1002,7 @@ function DatasetItem({
   onCreateJob: (datasetId: string) => void;
   onPreview: (dataset: DatasetSource) => void;
   onDelete: (dataset: DatasetSource) => void;
+  onDownload: (dataset: DatasetSource) => void;
   onContextMenu: (event: MouseEvent, dataset: DatasetSource) => void;
 }) {
   const isLocal = dataset.kind === "local";
@@ -944,9 +1034,9 @@ function DatasetItem({
           <FileCog size={15} /> Create Job
         </button>
         {!isLocal ? (
-          <a className="secondary-button icon-text-button" href={`/api/datasets/uploads/${encodeURIComponent(dataset.upload.uploadId)}/download`}>
+          <button className="secondary-button icon-text-button" type="button" onClick={() => onDownload(dataset)}>
             <Download size={15} /> Download
-          </a>
+          </button>
         ) : null}
         {!isLocal ? (
           <button className="icon-button small-icon-button" type="button" disabled={deletePending} onClick={() => onDelete(dataset)} title="Delete upload">
@@ -966,12 +1056,16 @@ function NewJobPanel({
   csvPresets,
   seedDatasetId,
   editingJobId,
+  onTransferProgress,
+  onTransferComplete,
   onDone,
 }: {
   datasetSources: DatasetSource[];
   csvPresets: InitialCsvPreset[];
   seedDatasetId: string;
   editingJobId: string | null;
+  onTransferProgress?: (direction: DashboardTransfer["direction"], label: string, progress: TransferProgress) => void;
+  onTransferComplete?: () => void;
   onDone: (job: JobStatus) => void;
 }) {
   const [datasetId, setDatasetId] = useState(seedDatasetId);
@@ -1091,11 +1185,19 @@ function NewJobPanel({
       return;
     }
     try {
-      const initialUpload = initialCsvFile ? await uploadInitialCsv(initialCsvFile) : null;
-      const shouldUploadConfigYaml = yamlTouched && yamlText.trim();
-      const configUpload = shouldUploadConfigYaml
-        ? await uploadConfigYaml(new File([yamlText], "job-config.yaml", { type: "text/yaml" }))
+      const initialUpload = initialCsvFile
+        ? await uploadInitialCsv(initialCsvFile, (progress) => onTransferProgress?.("upload", "uploading initial CSV", progress))
         : null;
+      const shouldUploadConfigYaml = Boolean(yamlTouched && yamlText.trim());
+      const configUpload = shouldUploadConfigYaml
+        ? await uploadConfigYaml(
+            new File([yamlText], "job-config.yaml", { type: "text/yaml" }),
+            (progress) => onTransferProgress?.("upload", "uploading YAML", progress),
+          )
+        : null;
+      if (initialUpload || configUpload) {
+        onTransferComplete?.();
+      }
       const payload: CreateJobPayload = {
         label: label.trim() || null,
         type: "tracking",
@@ -1259,11 +1361,12 @@ function UploadScanPanel({
   scan: PendingUpload;
   uploading: boolean;
   error: unknown;
-  progress: number | null;
+  progress: TransferProgress | null;
   onUpload: () => void;
   onCancel: () => void;
 }) {
-  const progressPercent = progress == null ? null : Math.round(Math.max(0, Math.min(1, progress)) * 100);
+  const progressPercent = progress?.total ? Math.round(Math.max(0, Math.min(1, progress.loaded / progress.total)) * 100) : null;
+  const progressDetail = progress ? formatTransferProgress(progress) : null;
   return (
     <div className="upload-scan-panel">
       <div>
@@ -1274,7 +1377,7 @@ function UploadScanPanel({
         {progressPercent != null ? (
           <div className="upload-progress" aria-label="Upload progress">
             <div className="progress-track dashboard-progress"><div style={{ width: `${progressPercent}%` }} /></div>
-            <span>{progressPercent}%</span>
+            <span>{progressDetail}{progressPercent != null ? ` (${progressPercent}%)` : ""}</span>
           </div>
         ) : null}
         {error ? <p className="dashboard-error">{formatError(error)}</p> : null}
@@ -1289,7 +1392,7 @@ function UploadScanPanel({
   );
 }
 
-function OutputsPanel({ jobs }: { jobs: JobStatus[] }) {
+function OutputsPanel({ jobs, onDownload }: { jobs: JobStatus[]; onDownload: (job: JobStatus) => void }) {
   const outputJobs = jobs.filter((job) => job.partialOutputsAvailable || job.completedFrames > 0 || job.state === "completed" || job.state === "failed" || job.state === "cancelled");
   if (!outputJobs.length) return <p className="dashboard-muted">No job outputs available</p>;
   return (
@@ -1298,7 +1401,7 @@ function OutputsPanel({ jobs }: { jobs: JobStatus[] }) {
         <article key={job.id} className="dashboard-row">
           <div className="item-title-wrap"><strong>{job.label ?? job.id}</strong><small>{job.id}</small></div>
           <div className="item-metrics"><span>{job.state}</span><span>{job.completedFrames}/{job.totalFrames} frames</span></div>
-          <a className="action-button" href={`/api/jobs/${encodeURIComponent(job.id)}/download`}><Download size={15} /> Download</a>
+          <button className="action-button" type="button" onClick={() => onDownload(job)}><Download size={15} /> Download</button>
         </article>
       ))}
     </div>
@@ -1522,6 +1625,15 @@ function SearchBox({ value, onChange, placeholder }: { value: string; onChange: 
   );
 }
 
+function DashboardTransferOverlay({ transfer }: { transfer: DashboardTransfer }) {
+  return (
+    <DashboardLoadingOverlay
+      label={transfer.label}
+      detail={transfer.error ?? formatTransferProgress(transfer.progress)}
+    />
+  );
+}
+
 function DashboardLoadingOverlay({ label, detail }: { label: string; detail: string }) {
   return (
     <div className="dashboard-loading-overlay" aria-live="polite">
@@ -1558,6 +1670,8 @@ function ContextMenu({
   onCreateJob,
   onPreview,
   onDeleteDataset,
+  onDownloadJob,
+  onDownloadDataset,
 }: {
   state: NonNullable<ContextMenuState>;
   job?: JobStatus;
@@ -1571,6 +1685,8 @@ function ContextMenu({
   onCreateJob: (datasetId: string) => void;
   onPreview: (dataset: DatasetSource) => void;
   onDeleteDataset: (dataset: DatasetSource) => void;
+  onDownloadJob: (job: JobStatus) => void;
+  onDownloadDataset: (dataset: DatasetSource) => void;
 }) {
   return (
     <div className="dashboard-context-menu" style={{ left: state.x, top: state.y }} onClick={(event) => event.stopPropagation()}>
@@ -1581,7 +1697,7 @@ function ContextMenu({
           {getLifecycleLabel(job) ? <button type="button" onClick={() => onLifecycle(job)}>{getLifecycleLabel(job)?.label}</button> : null}
           {job.state === "prepared" ? <button type="button" onClick={() => onEdit(job.id)}><Edit3 size={14} /> Edit</button> : null}
           {job.state !== "running" && job.state !== "queued" ? <button type="button" onClick={() => onClone(job)}><Copy size={14} /> Duplicate for editing</button> : null}
-          <a href={`/api/jobs/${encodeURIComponent(job.id)}/download`}><Download size={14} /> Download</a>
+          <button type="button" onClick={() => onDownloadJob(job)}><Download size={14} /> Download</button>
           <button type="button" disabled={job.state === "running" || job.state === "queued"} onClick={() => onArchive(job)}><Archive size={14} /> Archive</button>
         </>
       ) : null}
@@ -1589,7 +1705,7 @@ function ContextMenu({
         <>
           <button type="button" onClick={() => onPreview(dataset)}><Eye size={14} /> Preview</button>
           <button type="button" onClick={() => onCreateJob(dataset.id)}><FileCog size={14} /> Create Job</button>
-          {dataset.kind === "upload" ? <a href={`/api/datasets/uploads/${encodeURIComponent(dataset.upload.uploadId)}/download`}><Download size={14} /> Download</a> : null}
+          {dataset.kind === "upload" ? <button type="button" onClick={() => onDownloadDataset(dataset)}><Download size={14} /> Download</button> : null}
           {dataset.kind === "upload" ? <button type="button" onClick={() => onDeleteDataset(dataset)}><Trash2 size={14} /> Delete Upload</button> : null}
         </>
       ) : null}
@@ -1738,6 +1854,18 @@ function validateYamlSanity(text: string): string | null {
 
 function strippedYamlComments(text: string): string {
   return text.split(/\r?\n/).map((line) => line.replace(/#.*/, "")).join("\n");
+}
+
+function safeFilename(value: string): string {
+  return value.trim().replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "") || "download";
+}
+
+function formatTransferProgress(progress: TransferProgress): string {
+  const loaded = formatBytes(progress.loaded);
+  if (progress.total && progress.total >= progress.loaded) {
+    return `${loaded} of ${formatBytes(progress.total)} completed`;
+  }
+  return `${loaded} completed`;
 }
 
 function formatBytes(bytes: number): string {

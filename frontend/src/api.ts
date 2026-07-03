@@ -25,6 +25,11 @@ export type JsonLoadProgress = {
   total?: number;
 };
 
+export type TransferProgress = {
+  loaded: number;
+  total?: number;
+};
+
 export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -227,7 +232,7 @@ export function getBaseYaml(moduleId: string, pipelineMode?: string): Promise<{ 
 
 export async function uploadDataset(
   files: File[],
-  onProgress?: (loaded: number, total: number) => void,
+  onProgress?: (progress: TransferProgress) => void,
 ): Promise<{ uploadId: string; kind: string; files: string[] }> {
   const form = new FormData();
   files.forEach((file) => form.append("files", file));
@@ -242,9 +247,7 @@ export async function uploadDataset(
     xhr.open("POST", `${API_BASE}/datasets/uploads`);
     xhr.responseType = "text";
     xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        onProgress(event.loaded, event.total);
-      }
+      onProgress({ loaded: event.loaded, total: event.lengthComputable ? event.total : undefined });
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -262,22 +265,111 @@ export async function uploadDataset(
   });
 }
 
-export async function uploadInitialCsv(file: File): Promise<{ uploadId: string; kind: string; files: string[] }> {
+export async function uploadInitialCsv(
+  file: File,
+  onProgress?: (progress: TransferProgress) => void,
+): Promise<{ uploadId: string; kind: string; files: string[] }> {
   const form = new FormData();
   form.append("file", file);
-  return requestJson<{ uploadId: string; kind: string; files: string[] }>("/uploads/initial-csv", {
-    method: "POST",
-    body: form,
+  return uploadForm<{ uploadId: string; kind: string; files: string[] }>("/uploads/initial-csv", form, onProgress);
+}
+
+export async function uploadConfigYaml(
+  file: File,
+  onProgress?: (progress: TransferProgress) => void,
+): Promise<{ uploadId: string; kind: string; files: string[] }> {
+  const form = new FormData();
+  form.append("file", file);
+  return uploadForm<{ uploadId: string; kind: string; files: string[] }>("/uploads/config-yaml", form, onProgress);
+}
+
+export async function downloadFile(
+  path: string,
+  fallbackFilename: string,
+  onProgress?: (progress: TransferProgress) => void,
+): Promise<void> {
+  const response = await fetch(`${API_BASE}${path}`);
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`${response.status} ${response.statusText}: ${detail}`);
+  }
+
+  const totalHeader = response.headers.get("content-length");
+  const parsedTotal = totalHeader ? Number.parseInt(totalHeader, 10) : undefined;
+  const total = parsedTotal && Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : undefined;
+  const filename = filenameFromDisposition(response.headers.get("content-disposition")) ?? fallbackFilename;
+
+  if (!response.body) {
+    const blob = await response.blob();
+    onProgress?.({ loaded: blob.size, total: total ?? blob.size });
+    saveBlob(blob, filename);
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  onProgress?.({ loaded, total });
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress?.({ loaded, total });
+  }
+  const parts = chunks.map((chunk) => chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer);
+  saveBlob(new Blob(parts), filename);
+}
+
+function uploadForm<T>(path: string, form: FormData, onProgress?: (progress: TransferProgress) => void): Promise<T> {
+  if (!onProgress) {
+    return requestJson<T>(path, {
+      method: "POST",
+      body: form,
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}${path}`);
+    xhr.responseType = "text";
+    xhr.upload.onprogress = (event) => {
+      onProgress({ loaded: event.loaded, total: event.lengthComputable ? event.total : undefined });
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as T);
+        } catch (error) {
+          reject(error);
+        }
+        return;
+      }
+      reject(new Error(`${xhr.status} ${xhr.statusText}: ${xhr.responseText}`));
+    };
+    xhr.onerror = () => reject(new Error("upload failed"));
+    xhr.send(form);
   });
 }
 
-export async function uploadConfigYaml(file: File): Promise<{ uploadId: string; kind: string; files: string[] }> {
-  const form = new FormData();
-  form.append("file", file);
-  return requestJson<{ uploadId: string; kind: string; files: string[] }>("/uploads/config-yaml", {
-    method: "POST",
-    body: form,
-  });
+function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+function filenameFromDisposition(disposition: string | null): string | null {
+  if (!disposition) return null;
+  const utfMatch = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (utfMatch?.[1]) {
+    return decodeURIComponent(utfMatch[1].trim().replace(/^"|"$/g, ""));
+  }
+  const match = /filename=([^;]+)/i.exec(disposition);
+  return match?.[1]?.trim().replace(/^"|"$/g, "") || null;
 }
 
 export function getManifest(

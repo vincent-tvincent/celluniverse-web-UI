@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { ListRestart, PauseCircle, PlayCircle, RefreshCcw } from "lucide-react";
 import type { RefreshUnit } from "../../store";
 import PanelHeading from "./PanelHeading";
@@ -11,6 +12,7 @@ type SchedulePanelProps = {
   setUnit: (unit: RefreshUnit) => void;
   onRefresh: () => void;
   onHide: () => void;
+  nextRefreshAt?: number | null;
 };
 
 export default function SchedulePanel({
@@ -22,16 +24,50 @@ export default function SchedulePanel({
   setUnit,
   onRefresh,
   onHide,
+  nextRefreshAt = null,
 }: SchedulePanelProps) {
   const unitConfig = refreshUnitConfig(unit);
   const amount = secondsToRefreshAmount(seconds, unit);
-  const updateAmount = (nextAmount: number) => {
+  const [draftAmount, setDraftAmount] = useState(String(amount));
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    setDraftAmount(String(amount));
+  }, [amount, unit]);
+
+  useEffect(() => {
+    if (!enabled || !nextRefreshAt) {
+      return undefined;
+    }
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [enabled, nextRefreshAt]);
+
+  const updateAmount = (nextValue: string) => {
+    setDraftAmount(nextValue);
+    if (!nextValue.trim()) {
+      return;
+    }
+    const parsed = Number(nextValue);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+    setSeconds(normalizeRefreshAmount(parsed, unit) * unitConfig.multiplier);
+  };
+  const commitAmount = () => {
+    const nextAmount = normalizeRefreshAmount(Number(draftAmount), unit);
+    setDraftAmount(String(nextAmount));
     setSeconds(nextAmount * unitConfig.multiplier);
   };
   const updateUnit = (nextUnit: RefreshUnit) => {
+    const nextConfig = refreshUnitConfig(nextUnit);
+    const nextAmount = normalizeRefreshAmount(Number(draftAmount), nextUnit);
     setUnit(nextUnit);
-    setSeconds(amount * refreshUnitConfig(nextUnit).multiplier);
+    setDraftAmount(String(nextAmount));
+    setSeconds(nextAmount * nextConfig.multiplier);
   };
+  const secondsRemaining = enabled && nextRefreshAt ? Math.max(0, Math.ceil((nextRefreshAt - now) / 1000)) : null;
 
   return (
     <section className="tool-panel">
@@ -53,8 +89,14 @@ export default function SchedulePanel({
           min={unitConfig.min}
           max={unitConfig.max}
           step={1}
-          value={amount}
-          onChange={(event) => updateAmount(Number(event.target.value))}
+          value={draftAmount}
+          onChange={(event) => updateAmount(event.currentTarget.value)}
+          onBlur={commitAmount}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
         />
         <select
           aria-label="Refresh interval unit"
@@ -66,6 +108,10 @@ export default function SchedulePanel({
           <option value="hours">hr</option>
         </select>
       </label>
+      <div className="scheduler-countdown" aria-live="polite">
+        <span>Next update</span>
+        <strong>{secondsRemaining == null ? "inactive" : formatRemaining(secondsRemaining)}</strong>
+      </div>
       <button type="button" className="action-button" onClick={onRefresh}>
         <RefreshCcw size={16} />
         Refresh now
@@ -88,5 +134,28 @@ function refreshUnitConfig(unit: RefreshUnit): { multiplier: number; min: number
 
 function secondsToRefreshAmount(seconds: number, unit: RefreshUnit): number {
   const config = refreshUnitConfig(unit);
-  return Math.max(config.min, Math.min(config.max, Math.round(seconds / config.multiplier)));
+  return normalizeRefreshAmount(seconds / config.multiplier, unit);
+}
+
+function normalizeRefreshAmount(amount: number, unit: RefreshUnit): number {
+  const config = refreshUnitConfig(unit);
+  if (!Number.isFinite(amount)) {
+    return config.min;
+  }
+  return Math.max(config.min, Math.min(config.max, Math.round(amount)));
+}
+
+function formatRemaining(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  if (minutes < 60) {
+    return `${minutes}m ${String(rest).padStart(2, "0")}s`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const minuteRest = minutes % 60;
+  return `${hours}h ${String(minuteRest).padStart(2, "0")}m ${String(rest).padStart(2, "0")}s`;
 }

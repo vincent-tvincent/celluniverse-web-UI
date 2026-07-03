@@ -9,6 +9,7 @@ type ViewerLoadingOverlayProps = {
   pointCloudLoading: boolean;
   previewLoadingLabel: string;
   previewLoadingDetail: string;
+  previewProgress?: JsonLoadProgress | null;
   activeFrameWaiting: boolean;
   renderPending: boolean;
   renderLabel: string;
@@ -22,6 +23,7 @@ export default function ViewerLoadingOverlay({
   pointCloudLoading,
   previewLoadingLabel,
   previewLoadingDetail,
+  previewProgress,
   activeFrameWaiting,
   renderPending,
   renderLabel,
@@ -43,7 +45,7 @@ export default function ViewerLoadingOverlay({
     : metadataLoading
       ? formatMetadataProgress(metadataProgress) ?? "refreshing manifest"
     : pointCloudLoading
-      ? previewLoadingDetail
+      ? formatMetadataProgress(previewProgress) ?? previewLoadingDetail
     : renderPending
       ? renderDetail
     : "waiting for preview data";

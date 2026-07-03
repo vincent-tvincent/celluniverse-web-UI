@@ -1098,6 +1098,27 @@ button {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
+.scheduler-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  margin: 0 0 12px;
+  padding: 0 10px;
+  color: var(--color-text-soft);
+  background: var(--surface-input-inline);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-control);
+  font-size: 13px;
+}
+
+.scheduler-countdown strong {
+  color: var(--color-text-strong);
+  font-size: 14px;
+  font-weight: 650;
+}
+
 input[type="range"] {
   width: 100%;
   accent-color: var(--surface-slider-accent);

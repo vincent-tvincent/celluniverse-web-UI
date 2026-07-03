@@ -9,8 +9,8 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Database, Download, FileCog, PanelLeftOpen, RotateCcw } from "lucide-react";
-import { getLocalDatasetPreview, getUploadedDatasetPreview, toApiUrl } from "../../api";
-import type { JsonLoadProgress } from "../../api";
+import { downloadFile, getLocalDatasetPreview, getUploadedDatasetPreview, toApiUrl } from "../../api";
+import type { JsonLoadProgress, TransferProgress } from "../../api";
 import { previewConfigSignature, useViewerConfig, type PreviewConfig } from "../../config";
 import type { CellRecord, DatasetPreviewManifest, LayerEntry } from "../../types";
 import type { ColorMapId } from "../../viewer/colorMaps";
@@ -69,6 +69,10 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
   const [hoverSample, setHoverSample] = useState<ViewerHoverSample | null>(null);
   const [delayedViewerLoading, setDelayedViewerLoading] = useState(false);
   const [manifestLoadProgress, setManifestLoadProgress] = useState<JsonLoadProgress | null>(null);
+  const [pointCloudProgress, setPointCloudProgress] = useState<JsonLoadProgress | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<TransferProgress | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const downloadTokenRef = useRef(0);
 
   const manifestQuery = useQuery({
     queryKey: ["dataset-preview", kind, datasetId],
@@ -114,19 +118,20 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
   const previewSignature = previewConfig ? previewConfigSignature(previewConfig) : "";
   const usePointCloudPreview = mode === "volume" && Boolean(realPointCloudUrl);
   const realSliceUrl = getDatasetSlicePreviewUrl(kind, datasetId, sourceFrameIndex, slice, previewConfig, realUrl);
+  useEffect(() => setPointCloudProgress(null), [realPointCloudUrl]);
 
   const preloadTargets = useMemo(
-    () => realUrl && previewConfig && mode !== "slice" && !usePointCloudPreview
+    () => realUrl && previewConfig && mode !== "slice"
       ? [buildPreviewTarget(realUrl, activeFrameNumber ?? 0, previewConfig, previewSignature)]
       : [],
-    [activeFrameNumber, mode, previewConfig, previewSignature, realUrl, usePointCloudPreview],
+    [activeFrameNumber, mode, previewConfig, previewSignature, realUrl],
   );
   const preload = useVolumePreload(preloadTargets, previewConfig?.preloadConcurrency ?? 1);
-  const realVolume = !usePointCloudPreview && realUrl && previewConfig ? preload.volumes[getPreloadKey(realUrl, previewSignature)] : undefined;
+  const realVolume = realUrl && previewConfig ? preload.volumes[getPreloadKey(realUrl, previewSignature)] : undefined;
 
   const realPointCloudQuery = useQuery({
     queryKey: ["dataset-point-cloud", realPointCloudUrl],
-    queryFn: () => loadPointCloudPreview(toApiUrl(realPointCloudUrl!)),
+    queryFn: () => loadPointCloudPreview(toApiUrl(realPointCloudUrl!), setPointCloudProgress),
     enabled: usePointCloudPreview && realEnabled && Boolean(realPointCloudUrl),
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -211,14 +216,14 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
   const realPreloadError = realUrl ? Boolean(preload.errors[getPreloadKey(realUrl, previewSignature)]) : false;
   const realVolumeWaiting = realEnabled && (
     realPointCloudUrl
-      ? !realPointCloudQuery.data && !realPointCloudQuery.isError
+      ? !realPointCloudQuery.data && !realVolume && !realPointCloudQuery.isError && !realPreloadError
       : Boolean(realUrl) && !realVolume && !realPreloadError
   );
   const activeVolumeWaiting = Boolean(activeFrame && realVolumeWaiting);
   const rawLoadingVisible = metadataLoading || (
     mode === "slice"
       ? activeSliceWaiting || slicePreviewLoading
-      : preload.isLoading || pointCloudLoading || activeVolumeWaiting
+      : pointCloudLoading || activeVolumeWaiting
   ) || activeRenderPending;
   const loadingDelayKey = [
     kind,
@@ -253,6 +258,43 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
     leftPanelVisible ? "" : "hide-left",
     rightPanelVisible ? "" : "hide-right",
   ].filter(Boolean).join(" ");
+
+  const handleDownloadDataset = useCallback(async () => {
+    if (kind !== "upload") {
+      return;
+    }
+    downloadTokenRef.current += 1;
+    const token = downloadTokenRef.current;
+    const label = manifest?.label ?? datasetId;
+    setDownloadError(null);
+    setDownloadProgress({ loaded: 0, total: typeof manifest?.metadata?.totalBytes === "number" ? manifest.metadata.totalBytes : undefined });
+    try {
+      await downloadFile(
+        `/datasets/uploads/${encodeURIComponent(datasetId)}/download`,
+        `${safeFilename(label)}.zip`,
+        (progress) => {
+          if (downloadTokenRef.current === token) {
+            setDownloadProgress(progress);
+          }
+        },
+      );
+      window.setTimeout(() => {
+        if (downloadTokenRef.current === token) {
+          setDownloadProgress(null);
+        }
+      }, 1200);
+    } catch (error) {
+      if (downloadTokenRef.current === token) {
+        setDownloadError(error instanceof Error ? error.message : String(error));
+        window.setTimeout(() => {
+          if (downloadTokenRef.current === token) {
+            setDownloadProgress(null);
+            setDownloadError(null);
+          }
+        }, 2400);
+      }
+    }
+  }, [datasetId, kind, manifest]);
 
   const setLayer = useCallback((layer: "realEnabled" | "synthEnabled" | "cellsEnabled", value: boolean) => {
     if (layer === "realEnabled") {
@@ -327,9 +369,9 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
             <FileCog size={16} /> Create Job
           </button>
           {kind === "upload" ? (
-            <a className="secondary-button icon-text-button" href={`/api/datasets/uploads/${encodeURIComponent(datasetId)}/download`}>
+            <button className="secondary-button icon-text-button" type="button" onClick={() => void handleDownloadDataset()}>
               <Download size={16} /> Download
-            </a>
+            </button>
           ) : null}
           <button className="icon-button" type="button" onClick={() => void manifestQuery.refetch()} title="Refresh preview" aria-label="Refresh preview">
             <RotateCcw size={17} />
@@ -337,6 +379,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
         </div>
       </header>
 
+      {downloadProgress || downloadError ? <DatasetPreviewTransferOverlay progress={downloadProgress} error={downloadError} /> : null}
       <section className={workspaceClassName} ref={workspaceRef} style={workspaceStyle}>
         {!leftPanelVisible ? (
           <button
@@ -485,6 +528,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
                 pointCloudLoading={mode === "slice" ? slicePreviewLoading : pointCloudLoading}
                 previewLoadingLabel={mode === "slice" ? "loading 2D slice" : "loading point cloud preview"}
                 previewLoadingDetail={mode === "slice" ? "fetching backend slice preview" : "downloading compact backend preview"}
+                previewProgress={mode === "slice" ? null : pointCloudProgress}
                 activeFrameWaiting={mode === "slice" ? activeSliceWaiting : activeVolumeWaiting}
                 renderPending={activeRenderPending}
                 renderLabel={mode === "slice" ? "rendering 2D slice" : "rendering 3D view"}
@@ -519,9 +563,9 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
                     <FileCog size={15} /> Create Job
                   </button>
                   {kind === "upload" ? (
-                    <a className="secondary-button icon-text-button" href={`/api/datasets/uploads/${encodeURIComponent(datasetId)}/download`}>
+                    <button className="secondary-button icon-text-button" type="button" onClick={() => void handleDownloadDataset()}>
                       <Download size={15} /> Download
-                    </a>
+                    </button>
                   ) : null}
                 </div>
               </section>
@@ -621,6 +665,20 @@ function metadataEntries(manifest: DatasetPreviewManifest | undefined): [string,
   });
 }
 
+function DatasetPreviewTransferOverlay({ progress, error }: { progress: TransferProgress | null; error: string | null }) {
+  return (
+    <div className="dashboard-loading-overlay" aria-live="polite">
+      <div className="viewer-loading-card">
+        <div className="viewer-loading-spinner" />
+        <div>
+          <strong>{error ? "download failed" : "downloading dataset"}</strong>
+          <span>{error ?? (progress ? formatTransferProgress(progress) : "preparing download")}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DatasetPreviewReadout({
   manifest,
   frame,
@@ -657,6 +715,18 @@ function DatasetPreviewReadout({
       ) : null}
     </div>
   );
+}
+
+function safeFilename(value: string): string {
+  return value.trim().replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "") || "dataset";
+}
+
+function formatTransferProgress(progress: TransferProgress): string {
+  const loaded = formatBytes(progress.loaded);
+  if (progress.total && progress.total >= progress.loaded) {
+    return `${loaded} of ${formatBytes(progress.total)} completed`;
+  }
+  return `${loaded} completed`;
 }
 
 function formatBrightness(value: number | null): string {
