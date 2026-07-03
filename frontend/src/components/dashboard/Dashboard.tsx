@@ -1437,10 +1437,12 @@ function SettingsPanel({
   const defaultRealEnabled = useViewerStore((state) => state.defaultRealEnabled);
   const defaultSynthEnabled = useViewerStore((state) => state.defaultSynthEnabled);
   const defaultCellsEnabled = useViewerStore((state) => state.defaultCellsEnabled);
+  const defaultCellCentersEnabled = useViewerStore((state) => state.defaultCellCentersEnabled);
   const setDefault3dBackgroundMode = useViewerStore((state) => state.setDefault3dBackgroundMode);
   const setDefaultRealEnabled = useViewerStore((state) => state.setDefaultRealEnabled);
   const setDefaultSynthEnabled = useViewerStore((state) => state.setDefaultSynthEnabled);
   const setDefaultCellsEnabled = useViewerStore((state) => state.setDefaultCellsEnabled);
+  const setDefaultCellCentersEnabled = useViewerStore((state) => state.setDefaultCellCentersEnabled);
   const enabledSources = dataSources.filter((source) => source.enabled);
   const presetSources = dataSources.filter((source) => source.preset);
   const csvSources = dataSources.filter((source) => source.sourceRole === "initial-csv");
@@ -1498,6 +1500,7 @@ function SettingsPanel({
           </button>
           <ViewerDefaultToggle label="Real" enabled={defaultRealEnabled} onChange={setDefaultRealEnabled} />
           <ViewerDefaultToggle label="Synthetic" enabled={defaultSynthEnabled} onChange={setDefaultSynthEnabled} />
+          <ViewerDefaultToggle label="Cell centers" enabled={defaultCellCentersEnabled} onChange={setDefaultCellCentersEnabled} />
           <ViewerDefaultToggle label="Cell outlines" enabled={defaultCellsEnabled} onChange={setDefaultCellsEnabled} />
         </div>
       </section>

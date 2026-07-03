@@ -12,6 +12,7 @@ type ViewerDefaults = {
   defaultRealEnabled: boolean;
   defaultSynthEnabled: boolean;
   defaultCellsEnabled: boolean;
+  defaultCellCentersEnabled: boolean;
 };
 
 type ViewerState = {
@@ -22,6 +23,7 @@ type ViewerState = {
   realEnabled: boolean;
   synthEnabled: boolean;
   cellsEnabled: boolean;
+  cellCentersEnabled: boolean;
   realMap: ColorMapId;
   synthMap: ColorMapId;
   realOpacity: number;
@@ -33,6 +35,7 @@ type ViewerState = {
   defaultRealEnabled: boolean;
   defaultSynthEnabled: boolean;
   defaultCellsEnabled: boolean;
+  defaultCellCentersEnabled: boolean;
   logStream: "stdout" | "stderr";
   autoRefreshEnabled: boolean;
   autoRefreshSeconds: number;
@@ -41,7 +44,7 @@ type ViewerState = {
   setFrame: (frame: number) => void;
   setSlice: (slice: number) => void;
   setMode: (mode: ViewMode) => void;
-  setLayer: (layer: "realEnabled" | "synthEnabled" | "cellsEnabled", value: boolean) => void;
+  setLayer: (layer: "realEnabled" | "synthEnabled" | "cellsEnabled" | "cellCentersEnabled", value: boolean) => void;
   setRealMap: (map: ColorMapId) => void;
   setSynthMap: (map: ColorMapId) => void;
   setRealOpacity: (opacity: number) => void;
@@ -53,6 +56,7 @@ type ViewerState = {
   setDefaultRealEnabled: (enabled: boolean) => void;
   setDefaultSynthEnabled: (enabled: boolean) => void;
   setDefaultCellsEnabled: (enabled: boolean) => void;
+  setDefaultCellCentersEnabled: (enabled: boolean) => void;
   setLogStream: (stream: "stdout" | "stderr") => void;
   setAutoRefreshEnabled: (enabled: boolean) => void;
   setAutoRefreshSeconds: (seconds: number) => void;
@@ -66,6 +70,7 @@ const FALLBACK_VIEWER_DEFAULTS: ViewerDefaults = {
   defaultRealEnabled: true,
   defaultSynthEnabled: true,
   defaultCellsEnabled: false,
+  defaultCellCentersEnabled: false,
 };
 
 const storedViewerDefaults = readStoredViewerDefaults();
@@ -78,6 +83,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   realEnabled: storedViewerDefaults.defaultRealEnabled,
   synthEnabled: storedViewerDefaults.defaultSynthEnabled,
   cellsEnabled: storedViewerDefaults.defaultCellsEnabled,
+  cellCentersEnabled: storedViewerDefaults.defaultCellCentersEnabled,
   realMap: "viridis",
   synthMap: "magma",
   realOpacity: 0.5,
@@ -89,6 +95,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   defaultRealEnabled: storedViewerDefaults.defaultRealEnabled,
   defaultSynthEnabled: storedViewerDefaults.defaultSynthEnabled,
   defaultCellsEnabled: storedViewerDefaults.defaultCellsEnabled,
+  defaultCellCentersEnabled: storedViewerDefaults.defaultCellCentersEnabled,
   logStream: "stdout",
   autoRefreshEnabled: true,
   autoRefreshSeconds: 5,
@@ -143,6 +150,12 @@ export const useViewerStore = create<ViewerState>((set) => ({
     writeStoredViewerDefaults(nextDefaults);
     return { defaultCellsEnabled, cellsEnabled: defaultCellsEnabled };
   }),
+  setDefaultCellCentersEnabled: (defaultCellCentersEnabled) => set((state) => {
+    if (state.defaultCellCentersEnabled === defaultCellCentersEnabled && state.cellCentersEnabled === defaultCellCentersEnabled) return state;
+    const nextDefaults = { ...pickViewerDefaults(state), defaultCellCentersEnabled };
+    writeStoredViewerDefaults(nextDefaults);
+    return { defaultCellCentersEnabled, cellCentersEnabled: defaultCellCentersEnabled };
+  }),
   setLogStream: (logStream) => set((state) => (state.logStream === logStream ? state : { logStream })),
   setAutoRefreshEnabled: (autoRefreshEnabled) => (
     set((state) => (state.autoRefreshEnabled === autoRefreshEnabled ? state : { autoRefreshEnabled }))
@@ -185,6 +198,7 @@ function normalizeViewerDefaults(defaults: Partial<ViewerDefaults>): ViewerDefau
     defaultRealEnabled: typeof defaults.defaultRealEnabled === "boolean" ? defaults.defaultRealEnabled : FALLBACK_VIEWER_DEFAULTS.defaultRealEnabled,
     defaultSynthEnabled: typeof defaults.defaultSynthEnabled === "boolean" ? defaults.defaultSynthEnabled : FALLBACK_VIEWER_DEFAULTS.defaultSynthEnabled,
     defaultCellsEnabled: typeof defaults.defaultCellsEnabled === "boolean" ? defaults.defaultCellsEnabled : FALLBACK_VIEWER_DEFAULTS.defaultCellsEnabled,
+    defaultCellCentersEnabled: typeof defaults.defaultCellCentersEnabled === "boolean" ? defaults.defaultCellCentersEnabled : FALLBACK_VIEWER_DEFAULTS.defaultCellCentersEnabled,
   };
 }
 
@@ -194,6 +208,7 @@ function pickViewerDefaults(state: ViewerDefaults): ViewerDefaults {
     defaultRealEnabled: state.defaultRealEnabled,
     defaultSynthEnabled: state.defaultSynthEnabled,
     defaultCellsEnabled: state.defaultCellsEnabled,
+    defaultCellCentersEnabled: state.defaultCellCentersEnabled,
   };
 }
 

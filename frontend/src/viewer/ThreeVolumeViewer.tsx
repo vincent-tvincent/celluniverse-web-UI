@@ -20,6 +20,7 @@ type Props = {
   realEnabled: boolean;
   synthEnabled: boolean;
   cellsEnabled: boolean;
+  cellCentersEnabled: boolean;
   realMap: ColorMapId;
   synthMap: ColorMapId;
   realOpacity: number;
@@ -76,6 +77,7 @@ export default function ThreeVolumeViewer({
   realEnabled,
   synthEnabled,
   cellsEnabled,
+  cellCentersEnabled,
   realMap,
   synthMap,
   realOpacity,
@@ -199,6 +201,9 @@ export default function ThreeVolumeViewer({
         pointAlphaByBrightness,
       );
     }
+    if (cellCentersEnabled && cells.length) {
+      addCellCenters(group, cells, base, worldWidth, worldHeight, worldDepth, darkBackground);
+    }
     if (cellsEnabled && cells.length) {
       addCells(group, cells, base, worldWidth, worldHeight, worldDepth);
     }
@@ -285,6 +290,11 @@ export default function ThreeVolumeViewer({
       renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
       controls.dispose();
       scene.traverse((object) => {
+        if (object instanceof THREE.Sprite) {
+          object.material.map?.dispose();
+          object.material.dispose();
+          return;
+        }
         if (object instanceof THREE.Mesh || object instanceof THREE.Points) {
           object.geometry.dispose();
           const material = object.material;
@@ -309,6 +319,7 @@ export default function ThreeVolumeViewer({
     realEnabled,
     synthEnabled,
     cellsEnabled,
+    cellCentersEnabled,
     realMap,
     synthMap,
     realOpacity,
@@ -353,7 +364,7 @@ export default function ThreeVolumeViewer({
         </button>
       </div>
       {!real && !synth && !realPointCloud && !synthPointCloud ? (
-        <div className="viewer-empty">Waiting for TIFF output</div>
+        <div className="viewer-empty">Waiting for viewer output</div>
       ) : null}
     </div>
   );
@@ -920,6 +931,107 @@ function computeIntensityThreshold(volume: VolumeData, percentile: number, sampl
     }
   }
   return 1;
+}
+
+function addCellCenters(
+  group: THREE.Group,
+  cells: CellRecord[],
+  volume: VolumeDimensions,
+  worldWidth: number,
+  worldHeight: number,
+  worldDepth: number,
+  darkBackground: boolean,
+) {
+  const maxCellZ = cells.reduce((max, cell) => Math.max(max, Number(cell.z) || 0), 0);
+  const zScale = Math.max(volume.depth - 1, maxCellZ, 1);
+  const markerRadius = Math.max(worldWidth, worldHeight, worldDepth) * 0.0085;
+  const labelHeight = Math.max(worldWidth, worldHeight, worldDepth) * 0.046;
+  const labelOffset = markerRadius * 3.4;
+  for (const cell of cells) {
+    const isTrash = Boolean(cell.isTrash);
+    const markerGeometry = new THREE.SphereGeometry(markerRadius, 14, 10);
+    const markerMaterial = new THREE.MeshBasicMaterial({
+      color: isTrash ? uiPalette.cellTrash : uiPalette.cellSelected,
+      transparent: true,
+      opacity: isTrash ? 0.76 : 0.9,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+    const center = cellToWorldPosition(cell, volume, worldWidth, worldHeight, worldDepth, zScale);
+    marker.position.copy(center);
+    marker.renderOrder = 36;
+    group.add(marker);
+
+    const label = createCellLabelSprite(cell.name, isTrash, darkBackground, labelHeight);
+    label.position.set(center.x + labelOffset, center.y + labelOffset * 0.36, center.z);
+    label.renderOrder = 38;
+    group.add(label);
+  }
+}
+
+function createCellLabelSprite(name: string, isTrash: boolean, darkBackground: boolean, worldHeight: number): THREE.Sprite {
+  const fontSize = 26;
+  const paddingX = 12;
+  const paddingY = 7;
+  const canvas = document.createElement("canvas");
+  const measureContext = canvas.getContext("2d");
+  const text = name || "cell";
+  const font = `700 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  if (measureContext) {
+    measureContext.font = font;
+  }
+  const measuredWidth = Math.ceil((measureContext?.measureText(text).width ?? text.length * fontSize * 0.58) + paddingX * 2);
+  const measuredHeight = Math.ceil(fontSize + paddingY * 2);
+  const scale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  canvas.width = Math.ceil(measuredWidth * scale);
+  canvas.height = Math.ceil(measuredHeight * scale);
+
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.scale(scale, scale);
+    context.font = font;
+    context.textBaseline = "middle";
+    context.lineJoin = "round";
+    const fill = darkBackground ? "rgba(9, 13, 19, 0.78)" : "rgba(255, 254, 250, 0.88)";
+    const stroke = isTrash ? uiPalette.cellTrash : uiPalette.cellSelected;
+    const textColor = darkBackground ? uiPalette.volumeBoxDark : uiPalette.viewerBackgroundDark;
+    drawRoundedRect(context, 0.5, 0.5, measuredWidth - 1, measuredHeight - 1, 7);
+    context.fillStyle = fill;
+    context.fill();
+    context.strokeStyle = stroke;
+    context.lineWidth = 1.25;
+    context.stroke();
+    context.fillStyle = textColor;
+    context.fillText(text, paddingX, measuredHeight / 2);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(worldHeight * (measuredWidth / measuredHeight), worldHeight, 1);
+  return sprite;
+}
+
+function drawRoundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.lineTo(x + width - safeRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  context.lineTo(x + width, y + height - safeRadius);
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  context.lineTo(x + safeRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  context.lineTo(x, y + safeRadius);
+  context.quadraticCurveTo(x, y, x + safeRadius, y);
+  context.closePath();
 }
 
 function addCells(

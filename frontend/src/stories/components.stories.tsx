@@ -338,6 +338,7 @@ export const LayerPanelInteractive: Story = {
     const [realEnabled, setRealEnabled] = useState(true);
     const [synthEnabled, setSynthEnabled] = useState(true);
     const [cellsEnabled, setCellsEnabled] = useState(false);
+    const [cellCentersEnabled, setCellCentersEnabled] = useState(false);
     const [realMap, setRealMap] = useState<ColorMapId>("viridis");
     const [synthMap, setSynthMap] = useState<ColorMapId>("magma");
     const [realOpacity, setRealOpacity] = useState(0.5);
@@ -351,10 +352,12 @@ export const LayerPanelInteractive: Story = {
           realEnabled={realEnabled}
           synthEnabled={synthEnabled}
           cellsEnabled={cellsEnabled}
+          cellCentersEnabled={cellCentersEnabled}
           setLayer={(layer, value) => {
             if (layer === "realEnabled") setRealEnabled(value);
             if (layer === "synthEnabled") setSynthEnabled(value);
             if (layer === "cellsEnabled") setCellsEnabled(value);
+            if (layer === "cellCentersEnabled") setCellCentersEnabled(value);
           }}
           realMap={realMap}
           synthMap={synthMap}
@@ -582,6 +585,7 @@ export const ViewerEmptyStates: Story = {
           realEnabled
           synthEnabled
           cellsEnabled={false}
+          cellCentersEnabled={false}
           realMap="viridis"
           synthMap="magma"
           realOpacity={0.5}

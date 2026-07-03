@@ -811,9 +811,12 @@ button {
   background: var(--surface-toggle);
 }
 
-.layer-brightness-toggle.separated {
-  margin-top: 8px;
+.layer-toggle-stack {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
 }
+
 
 .toggle-button.active {
   background: var(--surface-toggle-active);
@@ -1387,7 +1390,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   display: grid;
   gap: 7px;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-viewer-strong);
+  background: var(--surface-time-slider-panel);
 }
 
 .preload-strip.complete {
@@ -1420,7 +1423,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   height: 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--surface-control);
+  background: var(--color-bg);
   border: 1px solid var(--border-subtle);
 }
 
@@ -3069,7 +3072,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 .viewer-defaults-grid {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
   align-items: end;
 }
@@ -3086,7 +3089,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 }
 
 .viewer-defaults-label-layers {
-  grid-column: span 3;
+  grid-column: span 4;
 }
 
 .viewer-defaults-grid .toggle-button {

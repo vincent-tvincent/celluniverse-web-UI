@@ -16,10 +16,12 @@ import type { CellRecord, DatasetPreviewManifest, LayerEntry } from "../../types
 import type { ColorMapId } from "../../viewer/colorMaps";
 import { DEFAULT_CLEAN_CONTRAST_LIMITS, type ContrastLimits } from "../../viewer/contrast";
 import type { ViewerHoverSample } from "../../viewer/hover";
+import { userFacingViewerError } from "../../viewer/errors";
 import { loadPointCloudPreview } from "../../viewer/pointCloud";
 import { loadSlicePreview } from "../../viewer/slicePreview";
 import CanvasSliceViewer from "../../viewer/CanvasSliceViewer";
 import ThreeVolumeViewer from "../../viewer/ThreeVolumeViewer";
+import { usePointCloudPreload, type PointCloudPreloadTarget } from "../../viewer/usePointCloudPreload";
 import { useVolumePreload, type VolumePreloadTarget } from "../../viewer/useVolumePreload";
 import LoadBadge from "../layout/LoadBadge";
 import PanelResizer from "../layout/PanelResizer";
@@ -121,12 +123,20 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
   useEffect(() => setPointCloudProgress(null), [realPointCloudUrl]);
 
   const preloadTargets = useMemo(
-    () => realUrl && previewConfig && mode !== "slice"
+    () => realUrl && previewConfig && mode !== "slice" && !usePointCloudPreview
       ? [buildPreviewTarget(realUrl, activeFrameNumber ?? 0, previewConfig, previewSignature)]
       : [],
-    [activeFrameNumber, mode, previewConfig, previewSignature, realUrl],
+    [activeFrameNumber, mode, previewConfig, previewSignature, realUrl, usePointCloudPreview],
   );
   const preload = useVolumePreload(preloadTargets, previewConfig?.preloadConcurrency ?? 1);
+  const activePointCloudUrls = useMemo(
+    () => new Set([realPointCloudUrl].filter((url): url is string => Boolean(url))),
+    [realPointCloudUrl],
+  );
+  const pointCloudPreloadTargets = useMemo(
+    () => buildPointCloudPreloadTargets(frames, activeFrameNumber, activePointCloudUrls),
+    [activeFrameNumber, activePointCloudUrls, frames],
+  );
   const realVolume = realUrl && previewConfig ? preload.volumes[getPreloadKey(realUrl, previewSignature)] : undefined;
 
   const realPointCloudQuery = useQuery({
@@ -212,6 +222,16 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
   const metadataLoading = manifestQuery.isFetching || configQuery.isLoading;
   const slicePreviewLoading = realEnabled && Boolean(realSliceUrl) && realSliceQuery.isLoading;
   const pointCloudLoading = realEnabled && Boolean(realPointCloudUrl) && realPointCloudQuery.isLoading;
+  const activePointCloudPreload = pointCloudLoading
+    ? progressAsPreloadState(pointCloudProgress, activeFrameNumber, "active point cloud")
+    : null;
+  const pointCloudPreload = usePointCloudPreload(
+    pointCloudPreloadTargets,
+    previewConfig?.preloadConcurrency ?? 1,
+    Boolean(activePointCloudPreload),
+  );
+  const displayedPreload = activePointCloudPreload ?? (preload.isLoading ? preload : pointCloudPreload);
+  const displayedPreloadLabel = activePointCloudPreload ? "Loading" : preload.isLoading ? "Caching" : "Caching point clouds";
   const activeSliceWaiting = Boolean(activeFrame && realEnabled && Boolean(realSliceUrl) && !realSliceQuery.data);
   const realPreloadError = realUrl ? Boolean(preload.errors[getPreloadKey(realUrl, previewSignature)]) : false;
   const realVolumeWaiting = realEnabled && (
@@ -247,7 +267,9 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
   }, [loadingDelayKey, rawLoadingVisible]);
 
   const viewerLoadingOverlayVisible = rawLoadingVisible && delayedViewerLoading;
-  const error = toError(manifestQuery.error ?? configQuery.error ?? realPointCloudQuery.error ?? realSliceQuery.error) ?? firstPreloadError(preload.errors);
+  const error = userFacingViewerError(
+    manifestQuery.error ?? configQuery.error ?? realPointCloudQuery.error ?? realSliceQuery.error ?? firstPreloadError(preload.errors),
+  );
   const workspaceStyle = {
     "--left-panel-width": `${panelLayout.left}px`,
     "--right-panel-width": `${panelLayout.right}px`,
@@ -296,7 +318,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
     }
   }, [datasetId, kind, manifest]);
 
-  const setLayer = useCallback((layer: "realEnabled" | "synthEnabled" | "cellsEnabled", value: boolean) => {
+  const setLayer = useCallback((layer: "realEnabled" | "synthEnabled" | "cellsEnabled" | "cellCentersEnabled", value: boolean) => {
     if (layer === "realEnabled") {
       setRealEnabled(value);
     }
@@ -412,6 +434,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
                 realEnabled={realEnabled}
                 synthEnabled={false}
                 cellsEnabled={false}
+                cellCentersEnabled={false}
                 setLayer={setLayer}
                 realMap={realMap}
                 synthMap={synthMap}
@@ -451,7 +474,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
             setSlice={setSlice}
             frameControlsDisabled={mode === "volume" ? pointCloudLoading : slicePreviewLoading}
           />
-          <PreloadProgress preload={preload} />
+          <PreloadProgress preload={displayedPreload} label={displayedPreloadLabel} />
           <div className="viewer-shell">
             {mode === "slice" ? (
               <CanvasSliceViewer
@@ -480,6 +503,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
                 realEnabled={realEnabled}
                 synthEnabled={false}
                 cellsEnabled={false}
+                cellCentersEnabled={false}
                 realMap={realMap}
                 synthMap={synthMap}
                 realOpacity={realOpacity}
@@ -591,6 +615,56 @@ function buildPreviewTarget(
       maxXY: previewConfig.maxXY,
       maxSlices: Math.max(previewConfig.maxSlices, 50),
     },
+  };
+}
+
+function buildPointCloudPreloadTargets(
+  frames: DatasetPreviewManifest["frames"],
+  activeFrame: number | undefined,
+  excludedUrls: Set<string>,
+): PointCloudPreloadTarget[] {
+  const targets: PointCloudPreloadTarget[] = [];
+  frames.forEach((frame, order) => {
+    const layer = frame.layers.realPointCloud;
+    if (!layer || layer.format !== "point-cloud-v1" || excludedUrls.has(layer.url)) {
+      return;
+    }
+    targets.push({
+      key: layer.url,
+      url: toApiUrl(layer.url),
+      label: `t${frame.t} real point cloud`,
+      frame: frame.t,
+      order,
+    });
+  });
+  return targets.sort((a, b) => {
+    const distanceA = activeFrame == null ? 0 : Math.abs(a.frame - activeFrame);
+    const distanceB = activeFrame == null ? 0 : Math.abs(b.frame - activeFrame);
+    if (distanceA !== distanceB) {
+      return distanceA - distanceB;
+    }
+    return a.order - b.order;
+  });
+}
+
+function progressAsPreloadState(
+  progress: JsonLoadProgress | null,
+  frame: number | undefined,
+  label: string,
+) {
+  const loadedBytes = progress?.loaded ?? 0;
+  const totalBytes = progress?.total ?? 0;
+  return {
+    totalFiles: 1,
+    readyFiles: 0,
+    failedFiles: 0,
+    progress: totalBytes > 0 ? Math.max(0, Math.min(1, loadedBytes / totalBytes)) : 0,
+    loadedBytes,
+    totalBytes,
+    bytesPerSecond: 0,
+    currentLabel: `t${frame ?? 0} ${label}`,
+    currentPhase: "download" as const,
+    isLoading: true,
   };
 }
 

@@ -12,7 +12,14 @@ export type PointCloudPreviewData = {
   intensity: Float32Array;
 };
 
-const cache = new Map<string, Promise<PointCloudPreviewData>>();
+type PointCloudCacheEntry = {
+  promise: Promise<PointCloudPreviewData>;
+  listeners: Set<(progress: PointCloudLoadProgress) => void>;
+  lastProgress?: PointCloudLoadProgress;
+};
+
+const cache = new Map<string, PointCloudCacheEntry>();
+const POINT_CLOUD_FETCH_TIMEOUT_MS = 60000;
 
 export type PointCloudLoadProgress = {
   loaded: number;
@@ -25,14 +32,40 @@ export function loadPointCloudPreview(
 ): Promise<PointCloudPreviewData> {
   const cached = cache.get(url);
   if (cached) {
-    return cached;
+    return attachProgressListener(cached, onProgress);
   }
-  const promise = fetchPointCloudPreview(url, onProgress).catch((error: Error) => {
+
+  const listeners = new Set<(progress: PointCloudLoadProgress) => void>();
+  const entry: PointCloudCacheEntry = {
+    listeners,
+    promise: Promise.resolve(undefined as unknown as PointCloudPreviewData),
+  };
+  const promise = fetchPointCloudPreview(url, (progress) => {
+    entry.lastProgress = progress;
+    entry.listeners.forEach((listener) => listener(progress));
+  }).catch((error: Error) => {
     cache.delete(url);
     throw error;
   });
-  cache.set(url, promise);
-  return promise;
+  entry.promise = promise;
+  cache.set(url, entry);
+  return attachProgressListener(entry, onProgress);
+}
+
+function attachProgressListener(
+  entry: PointCloudCacheEntry,
+  onProgress?: (progress: PointCloudLoadProgress) => void,
+): Promise<PointCloudPreviewData> {
+  if (!onProgress) {
+    return entry.promise;
+  }
+  entry.listeners.add(onProgress);
+  if (entry.lastProgress) {
+    onProgress(entry.lastProgress);
+  }
+  return entry.promise.finally(() => {
+    entry.listeners.delete(onProgress);
+  });
 }
 
 async function fetchPointCloudPreview(
@@ -40,13 +73,20 @@ async function fetchPointCloudPreview(
   onProgress?: (progress: PointCloudLoadProgress) => void,
 ): Promise<PointCloudPreviewData> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  const timeout = window.setTimeout(() => {
+    controller.abort(new Error("point cloud preview timed out"));
+  }, POINT_CLOUD_FETCH_TIMEOUT_MS);
   try {
     const response = await fetch(url, { cache: "no-store", signal: controller.signal });
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
     return parsePointCloudPreview(await readResponseBuffer(response, onProgress));
+  } catch (error) {
+    if (controller.signal.aborted && controller.signal.reason instanceof Error) {
+      throw controller.signal.reason;
+    }
+    throw error;
   } finally {
     window.clearTimeout(timeout);
   }

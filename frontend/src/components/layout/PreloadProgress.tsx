@@ -1,12 +1,25 @@
-import type { VolumePreloadState } from "../../viewer/useVolumePreload";
 import { formatBytes, formatPreloadLabel } from "./preloadFormat";
 
-type PreloadProgressProps = {
-  preload: VolumePreloadState;
+type PreloadProgressState = {
+  totalFiles: number;
+  readyFiles: number;
+  failedFiles: number;
+  progress: number;
+  loadedBytes: number;
+  totalBytes: number;
+  bytesPerSecond: number;
+  currentLabel: string;
+  currentPhase: "download" | "decode" | "idle";
+  isLoading: boolean;
 };
 
-export default function PreloadProgress({ preload }: PreloadProgressProps) {
-  if (preload.totalFiles === 0) {
+type PreloadProgressProps = {
+  preload: PreloadProgressState;
+  label?: string;
+};
+
+export default function PreloadProgress({ preload, label = "Caching" }: PreloadProgressProps) {
+  if (preload.totalFiles === 0 || !preload.isLoading) {
     return null;
   }
 
@@ -19,9 +32,7 @@ export default function PreloadProgress({ preload }: PreloadProgressProps) {
         : "";
   const speedText = preload.bytesPerSecond > 0 ? `${formatBytes(preload.bytesPerSecond)}/s` : "";
   const bytesText = [totalBytesText, speedText].filter(Boolean).join(" · ");
-  const statusText = preload.isLoading
-    ? `Caching ${preload.readyFiles}/${preload.totalFiles}`
-    : `Cached ${preload.readyFiles}/${preload.totalFiles}`;
+  const statusText = `${label} ${preload.readyFiles}/${preload.totalFiles}`;
   const current = preload.currentLabel
     ? `${formatPreloadLabel(preload.currentLabel)} · ${preload.currentPhase}`
     : preload.failedFiles

@@ -1,5 +1,5 @@
 import { useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Check, ChevronDown, Eye, EyeOff } from "lucide-react";
+import { Check, ChevronDown, Crosshair, Eye, EyeOff } from "lucide-react";
 import { colorMaps, getColorMap, type ColorMap, type ColorMapId } from "../../viewer/colorMaps";
 import { clampContrastLimits, type ContrastLimits } from "../../viewer/contrast";
 import PanelHeading from "./PanelHeading";
@@ -8,7 +8,8 @@ type LayerPanelProps = {
   realEnabled: boolean;
   synthEnabled: boolean;
   cellsEnabled: boolean;
-  setLayer: (layer: "realEnabled" | "synthEnabled" | "cellsEnabled", value: boolean) => void;
+  cellCentersEnabled: boolean;
+  setLayer: (layer: "realEnabled" | "synthEnabled" | "cellsEnabled" | "cellCentersEnabled", value: boolean) => void;
   realMap: ColorMapId;
   synthMap: ColorMapId;
   setRealMap: (map: ColorMapId) => void;
@@ -32,6 +33,7 @@ export default function LayerPanel({
   realEnabled,
   synthEnabled,
   cellsEnabled,
+  cellCentersEnabled,
   setLayer,
   realMap,
   synthMap,
@@ -54,26 +56,40 @@ export default function LayerPanel({
   return (
     <section className="tool-panel">
       <PanelHeading title="Layers" icon={<Eye size={17} />} onHide={onHide} />
-      {showCells ? (
-        <button
-          type="button"
-          className={`toggle-button ${cellsEnabled ? "active" : ""}`}
-          onClick={() => setLayer("cellsEnabled", !cellsEnabled)}
-        >
-          {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
-          Cell outlines
-        </button>
-      ) : null}
-      {setPointAlphaByBrightness ? (
-        <button
-          type="button"
-          className={`toggle-button layer-brightness-toggle ${showCells ? "separated" : ""} ${pointAlphaByBrightness ? "active" : ""}`}
-          onClick={() => setPointAlphaByBrightness(!pointAlphaByBrightness)}
-          title="Make point opacity proportional to brightness"
-        >
-          {pointAlphaByBrightness ? <Eye size={16} /> : <EyeOff size={16} />}
-          Brightness alpha
-        </button>
+      {showCells || setPointAlphaByBrightness ? (
+        <div className="layer-toggle-stack">
+          {showCells ? (
+            <>
+              <button
+                type="button"
+                className={`toggle-button ${cellCentersEnabled ? "active" : ""}`}
+                onClick={() => setLayer("cellCentersEnabled", !cellCentersEnabled)}
+              >
+                {cellCentersEnabled ? <Crosshair size={16} /> : <EyeOff size={16} />}
+                Cell centers
+              </button>
+              <button
+                type="button"
+                className={`toggle-button ${cellsEnabled ? "active" : ""}`}
+                onClick={() => setLayer("cellsEnabled", !cellsEnabled)}
+              >
+                {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
+                Cell outlines
+              </button>
+            </>
+          ) : null}
+          {setPointAlphaByBrightness ? (
+            <button
+              type="button"
+              className={`toggle-button layer-brightness-toggle ${pointAlphaByBrightness ? "active" : ""}`}
+              onClick={() => setPointAlphaByBrightness(!pointAlphaByBrightness)}
+              title="Make point opacity proportional to brightness"
+            >
+              {pointAlphaByBrightness ? <Eye size={16} /> : <EyeOff size={16} />}
+              Brightness alpha
+            </button>
+          ) : null}
+        </div>
       ) : null}
       <LayerControlGroup
         label="Real"

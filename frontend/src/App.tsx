@@ -54,9 +54,11 @@ import type { CellRecord, JobManifest, JobStatus, LayerEntry, LineageNode } from
 import CanvasSliceViewer from "./viewer/CanvasSliceViewer";
 import ThreeVolumeViewer from "./viewer/ThreeVolumeViewer";
 import type { ViewerHoverSample } from "./viewer/hover";
+import { userFacingViewerError } from "./viewer/errors";
 import { loadPointCloudPreview } from "./viewer/pointCloud";
 import { loadSlicePreview } from "./viewer/slicePreview";
 import type { VolumeData } from "./viewer/tiff";
+import { usePointCloudPreload, type PointCloudPreloadTarget } from "./viewer/usePointCloudPreload";
 import { useVolumePreload, type VolumePreloadTarget } from "./viewer/useVolumePreload";
 
 const EMPTY_CELLS: CellRecord[] = [];
@@ -151,6 +153,7 @@ function LiveMonitor({
     realEnabled,
     synthEnabled,
     cellsEnabled,
+    cellCentersEnabled,
     setLayer,
     realMap,
     synthMap,
@@ -359,15 +362,20 @@ function LiveMonitor({
   const realSliceUrl = getSlicePreviewUrl(selectedJobId, activeFrameNumber, "real", slice, previewConfig, realUrl);
   const synthSliceUrl = getSlicePreviewUrl(selectedJobId, activeFrameNumber, "synth", slice, previewConfig, synthUrl);
   const preloadTargets = useMemo(() => {
-    if (!previewConfig || mode === "slice") {
+    if (!previewConfig || mode === "slice" || usePointCloudPreview) {
       return [];
     }
-    if (usePointCloudPreview && activeFrame) {
-      return buildSingleFramePreloadTargets(activeFrame, previewConfig, previewSignature);
-    }
     return buildPreloadTargets(frames, activeFrameNumber, previewConfig, previewSignature, quickPreview);
-  }, [activeFrame, activeFrameNumber, frames, mode, previewConfig, previewSignature, quickPreview, usePointCloudPreview]);
+  }, [activeFrameNumber, frames, mode, previewConfig, previewSignature, quickPreview, usePointCloudPreview]);
   const preload = useVolumePreload(preloadTargets, previewConfig?.preloadConcurrency ?? 1);
+  const activePointCloudUrls = useMemo(
+    () => new Set([realPointCloudUrl, synthPointCloudUrl].filter((url): url is string => Boolean(url))),
+    [realPointCloudUrl, synthPointCloudUrl],
+  );
+  const pointCloudPreloadTargets = useMemo(
+    () => buildPointCloudPreloadTargets(frames, activeFrameNumber, activePointCloudUrls),
+    [activeFrameNumber, activePointCloudUrls, frames],
+  );
   const realVolume = realUrl && previewConfig
     ? preload.volumes[getPreloadKey(realUrl, previewSignature)]
     : undefined;
@@ -410,6 +418,16 @@ function LiveMonitor({
     realEnabled && Boolean(realPointCloudUrl) && realPointCloudQuery.isLoading ? realPointCloudProgress : null,
     synthEnabled && Boolean(synthPointCloudUrl) && synthPointCloudQuery.isLoading ? synthPointCloudProgress : null,
   );
+  const activePointCloudPreload = pointCloudLoading
+    ? progressAsPreloadState(pointCloudProgress, activeFrameNumber, "active point cloud")
+    : null;
+  const pointCloudPreload = usePointCloudPreload(
+    pointCloudPreloadTargets,
+    previewConfig?.preloadConcurrency ?? 1,
+    Boolean(activePointCloudPreload),
+  );
+  const displayedPreload = activePointCloudPreload ?? (preload.isLoading ? preload : pointCloudPreload);
+  const displayedPreloadLabel = activePointCloudPreload ? "Loading" : preload.isLoading ? "Caching" : "Caching point clouds";
   const cellsQuery = useQuery({
     queryKey: ["cells", selectedJobId, activeFrame?.t],
     queryFn: () => getFrameCells(selectedJobId, activeFrame!.t),
@@ -417,8 +435,8 @@ function LiveMonitor({
   });
   const frameCells = cellsQuery.data ?? EMPTY_CELLS;
   const cellDataSignature = useMemo(
-    () => (cellsEnabled ? cellRecordsSignature(frameCells) : "hidden"),
-    [cellsEnabled, frameCells],
+    () => (cellsEnabled || cellCentersEnabled ? cellRecordsSignature(frameCells) : "hidden"),
+    [cellCentersEnabled, cellsEnabled, frameCells],
   );
   const volumeRenderKey = useMemo(() => {
     if (
@@ -437,6 +455,7 @@ function LiveMonitor({
       realEnabled,
       synthEnabled,
       cellsEnabled,
+      cellCentersEnabled,
       cellDataSignature,
       realMap,
       synthMap,
@@ -451,6 +470,7 @@ function LiveMonitor({
   }, [
     activeFrame?.t,
     cellsEnabled,
+    cellCentersEnabled,
     cellDataSignature,
     configQuery.data,
     mode,
@@ -495,6 +515,7 @@ function LiveMonitor({
           realEnabled,
           synthEnabled,
           cellsEnabled,
+          cellCentersEnabled,
           cellDataSignature,
           realMap,
           synthMap,
@@ -603,6 +624,15 @@ function LiveMonitor({
       (realEnabled && Boolean(realSliceUrl) && !realSliceQuery.data) ||
       (synthEnabled && Boolean(synthSliceUrl) && !synthSliceQuery.data)
     ),
+  );
+  const viewerError = userFacingViewerError(
+    manifestQuery.error ??
+    configQuery.error ??
+    realSliceQuery.error ??
+    synthSliceQuery.error ??
+    (!realVolume ? realPointCloudQuery.error : null) ??
+    (!synthVolume ? synthPointCloudQuery.error : null) ??
+    firstPreloadError(preload.errors),
   );
   const realPreloadError = realUrl ? Boolean(preload.errors[getPreloadKey(realUrl, previewSignature)]) : false;
   const synthPreloadError = synthUrl ? Boolean(preload.errors[getPreloadKey(synthUrl, previewSignature)]) : false;
@@ -854,6 +884,7 @@ function LiveMonitor({
                   realEnabled={realEnabled}
                   synthEnabled={synthEnabled}
                   cellsEnabled={cellsEnabled}
+                  cellCentersEnabled={cellCentersEnabled}
                   setLayer={setLayer}
                   realMap={realMap}
                   synthMap={synthMap}
@@ -898,7 +929,7 @@ function LiveMonitor({
             }}
             frameControlsDisabled={pointCloudLoading}
           />
-          <PreloadProgress preload={preload} />
+          <PreloadProgress preload={displayedPreload} label={displayedPreloadLabel} />
           <div className="viewer-shell">
             {mode === "slice" ? (
               <CanvasSliceViewer
@@ -931,6 +962,7 @@ function LiveMonitor({
                 realEnabled={realEnabled}
                 synthEnabled={synthEnabled}
                 cellsEnabled={cellsEnabled}
+                cellCentersEnabled={cellCentersEnabled}
                 realMap={realMap}
                 synthMap={synthMap}
                 realOpacity={realOpacity}
@@ -969,17 +1001,7 @@ function LiveMonitor({
               pointCloudLoading={mode === "slice" ? slicePreviewLoading : pointCloudLoading}
               previewLoadingLabel={mode === "slice" ? "Loading 2D slice" : "Loading point cloud"}
               activeFrameWaiting={mode === "slice" ? activeSliceWaiting : activeVolumeWaiting}
-              error={
-                manifestQuery.error ??
-                configQuery.error ??
-                realSliceQuery.error ??
-                synthSliceQuery.error ??
-                (!realVolume && realPointCloudQuery.error)
-                  ? realPointCloudQuery.error
-                  : (!synthVolume && synthPointCloudQuery.error)
-                    ? synthPointCloudQuery.error
-                    : firstPreloadError(preload.errors)
-              }
+              error={viewerError}
             />
             {viewerLoadingOverlayVisible ? (
               <ViewerLoadingOverlay
@@ -1078,6 +1100,27 @@ function combineLoadProgress(...items: (JsonLoadProgress | null | undefined)[]):
   const loaded = active.reduce((sum, item) => sum + item.loaded, 0);
   const totals = active.map((item) => item.total).filter((value): value is number => typeof value === "number");
   return { loaded, total: totals.length === active.length ? totals.reduce((sum, value) => sum + value, 0) : undefined };
+}
+
+function progressAsPreloadState(
+  progress: JsonLoadProgress | null,
+  frame: number | undefined,
+  label: string,
+) {
+  const loadedBytes = progress?.loaded ?? 0;
+  const totalBytes = progress?.total ?? 0;
+  return {
+    totalFiles: 1,
+    readyFiles: 0,
+    failedFiles: 0,
+    progress: totalBytes > 0 ? Math.max(0, Math.min(1, loadedBytes / totalBytes)) : 0,
+    loadedBytes,
+    totalBytes,
+    bytesPerSecond: 0,
+    currentLabel: `t${frame ?? 0} ${label}`,
+    currentPhase: "download" as const,
+    isLoading: true,
+  };
 }
 
 function getLayerUrl(layer?: LayerEntry): string | undefined {
@@ -1346,17 +1389,6 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function buildSingleFramePreloadTargets(
-  frame: JobManifest["frames"][number],
-  previewConfig: PreviewConfig,
-  previewSignature: string,
-): VolumePreloadTarget[] {
-  const targets: VolumePreloadTarget[] = [];
-  addPreloadTarget(targets, frame.t, "real", frame.layers.realTiff, previewConfig, previewSignature);
-  addPreloadTarget(targets, frame.t, "synth", frame.layers.synthTiff, previewConfig, previewSignature);
-  return targets;
-}
-
 function buildPreloadTargets(
   frames: JobManifest["frames"],
   activeFrame: number | undefined,
@@ -1382,6 +1414,49 @@ function buildPreloadTargets(
     addPreloadTarget(targets, frame.t, "synth", frame.layers.synthTiff, previewConfig, previewSignature);
   }
   return targets;
+}
+
+function buildPointCloudPreloadTargets(
+  frames: JobManifest["frames"],
+  activeFrame: number | undefined,
+  excludedUrls: Set<string>,
+): PointCloudPreloadTarget[] {
+  let order = 0;
+  const targets: PointCloudPreloadTarget[] = [];
+  for (const frame of frames) {
+    addPointCloudPreloadTarget(targets, frame.t, "real", frame.layers.realPointCloud, order, excludedUrls);
+    order += 1;
+    addPointCloudPreloadTarget(targets, frame.t, "synth", frame.layers.synthPointCloud, order, excludedUrls);
+    order += 1;
+  }
+  return targets.sort((a, b) => {
+    const distanceA = activeFrame == null ? 0 : Math.abs(a.frame - activeFrame);
+    const distanceB = activeFrame == null ? 0 : Math.abs(b.frame - activeFrame);
+    if (distanceA !== distanceB) {
+      return distanceA - distanceB;
+    }
+    return a.order - b.order;
+  });
+}
+
+function addPointCloudPreloadTarget(
+  targets: PointCloudPreloadTarget[],
+  frame: number,
+  layerName: "real" | "synth",
+  layer: LayerEntry | undefined,
+  order: number,
+  excludedUrls: Set<string>,
+) {
+  if (!layer || layer.format !== "point-cloud-v1" || excludedUrls.has(layer.url)) {
+    return;
+  }
+  targets.push({
+    key: layer.url,
+    url: toApiUrl(layer.url),
+    label: `t${frame} ${layerName} point cloud`,
+    frame,
+    order,
+  });
 }
 
 function addPreloadTarget(

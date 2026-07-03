@@ -203,7 +203,7 @@ export default function CanvasSliceViewer({
         onPointerMove={handlePointerMove}
         onPointerLeave={() => onHoverSample?.(null)}
       />
-      {!hasImage ? <div className="viewer-empty">Waiting for TIFF output</div> : null}
+      {!hasImage ? <div className="viewer-empty">Waiting for viewer output</div> : null}
     </>
   );
 }
