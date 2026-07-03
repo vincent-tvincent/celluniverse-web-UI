@@ -944,9 +944,9 @@ function addCellCenters(
 ) {
   const maxCellZ = cells.reduce((max, cell) => Math.max(max, Number(cell.z) || 0), 0);
   const zScale = Math.max(volume.depth - 1, maxCellZ, 1);
-  const markerRadius = Math.max(worldWidth, worldHeight, worldDepth) * 0.0085;
-  const labelHeight = Math.max(worldWidth, worldHeight, worldDepth) * 0.046;
-  const labelOffset = markerRadius * 3.4;
+  const markerRadius = Math.max(worldWidth, worldHeight, worldDepth) * 0.0065;
+  const labelHeight = Math.max(worldWidth, worldHeight, worldDepth) * 0.014;
+  const labelOffset = markerRadius * 2.8;
   for (const cell of cells) {
     const isTrash = Boolean(cell.isTrash);
     const markerGeometry = new THREE.SphereGeometry(markerRadius, 14, 10);
@@ -971,9 +971,9 @@ function addCellCenters(
 }
 
 function createCellLabelSprite(name: string, isTrash: boolean, darkBackground: boolean, worldHeight: number): THREE.Sprite {
-  const fontSize = 26;
-  const paddingX = 12;
-  const paddingY = 7;
+  const fontSize = 13;
+  const paddingX = 5;
+  const paddingY = 3;
   const canvas = document.createElement("canvas");
   const measureContext = canvas.getContext("2d");
   const text = name || "cell";
@@ -993,14 +993,14 @@ function createCellLabelSprite(name: string, isTrash: boolean, darkBackground: b
     context.font = font;
     context.textBaseline = "middle";
     context.lineJoin = "round";
-    const fill = darkBackground ? "rgba(9, 13, 19, 0.78)" : "rgba(255, 254, 250, 0.88)";
+    const fill = darkBackground ? "rgba(9, 13, 19, 0.58)" : "rgba(255, 254, 250, 0.68)";
     const stroke = isTrash ? uiPalette.cellTrash : uiPalette.cellSelected;
     const textColor = darkBackground ? uiPalette.volumeBoxDark : uiPalette.viewerBackgroundDark;
-    drawRoundedRect(context, 0.5, 0.5, measuredWidth - 1, measuredHeight - 1, 7);
+    drawRoundedRect(context, 0.5, 0.5, measuredWidth - 1, measuredHeight - 1, 4);
     context.fillStyle = fill;
     context.fill();
     context.strokeStyle = stroke;
-    context.lineWidth = 1.25;
+    context.lineWidth = 0.8;
     context.stroke();
     context.fillStyle = textColor;
     context.fillText(text, paddingX, measuredHeight / 2);
