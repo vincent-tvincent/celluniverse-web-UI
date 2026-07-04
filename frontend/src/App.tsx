@@ -50,7 +50,7 @@ import ViewModePanel from "./components/panels/ViewModePanel";
 import { previewConfigSignature, useViewerConfig, type PreviewConfig } from "./config";
 import { useJobEvents } from "./hooks";
 import { useViewerStore } from "./store";
-import type { CellRecord, JobManifest, JobStatus, LayerEntry, LineageNode } from "./types";
+import type { CellRecord, JobManifest, JobStatus, LayerEntry, LineageLayout, LineageNode } from "./types";
 import CanvasSliceViewer from "./viewer/CanvasSliceViewer";
 import ThreeVolumeViewer from "./viewer/ThreeVolumeViewer";
 import type { ViewerHoverSample } from "./viewer/hover";
@@ -169,6 +169,8 @@ function LiveMonitor({
     setSynthContrastLimits,
     pointAlphaByBrightness,
     setPointAlphaByBrightness,
+    lineageOutlineColorsEnabled,
+    setLineageOutlineColorsEnabled,
     default3dBackgroundMode,
     setDefault3dBackgroundMode,
     logStream,
@@ -464,6 +466,7 @@ function LiveMonitor({
       realContrastLimits,
       synthContrastLimits,
       pointAlphaByBrightness,
+      lineageOutlineColorsEnabled,
       configQuery.data?.rendering.maxPixelRatio ?? 1,
       JSON.stringify(configQuery.data?.pointCloud ?? {}),
     ].join("|");
@@ -480,6 +483,7 @@ function LiveMonitor({
     realContrastLimits,
     realUrl,
     pointAlphaByBrightness,
+    lineageOutlineColorsEnabled,
     realVolume,
     realPointCloudQuery.data,
     realPointCloudUrl,
@@ -545,6 +549,11 @@ function LiveMonitor({
     enabled: Boolean(selectedJobId && (activeFrameNumber != null || Number.isFinite(frame))),
     refetchInterval: selectedJobId ? scheduledRefreshMs : false,
   });
+  const lineageCellColors = useMemo(
+    () => buildLineageCellColorMap(lineageLayoutQuery.data?.nodes),
+    [lineageLayoutQuery.data?.nodes],
+  );
+  const activeCellOutlineColors = lineageOutlineColorsEnabled ? (lineageCellColors ?? {}) : undefined;
 
   const logsQuery = useQuery({
     queryKey: ["logs", selectedJobId, logStream],
@@ -900,6 +909,8 @@ function LiveMonitor({
                   setSynthContrastLimits={setSynthContrastLimits}
                   pointAlphaByBrightness={pointAlphaByBrightness}
                   setPointAlphaByBrightness={setPointAlphaByBrightness}
+                  lineageOutlineColorsEnabled={lineageOutlineColorsEnabled}
+                  setLineageOutlineColorsEnabled={setLineageOutlineColorsEnabled}
                   onHide={() => hidePanel("layers")}
                 />
               ) : (
@@ -942,6 +953,7 @@ function LiveMonitor({
                 realEnabled={realEnabled}
                 synthEnabled={synthEnabled}
                 cellsEnabled={cellsEnabled}
+                cellOutlineColors={activeCellOutlineColors}
                 realMap={realMap}
                 synthMap={synthMap}
                 realOpacity={realOpacity}
@@ -963,6 +975,7 @@ function LiveMonitor({
                 synthEnabled={synthEnabled}
                 cellsEnabled={cellsEnabled}
                 cellCentersEnabled={cellCentersEnabled}
+                cellOutlineColors={activeCellOutlineColors}
                 realMap={realMap}
                 synthMap={synthMap}
                 realOpacity={realOpacity}
@@ -1150,6 +1163,19 @@ function getSlicePreviewUrl(
   }
   const requestedSlice = Math.max(0, Math.round(slice));
   return `/api/jobs/${encodeURIComponent(jobId)}/slices/${layer}/${frame}/${requestedSlice}.cusl?max_xy=${previewConfig.maxXY}`;
+}
+
+function buildLineageCellColorMap(nodes?: LineageLayout["nodes"]): Record<string, string> | undefined {
+  if (!nodes || !Object.keys(nodes).length) {
+    return undefined;
+  }
+  const colors: Record<string, string> = {};
+  for (const node of Object.values(nodes)) {
+    if (node.id && node.color) {
+      colors[node.id] = node.color;
+    }
+  }
+  return Object.keys(colors).length ? colors : undefined;
 }
 
 function cellRecordsSignature(cells: CellRecord[]): string {

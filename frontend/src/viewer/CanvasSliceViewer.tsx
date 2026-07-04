@@ -18,6 +18,7 @@ type Props = {
   realEnabled: boolean;
   synthEnabled: boolean;
   cellsEnabled: boolean;
+  cellOutlineColors?: Record<string, string>;
   realMap: ColorMapId;
   synthMap: ColorMapId;
   realOpacity: number;
@@ -39,6 +40,7 @@ export default function CanvasSliceViewer({
   realEnabled,
   synthEnabled,
   cellsEnabled,
+  cellOutlineColors,
   realMap,
   synthMap,
   realOpacity,
@@ -128,7 +130,7 @@ export default function CanvasSliceViewer({
         drawCellOverlay(ctx, cells, slice, imageRect, {
           width: baseSlice?.sourceWidth ?? baseVolume?.sourceWidth ?? image.width,
           height: baseSlice?.sourceHeight ?? baseVolume?.sourceHeight ?? image.height,
-        });
+        }, cellOutlineColors);
       }
       onRenderComplete?.();
     };
@@ -160,6 +162,7 @@ export default function CanvasSliceViewer({
     synthContrastLimits,
     cells,
     cellsEnabled,
+    cellOutlineColors,
     baseVolume,
     baseSlice,
     onRenderStart,

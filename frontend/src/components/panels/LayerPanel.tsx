@@ -1,5 +1,5 @@
 import { useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Check, ChevronDown, Crosshair, Eye, EyeOff } from "lucide-react";
+import { Check, ChevronDown, Crosshair, Eye, EyeOff, Palette } from "lucide-react";
 import { colorMaps, getColorMap, type ColorMap, type ColorMapId } from "../../viewer/colorMaps";
 import { clampContrastLimits, type ContrastLimits } from "../../viewer/contrast";
 import PanelHeading from "./PanelHeading";
@@ -24,6 +24,8 @@ type LayerPanelProps = {
   setSynthContrastLimits: (limits: ContrastLimits) => void;
   pointAlphaByBrightness?: boolean;
   setPointAlphaByBrightness?: (enabled: boolean) => void;
+  lineageOutlineColorsEnabled?: boolean;
+  setLineageOutlineColorsEnabled?: (enabled: boolean) => void;
   showCells?: boolean;
   showSynth?: boolean;
   onHide: () => void;
@@ -49,6 +51,8 @@ export default function LayerPanel({
   setSynthContrastLimits,
   pointAlphaByBrightness = false,
   setPointAlphaByBrightness,
+  lineageOutlineColorsEnabled = false,
+  setLineageOutlineColorsEnabled,
   showCells = true,
   showSynth = true,
   onHide,
@@ -76,6 +80,17 @@ export default function LayerPanel({
                 {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
                 Cell outlines
               </button>
+              {setLineageOutlineColorsEnabled ? (
+                <button
+                  type="button"
+                  className={`toggle-button ${lineageOutlineColorsEnabled ? "active" : ""}`}
+                  onClick={() => setLineageOutlineColorsEnabled(!lineageOutlineColorsEnabled)}
+                  title="Match cell outline colors to the lineage tree"
+                >
+                  {lineageOutlineColorsEnabled ? <Palette size={16} /> : <EyeOff size={16} />}
+                  Lineage colors
+                </button>
+              ) : null}
             </>
           ) : null}
           {setPointAlphaByBrightness ? (

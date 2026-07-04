@@ -31,6 +31,7 @@ type ViewerState = {
   realContrastLimits: ContrastLimits;
   synthContrastLimits: ContrastLimits;
   pointAlphaByBrightness: boolean;
+  lineageOutlineColorsEnabled: boolean;
   default3dBackgroundMode: ViewerBackgroundMode;
   defaultRealEnabled: boolean;
   defaultSynthEnabled: boolean;
@@ -52,6 +53,7 @@ type ViewerState = {
   setRealContrastLimits: (limits: ContrastLimits) => void;
   setSynthContrastLimits: (limits: ContrastLimits) => void;
   setPointAlphaByBrightness: (enabled: boolean) => void;
+  setLineageOutlineColorsEnabled: (enabled: boolean) => void;
   setDefault3dBackgroundMode: (mode: ViewerBackgroundMode) => void;
   setDefaultRealEnabled: (enabled: boolean) => void;
   setDefaultSynthEnabled: (enabled: boolean) => void;
@@ -69,7 +71,7 @@ const FALLBACK_VIEWER_DEFAULTS: ViewerDefaults = {
   default3dBackgroundMode: "dark",
   defaultRealEnabled: true,
   defaultSynthEnabled: true,
-  defaultCellsEnabled: false,
+  defaultCellsEnabled: true,
   defaultCellCentersEnabled: false,
 };
 
@@ -91,6 +93,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   realContrastLimits: DEFAULT_CLEAN_CONTRAST_LIMITS,
   synthContrastLimits: DEFAULT_CLEAN_CONTRAST_LIMITS,
   pointAlphaByBrightness: false,
+  lineageOutlineColorsEnabled: true,
   default3dBackgroundMode: storedViewerDefaults.default3dBackgroundMode,
   defaultRealEnabled: storedViewerDefaults.defaultRealEnabled,
   defaultSynthEnabled: storedViewerDefaults.defaultSynthEnabled,
@@ -125,6 +128,9 @@ export const useViewerStore = create<ViewerState>((set) => ({
   }),
   setPointAlphaByBrightness: (pointAlphaByBrightness) => (
     set((state) => (state.pointAlphaByBrightness === pointAlphaByBrightness ? state : { pointAlphaByBrightness }))
+  ),
+  setLineageOutlineColorsEnabled: (lineageOutlineColorsEnabled) => (
+    set((state) => (state.lineageOutlineColorsEnabled === lineageOutlineColorsEnabled ? state : { lineageOutlineColorsEnabled }))
   ),
   setDefault3dBackgroundMode: (default3dBackgroundMode) => set((state) => {
     if (state.default3dBackgroundMode === default3dBackgroundMode) return state;

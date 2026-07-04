@@ -93,6 +93,7 @@ export function drawCellOverlay(
   slice: number,
   imageRect: { x: number; y: number; width: number; height: number },
   imageSize: { width: number; height: number },
+  cellOutlineColors?: Record<string, string>,
 ): void {
   if (!cells.length) {
     return;
@@ -113,12 +114,14 @@ export function drawCellOverlay(
 
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, getCellAngle(cell.thetaZ, cell.theta_z), 0, Math.PI * 2);
-    ctx.strokeStyle = cell.isTrash ? uiPalette.cellTrashStroke : uiPalette.cellNormalStroke;
+    const lineageColorMode = cellOutlineColors !== undefined;
+    const trashColor = lineageColorMode ? uiPalette.cellTrashLineage : uiPalette.cellTrashStroke;
+    ctx.strokeStyle = cellOutlineColors?.[cell.name] ?? (cell.isTrash ? trashColor : uiPalette.cellNormalStroke);
     ctx.stroke();
 
     ctx.beginPath();
     ctx.arc(cx, cy, 2.2, 0, Math.PI * 2);
-    ctx.fillStyle = cell.isTrash ? uiPalette.cellTrashFill : uiPalette.cellNormalFill;
+    ctx.fillStyle = cell.isTrash ? trashColor : uiPalette.cellNormalFill;
     ctx.fill();
   }
   ctx.restore();

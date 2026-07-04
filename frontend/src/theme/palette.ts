@@ -11,6 +11,8 @@ export const uiPalette = {
   cellNormal: "#00df82",
   // Alert color for cells marked as trash or rejected output.
   cellTrash: "#ff765e",
+  // Neutral trash outline when lineage color mode is active, avoiding confusion with lineage groups.
+  cellTrashLineage: "#60616d",
   // Highlight color for the currently selected or lineage-focused cell.
   cellSelected: "#00e7c8",
   // Stroke for normal cell outlines in the 2D slice overlay.

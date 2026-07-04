@@ -21,6 +21,7 @@ type Props = {
   synthEnabled: boolean;
   cellsEnabled: boolean;
   cellCentersEnabled: boolean;
+  cellOutlineColors?: Record<string, string>;
   realMap: ColorMapId;
   synthMap: ColorMapId;
   realOpacity: number;
@@ -78,6 +79,7 @@ export default function ThreeVolumeViewer({
   synthEnabled,
   cellsEnabled,
   cellCentersEnabled,
+  cellOutlineColors,
   realMap,
   synthMap,
   realOpacity,
@@ -205,7 +207,7 @@ export default function ThreeVolumeViewer({
       addCellCenters(group, cells, base, worldWidth, worldHeight, worldDepth, darkBackground);
     }
     if (cellsEnabled && cells.length) {
-      addCells(group, cells, base, worldWidth, worldHeight, worldDepth);
+      addCells(group, cells, base, worldWidth, worldHeight, worldDepth, cellOutlineColors);
     }
 
     const box = new THREE.Box3(
@@ -320,6 +322,7 @@ export default function ThreeVolumeViewer({
     synthEnabled,
     cellsEnabled,
     cellCentersEnabled,
+    cellOutlineColors,
     realMap,
     synthMap,
     realOpacity,
@@ -1041,6 +1044,7 @@ function addCells(
   worldWidth: number,
   worldHeight: number,
   worldDepth: number,
+  cellOutlineColors?: Record<string, string>,
 ) {
   const maxCellZ = cells.reduce((max, cell) => Math.max(max, Number(cell.z) || 0), 0);
   const zScale = Math.max(volume.depth - 1, maxCellZ, 1);
@@ -1048,8 +1052,10 @@ function addCells(
   const cellSpaceHeight = Math.max(1, volume.sourceHeight);
   for (const cell of cells) {
     const geometry = new THREE.SphereGeometry(1, 18, 12);
+    const lineageColorMode = cellOutlineColors !== undefined;
+    const trashColor = lineageColorMode ? uiPalette.cellTrashLineage : uiPalette.cellTrash;
     const material = new THREE.MeshBasicMaterial({
-      color: cell.isTrash ? uiPalette.cellTrash : uiPalette.cellNormal,
+      color: cellOutlineColors?.[cell.name] ?? (cell.isTrash ? trashColor : uiPalette.cellNormal),
       wireframe: true,
       transparent: true,
       opacity: cell.isTrash ? 0.34 : 0.42,
