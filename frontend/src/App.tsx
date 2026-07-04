@@ -428,6 +428,43 @@ function LiveMonitor({
     previewConfig?.preloadConcurrency ?? 1,
     Boolean(activePointCloudPreload),
   );
+  const isFrameReadyForImmediatePreview = useCallback((frameNumber: number) => {
+    const targetFrame = frames.find((item) => item.t === frameNumber);
+    if (!targetFrame || !selectedJobId) {
+      return false;
+    }
+    if ((cellsEnabled || cellCentersEnabled) && !queryClient.getQueryData(["cells", selectedJobId, targetFrame.t])) {
+      return false;
+    }
+    if (mode === "slice") {
+      const targetRealSliceUrl = getSlicePreviewUrl(selectedJobId, targetFrame.t, "real", slice, previewConfig, getLayerUrl(targetFrame.layers.realTiff));
+      const targetSynthSliceUrl = getSlicePreviewUrl(selectedJobId, targetFrame.t, "synth", slice, previewConfig, getLayerUrl(targetFrame.layers.synthTiff));
+      return isSlicePreviewReady(queryClient, realEnabled, targetRealSliceUrl) &&
+        isSlicePreviewReady(queryClient, synthEnabled, targetSynthSliceUrl);
+    }
+    const targetRealPointCloudUrl = getPointCloudLayerUrl(targetFrame.layers.realPointCloud);
+    const targetSynthPointCloudUrl = getPointCloudLayerUrl(targetFrame.layers.synthPointCloud);
+    if (targetRealPointCloudUrl || targetSynthPointCloudUrl) {
+      return isPointCloudPreviewReady(queryClient, pointCloudPreload.volumes, realEnabled, targetRealPointCloudUrl) &&
+        isPointCloudPreviewReady(queryClient, pointCloudPreload.volumes, synthEnabled, targetSynthPointCloudUrl);
+    }
+    return isVolumePreviewReady(preload.volumes, realEnabled, getLayerUrl(targetFrame.layers.realTiff), previewConfig, previewSignature) &&
+      isVolumePreviewReady(preload.volumes, synthEnabled, getLayerUrl(targetFrame.layers.synthTiff), previewConfig, previewSignature);
+  }, [
+    cellCentersEnabled,
+    cellsEnabled,
+    frames,
+    mode,
+    pointCloudPreload.volumes,
+    preload.volumes,
+    previewConfig,
+    previewSignature,
+    queryClient,
+    realEnabled,
+    selectedJobId,
+    slice,
+    synthEnabled,
+  ]);
   const displayedPreload = activePointCloudPreload ?? (preload.isLoading ? preload : pointCloudPreload);
   const displayedPreloadLabel = activePointCloudPreload ? "Loading" : preload.isLoading ? "Caching" : "Caching point clouds";
   const cellsQuery = useQuery({
@@ -932,13 +969,14 @@ function LiveMonitor({
             frame={activeFrame?.t ?? frame}
             frames={availableFrameNumbers}
             setFrame={(nextFrame) => selectFrame(nextFrame, { manual: true })}
+            canPreviewFrame={isFrameReadyForImmediatePreview}
             slice={slice}
             maxDepth={maxDepth}
             setSlice={(nextSlice) => {
               setManualSliceOverride(true);
               setSlice(nextSlice);
             }}
-            frameControlsDisabled={pointCloudLoading}
+            frameControlsDisabled={false}
           />
           <PreloadProgress preload={displayedPreload} label={displayedPreloadLabel} />
           <div className="viewer-shell">
@@ -1141,6 +1179,41 @@ function getLayerUrl(layer?: LayerEntry): string | undefined {
     return undefined;
   }
   return layer.url;
+}
+
+function isSlicePreviewReady(queryClient: ReturnType<typeof useQueryClient>, layerEnabled: boolean, url: string | undefined): boolean {
+  if (!layerEnabled || !url) {
+    return true;
+  }
+  return queryClient.getQueryData(["slice-preview", url]) !== undefined;
+}
+
+function isPointCloudPreviewReady(
+  queryClient: ReturnType<typeof useQueryClient>,
+  preloadedPointClouds: Record<string, unknown>,
+  layerEnabled: boolean,
+  url: string | undefined,
+): boolean {
+  if (!layerEnabled || !url) {
+    return true;
+  }
+  return preloadedPointClouds[url] !== undefined || queryClient.getQueryData(["point-cloud", url]) !== undefined;
+}
+
+function isVolumePreviewReady(
+  preloadedVolumes: Record<string, unknown>,
+  layerEnabled: boolean,
+  url: string | undefined,
+  previewConfig: PreviewConfig | undefined,
+  previewSignature: string,
+): boolean {
+  if (!layerEnabled || !url) {
+    return true;
+  }
+  if (!previewConfig || !previewSignature) {
+    return false;
+  }
+  return preloadedVolumes[getPreloadKey(url, previewSignature)] !== undefined;
 }
 
 function getPointCloudLayerUrl(layer?: LayerEntry): string | undefined {

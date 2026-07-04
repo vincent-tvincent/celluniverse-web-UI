@@ -11,6 +11,7 @@ type ViewerToolbarProps = {
   frame: number;
   frames: number[];
   setFrame: (frame: number) => void;
+  canPreviewFrame?: (frame: number) => boolean;
   slice: number;
   maxDepth: number;
   setSlice: (slice: number) => void;
@@ -22,6 +23,7 @@ export default function ViewerToolbar({
   frame,
   frames,
   setFrame,
+  canPreviewFrame,
   slice,
   maxDepth,
   setSlice,
@@ -150,6 +152,15 @@ export default function ViewerToolbar({
     setSlice(nextSlice);
   };
   const commitDraftFrame = () => setFrameFromIndex(draftFrameIndex);
+  const previewDraftFrame = (index: number) => {
+    const nextIndex = Math.max(0, Math.min(frames.length - 1, Math.round(index)));
+    const nextFrame = frames[nextIndex];
+    setSelectedFrameOffset(0);
+    setDraftFrameIndex(nextIndex);
+    if (nextFrame != null && canPreviewFrame?.(nextFrame)) {
+      setFrame(nextFrame);
+    }
+  };
   const commitDraftSlice = () => {
     window.clearTimeout(sliceCommitTimerRef.current);
     const currentSlice = Number(sliceInputRef.current?.value ?? draftSlice);
@@ -195,10 +206,7 @@ export default function ViewerToolbar({
           style={sliderFillStyle(draftFrameIndex, maxFrameIndex)}
           disabled={frames.length <= 1 || frameControlsDisabled}
           onPointerDown={resetFrameOffsetForSlider}
-          onInput={(event) => {
-            setSelectedFrameOffset(0);
-            setDraftFrameIndex(Number(event.currentTarget.value));
-          }}
+          onInput={(event) => previewDraftFrame(Number(event.currentTarget.value))}
           onPointerUp={commitDraftFrame}
           onKeyUp={commitDraftFrame}
           onBlur={commitDraftFrame}
