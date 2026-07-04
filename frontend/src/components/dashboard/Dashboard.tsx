@@ -482,6 +482,7 @@ export default function Dashboard({
               <NewJobPanel
                 datasetSources={datasetSources}
                 csvPresets={initialCsvQuery.data ?? []}
+                jobs={jobs}
                 seedDatasetId={seedDatasetId}
                 editingJobId={editingJobId}
                 onTransferProgress={showTransferProgress}
@@ -1054,6 +1055,7 @@ function DatasetItem({
 function NewJobPanel({
   datasetSources,
   csvPresets,
+  jobs,
   seedDatasetId,
   editingJobId,
   onTransferProgress,
@@ -1062,6 +1064,7 @@ function NewJobPanel({
 }: {
   datasetSources: DatasetSource[];
   csvPresets: InitialCsvPreset[];
+  jobs: JobStatus[];
   seedDatasetId: string;
   editingJobId: string | null;
   onTransferProgress?: (direction: DashboardTransfer["direction"], label: string, progress: TransferProgress) => void;
@@ -1074,6 +1077,9 @@ function NewJobPanel({
   const [lastFrame, setLastFrame] = useState(0);
   const [initialCsvPath, setInitialCsvPath] = useState("");
   const [initialCsvFile, setInitialCsvFile] = useState<File | null>(null);
+  const [startMode, setStartMode] = useState<"initial" | "resume">("initial");
+  const [resumeSourceJobId, setResumeSourceJobId] = useState("");
+  const [resumeFromFrame, setResumeFromFrame] = useState<number | null>(null);
   const [moduleId] = useState(DEFAULT_MODULE_ID);
   const [overrides, setOverrides] = useState<Record<string, unknown>>({});
   const [yamlText, setYamlText] = useState("");
@@ -1082,6 +1088,7 @@ function NewJobPanel({
   const [formError, setFormError] = useState<string | null>(null);
 
   const pipelineMode = typeof overrides["pipeline.mode"] === "string" ? String(overrides["pipeline.mode"]) : undefined;
+  const resumeMode = startMode === "resume";
   const moduleQuery = useQuery({ queryKey: ["parameter-module", moduleId], queryFn: () => getParameterModule(moduleId) });
   const yamlQuery = useQuery({
     queryKey: ["base-yaml", moduleId, pipelineMode ?? "default"],
@@ -1097,15 +1104,23 @@ function NewJobPanel({
     queryFn: () => getJobEffectiveConfig(editingJobId!),
     enabled: Boolean(editingJobId),
   });
+  const resumeSourceRequestQuery = useQuery({
+    queryKey: ["job-request", resumeSourceJobId],
+    queryFn: () => getJobRequest(resumeSourceJobId),
+    enabled: resumeMode && Boolean(resumeSourceJobId) && !editingJobId,
+  });
   const createMutation = useMutation({ mutationFn: createJob });
   const updateMutation = useMutation({ mutationFn: ({ jobId, payload }: { jobId: string; payload: CreateJobPayload }) => updatePreparedJob(jobId, payload) });
 
   const selectedDataset = datasetSources.find((dataset) => dataset.id === datasetId);
+  const resumableJobs = useMemo(() => jobs.filter((job) => job.id !== editingJobId && getLatestResumeFrame(job) !== null), [editingJobId, jobs]);
+  const resumeSourceJob = resumableJobs.find((job) => job.id === resumeSourceJobId) ?? null;
+  const resumeFrameMax = resumeSourceJob ? getLatestResumeFrame(resumeSourceJob) : null;
 
   useEffect(() => setDatasetId(seedDatasetId), [seedDatasetId]);
 
   useEffect(() => {
-    if (!selectedDataset || editingJobId) return;
+    if (!selectedDataset || editingJobId || resumeMode) return;
     if (selectedDataset.kind === "local") {
       setFirstFrame(selectedDataset.local.firstFrame);
       setLastFrame(selectedDataset.local.lastFrame);
@@ -1113,12 +1128,12 @@ function NewJobPanel({
       setFirstFrame(0);
       setLastFrame(Math.max(0, selectedDataset.upload.fileCount - 1));
     }
-  }, [editingJobId, selectedDataset]);
+  }, [editingJobId, resumeMode, selectedDataset]);
 
   useEffect(() => {
-    if (!csvPresets.length || initialCsvPath || initialCsvFile) return;
+    if (resumeMode || !csvPresets.length || initialCsvPath || initialCsvFile) return;
     setInitialCsvPath(csvPresets[0].path);
-  }, [csvPresets, initialCsvFile, initialCsvPath]);
+  }, [csvPresets, initialCsvFile, initialCsvPath, resumeMode]);
 
   useEffect(() => {
     if (!moduleQuery.data) return;
@@ -1148,6 +1163,9 @@ function NewJobPanel({
     setLastFrame(request.lastFrame ?? 0);
     setInitialCsvPath(request.initialCsvPath ?? "");
     setInitialCsvFile(null);
+    setStartMode(request.resumeSourceJobId ? "resume" : "initial");
+    setResumeSourceJobId(request.resumeSourceJobId ?? "");
+    setResumeFromFrame(request.resumeFromFrame ?? null);
     setOverrides(request.overrides ?? {});
     const match = datasetSources.find((dataset) => (
       dataset.kind === "upload"
@@ -1163,6 +1181,55 @@ function NewJobPanel({
     setYamlText(editYamlQuery.data);
   }, [editYamlQuery.data, yamlTouched]);
 
+  useEffect(() => {
+    const request = resumeSourceRequestQuery.data;
+    if (!request || editingJobId) return;
+    const match = datasetSources.find((dataset) => (
+      dataset.kind === "upload"
+        ? dataset.upload.uploadId === request.datasetId
+        : dataset.local.inputPath === request.inputPath
+    ));
+    if (match) setDatasetId(match.id);
+    if (request.initialCsvPath) {
+      setInitialCsvPath(request.initialCsvPath);
+      setInitialCsvFile(null);
+    }
+  }, [datasetSources, editingJobId, resumeSourceRequestQuery.data]);
+
+  const selectStartMode = (mode: "initial" | "resume") => {
+    setStartMode(mode);
+    if (mode === "initial") {
+      setResumeSourceJobId("");
+      setResumeFromFrame(null);
+    } else {
+      setInitialCsvFile(null);
+    }
+  };
+
+  const selectResumeSourceJob = (jobId: string) => {
+    setResumeSourceJobId(jobId);
+    if (!jobId) {
+      setResumeFromFrame(null);
+      return;
+    }
+    const sourceJob = jobs.find((job) => job.id === jobId);
+    const nextResumeFrame = sourceJob ? getLatestResumeFrame(sourceJob) : null;
+    setResumeFromFrame(nextResumeFrame);
+    if (nextResumeFrame !== null) {
+      setFirstFrame(nextResumeFrame);
+      setLastFrame(Math.max(nextResumeFrame, sourceJob?.lastFrame ?? nextResumeFrame));
+      if (!label.trim() && sourceJob) {
+        setLabel(`Resume of ${sourceJob.label || sourceJob.id}`);
+      }
+    }
+  };
+
+  const updateResumeFrame = (frame: number) => {
+    setResumeFromFrame(frame);
+    setFirstFrame(frame);
+    if (lastFrame < frame) setLastFrame(frame);
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setFormError(null);
@@ -1170,13 +1237,27 @@ function NewJobPanel({
       setFormError("Select a dataset first.");
       return;
     }
-    if (!initialCsvPath && !initialCsvFile) {
+    if (!resumeMode && !initialCsvPath && !initialCsvFile) {
       setFormError("Select or upload an initial CSV.");
       return;
     }
     if (lastFrame < firstFrame) {
       setFormError("Last frame must be greater than or equal to first frame.");
       return;
+    }
+    if (resumeMode) {
+      if (!resumeSourceJob || resumeFromFrame === null) {
+        setFormError("Select a source job and resume frame.");
+        return;
+      }
+      if (firstFrame !== resumeFromFrame) {
+        setFormError("First frame must match the resume frame.");
+        return;
+      }
+      if (!hasCheckpointForResumeFrame(resumeSourceJob, resumeFromFrame)) {
+        setFormError(`Source job needs a complete checkpoint at frame ${resumeFromFrame - 1}.`);
+        return;
+      }
     }
     const yamlError = validateYamlSanity(yamlText);
     if (yamlError) {
@@ -1185,7 +1266,7 @@ function NewJobPanel({
       return;
     }
     try {
-      const initialUpload = initialCsvFile
+      const initialUpload = !resumeMode && initialCsvFile
         ? await uploadInitialCsv(initialCsvFile, (progress) => onTransferProgress?.("upload", "uploading initial CSV", progress))
         : null;
       const shouldUploadConfigYaml = Boolean(yamlTouched && yamlText.trim());
@@ -1203,9 +1284,11 @@ function NewJobPanel({
         type: "tracking",
         firstFrame,
         lastFrame,
-        initialCsvPath: initialUpload ? null : initialCsvPath,
-        initialCsvUploadId: initialUpload?.uploadId ?? null,
+        initialCsvPath: resumeMode ? null : (initialUpload ? null : initialCsvPath),
+        initialCsvUploadId: resumeMode ? null : (initialUpload?.uploadId ?? null),
         configYamlUploadId: configUpload?.uploadId ?? null,
+        resumeSourceJobId: resumeMode ? resumeSourceJobId || null : null,
+        resumeFromFrame: resumeMode ? resumeFromFrame : null,
         parameterModuleId: moduleId,
         overrides,
         autoStart: false,
@@ -1231,9 +1314,9 @@ function NewJobPanel({
   return (
     <form className="new-job-form" onSubmit={submit}>
       <div className="form-grid two-column-form">
-        <label>
+        <label title={resumeMode ? "Resume jobs inherit the source job dataset." : undefined}>
           <span>Dataset</span>
-          <select value={datasetId} onChange={(event) => setDatasetId(event.target.value)}>
+          <select value={datasetId} disabled={resumeMode} onChange={(event) => setDatasetId(event.target.value)}>
             <option value="">Select dataset</option>
             {datasetSources.map((dataset) => (
               <option key={dataset.id} value={dataset.id}>{dataset.label} ({dataset.kind})</option>
@@ -1244,26 +1327,95 @@ function NewJobPanel({
           <span>Job Name</span>
           <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="optional" />
         </label>
-        <label>
+        <label title={resumeMode ? "Resume jobs start from the selected resume frame." : undefined}>
           <span>First Frame</span>
-          <input type="number" value={firstFrame} onChange={(event) => setFirstFrame(Number(event.target.value))} />
+          <input
+            type="number"
+            value={firstFrame}
+            disabled={resumeMode}
+            onChange={(event) => setFirstFrame(Number(event.target.value))}
+          />
         </label>
         <label>
           <span>Last Frame</span>
           <input type="number" value={lastFrame} onChange={(event) => setLastFrame(Number(event.target.value))} />
         </label>
-        <label>
-          <span>Initial CSV</span>
-          <select value={initialCsvPath} onChange={(event) => { setInitialCsvPath(event.target.value); setInitialCsvFile(null); }}>
-            <option value="">Select preset</option>
-            {csvPresets.map((preset) => <option key={preset.id} value={preset.path}>{preset.label}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>Upload CSV</span>
-          <input type="file" accept=".csv" onChange={(event) => setInitialCsvFile(event.target.files?.[0] ?? null)} />
-        </label>
       </div>
+
+      <fieldset className="startup-panel">
+        <legend>Startup</legend>
+        <div className="segmented-control start-mode-toggle" role="group" aria-label="Job startup mode">
+          <button
+            type="button"
+            className={startMode === "initial" ? "active" : undefined}
+            onClick={() => selectStartMode("initial")}
+          >
+            Initial CSV
+          </button>
+          <button
+            type="button"
+            className={resumeMode ? "active" : undefined}
+            onClick={() => selectStartMode("resume")}
+          >
+            Resume Source
+          </button>
+        </div>
+        {resumeMode ? (
+          <div className="parameter-group parameter-group-runtime">
+            <div className="form-grid three-column-form">
+              <label>
+                <span>Source Job</span>
+                <select value={resumeSourceJobId} onChange={(event) => selectResumeSourceJob(event.target.value)}>
+                  <option value="">Select source job</option>
+                  {resumableJobs.map((job) => (
+                    <option key={job.id} value={job.id}>{formatResumeJobOption(job)}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Resume Frame</span>
+                <input
+                  type="number"
+                  value={resumeFromFrame ?? ""}
+                  min={resumeSourceJob ? resumeSourceJob.firstFrame + 1 : undefined}
+                  max={resumeFrameMax ?? undefined}
+                  disabled={!resumeSourceJobId}
+                  onChange={(event) => updateResumeFrame(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                <span>Checkpoint</span>
+                <input
+                  value={resumeFromFrame !== null ? `frame_${String(resumeFromFrame - 1).padStart(3, "0")}.txt` : "none"}
+                  readOnly
+                  disabled={!resumeSourceJobId}
+                />
+              </label>
+            </div>
+            <p className="dashboard-muted">Resume jobs load metadata from the previous checkpoint in the source job output.</p>
+          </div>
+        ) : (
+          <div className="parameter-group parameter-group-runtime">
+            <div className="form-grid two-column-form">
+              <label>
+                <span>Initial CSV</span>
+                <select
+                  value={initialCsvPath}
+                  onChange={(event) => { setInitialCsvPath(event.target.value); setInitialCsvFile(null); }}
+                >
+                  <option value="">Select preset</option>
+                  {csvPresets.map((preset) => <option key={preset.id} value={preset.path}>{preset.label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Upload CSV</span>
+                <input type="file" accept=".csv" onChange={(event) => setInitialCsvFile(event.target.files?.[0] ?? null)} />
+              </label>
+            </div>
+            <p className="dashboard-muted">Initial jobs start from the selected CSV or an uploaded CSV copy.</p>
+          </div>
+        )}
+      </fieldset>
 
       <fieldset className="simple-config-panel">
         <legend>Simple Configuration</legend>
@@ -1304,13 +1456,34 @@ function NewJobPanel({
 
       {formError ? <p className="dashboard-error">{formError}</p> : null}
       <div className="form-actions">
-        <button className="action-button strong-action-button prepared-job-submit-button" type="submit" disabled={pending || !selectedDataset}>
+        <button className="action-button prepared-job-submit-button" type="submit" disabled={pending || !selectedDataset}>
           {pending ? <LoaderCircle size={15} /> : <FileCog size={15} />}
           {editingJobId ? "Save Prepared Job" : "Create Prepared Job"}
         </button>
       </div>
     </form>
   );
+}
+
+function getLatestResumeFrame(job: JobStatus): number | null {
+  const checkpoints = job.outputReady?.checkpointFrames ?? [];
+  if (!checkpoints.length) return null;
+  const latestCheckpoint = Math.max(...checkpoints);
+  const nextFrame = latestCheckpoint + 1;
+  if (nextFrame <= job.firstFrame) return null;
+  return nextFrame;
+}
+
+function hasCheckpointForResumeFrame(job: JobStatus, resumeFrame: number): boolean {
+  return (job.outputReady?.checkpointFrames ?? []).includes(resumeFrame - 1);
+}
+
+function formatResumeJobOption(job: JobStatus): string {
+  const frame = getLatestResumeFrame(job);
+  const label = job.label || job.id;
+  return frame === null
+    ? `${label} (${job.id})`
+    : `${label} (${job.id}) - resume ${frame}`;
 }
 
 function isRuntimeGroup(group: { id: string; label: string }): boolean {

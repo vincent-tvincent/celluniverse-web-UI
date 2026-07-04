@@ -34,6 +34,8 @@ class CreateJobRequest(BaseModel):
     initialCsvUploadId: str | None = None
     configYamlPath: str | None = None
     configYamlUploadId: str | None = None
+    resumeSourceJobId: str | None = None
+    resumeFromFrame: int | None = None
     parameterModuleId: str = "debug-basic"
     overrides: dict[str, Any] = Field(default_factory=dict)
     autoStart: bool = False
@@ -69,6 +71,7 @@ class JobStatus(BaseModel):
     resumeAvailable: bool = False
     resumeFromFrame: int | None = None
     resumeSourceDir: str | None = None
+    resumeSourceJobId: str | None = None
 
 
 class ClientConfig(BaseModel):

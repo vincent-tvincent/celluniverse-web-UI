@@ -22,6 +22,7 @@ export type JobStatus = {
   resumeAvailable?: boolean;
   resumeFromFrame?: number | null;
   resumeSourceDir?: string | null;
+  resumeSourceJobId?: string | null;
   pid?: number | null;
   error?: string | null;
   createdAt?: string;
@@ -196,6 +197,8 @@ export type CreateJobPayload = {
   initialCsvUploadId?: string | null;
   configYamlPath?: string | null;
   configYamlUploadId?: string | null;
+  resumeSourceJobId?: string | null;
+  resumeFromFrame?: number | null;
   parameterModuleId?: string;
   overrides?: Record<string, unknown>;
   autoStart?: boolean;

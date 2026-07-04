@@ -2957,6 +2957,14 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   padding: 0 10px;
 }
 
+.form-grid input:disabled,
+.form-grid select:disabled,
+.confirm-dialog input:disabled {
+  color: var(--color-control-disabled);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 .form-grid input:focus,
 .form-grid select:focus,
 .confirm-dialog input:focus,
@@ -2966,6 +2974,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 }
 
 .simple-config-panel,
+.startup-panel,
 .advanced-yaml-panel {
   padding: 12px;
   color: var(--color-text-strong);
@@ -2974,16 +2983,28 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   border-radius: var(--radius-panel);
 }
 
-.simple-config-panel {
+.simple-config-panel,
+.startup-panel {
   display: grid;
   gap: 10px;
 }
 
-.simple-config-panel legend {
+.simple-config-panel legend,
+.startup-panel legend {
   color: var(--color-heading);
   font-size: 12px;
   font-weight: 650;
   text-transform: uppercase;
+}
+
+.start-mode-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.start-mode-toggle button {
+  justify-content: center;
 }
 
 .parameter-group {

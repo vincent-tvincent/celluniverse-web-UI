@@ -65,6 +65,7 @@ class JobManager:
         frame_count = request.lastFrame - request.firstFrame + 1
         if frame_count > self.config.limits.maxFrameCount:
             raise ValueError(f"frame count exceeds limit: {frame_count}")
+        requested_resume = self._resolve_requested_resume(request)
 
         job_id = f"job_{uuid.uuid4().hex[:12]}"
         label = request.label or f"{request.type.value} {request.firstFrame}-{request.lastFrame}"
@@ -84,6 +85,10 @@ class JobManager:
             lastFrame=request.lastFrame,
             currentFrame=request.firstFrame,
             totalFrames=frame_count,
+            resumeAvailable=False,
+            resumeFromFrame=requested_resume["resumeFromFrame"] if requested_resume else None,
+            resumeSourceDir=requested_resume["resumeSourceDir"] if requested_resume else None,
+            resumeSourceJobId=requested_resume["resumeSourceJobId"] if requested_resume else None,
         )
         self._write_status(status)
         self._event(job_id, "job.prepared", status.model_dump(mode="json"))
@@ -164,6 +169,7 @@ class JobManager:
         frame_count = request.lastFrame - request.firstFrame + 1
         if frame_count > self.config.limits.maxFrameCount:
             raise ValueError(f"frame count exceeds limit: {frame_count}")
+        requested_resume = self._resolve_requested_resume(request)
 
         job_dir = self.job_dir(job_id)
         shutil.rmtree(job_dir / "input", ignore_errors=True)
@@ -184,6 +190,10 @@ class JobManager:
             "error": None,
             "partialOutputsAvailable": False,
             "outputReady": {},
+            "resumeAvailable": False,
+            "resumeFromFrame": requested_resume["resumeFromFrame"] if requested_resume else None,
+            "resumeSourceDir": requested_resume["resumeSourceDir"] if requested_resume else None,
+            "resumeSourceJobId": requested_resume["resumeSourceJobId"] if requested_resume else None,
         })
         self._write_status_dict(job_id, status)
         self._event(job_id, "job.updated", status)
@@ -195,6 +205,9 @@ class JobManager:
             raise KeyError(job_id)
         if status.get("state") != JobState.prepared.value:
             raise ValueError("only prepared jobs can be started")
+        prepared_resume_from = status.get("resumeFromFrame") if isinstance(status.get("resumeFromFrame"), int) else None
+        prepared_resume_source = status.get("resumeSourceDir") if prepared_resume_from is not None else None
+        prepared_resume_source_job = status.get("resumeSourceJobId") if prepared_resume_from is not None else None
         status.update({
             "state": JobState.queued.value,
             "startedAt": None,
@@ -202,10 +215,11 @@ class JobManager:
             "pid": None,
             "exitCode": None,
             "error": None,
-            "currentFrame": status.get("firstFrame"),
+            "currentFrame": prepared_resume_from if prepared_resume_from is not None else status.get("firstFrame"),
             "resumeAvailable": False,
-            "resumeFromFrame": None,
-            "resumeSourceDir": None,
+            "resumeFromFrame": prepared_resume_from,
+            "resumeSourceDir": prepared_resume_source,
+            "resumeSourceJobId": prepared_resume_source_job,
         })
         self._write_status_dict(job_id, status)
         self._event(job_id, "job.queued", status)
@@ -395,9 +409,10 @@ class JobManager:
         stdout_path = job_dir / "stdout.log"
         stderr_path = job_dir / "stderr.log"
         resume_from = status.get("resumeFromFrame") if isinstance(status.get("resumeFromFrame"), int) else None
+        resume_source_dir = status.get("resumeSourceDir") or str(job_dir / "output")
         if resume_from and stdout_path.exists():
             with stdout_path.open("a", encoding="utf-8") as handle:
-                handle.write(f"\n[Web Resume] resume_from={resume_from} resume_source_dir={job_dir / 'output'}\n")
+                handle.write(f"\n[Web Resume] resume_from={resume_from} resume_source_dir={resume_source_dir}\n")
             stdout_offset = stdout_path.stat().st_size
             stderr_offset = stderr_path.stat().st_size if stderr_path.exists() else 0
         else:
@@ -468,7 +483,8 @@ class JobManager:
     def _materialize_inputs(self, job_id: str, request: CreateJobRequest) -> None:
         job_dir = self.job_dir(job_id)
         input_path = self._resolve_job_input(job_dir, request)
-        initial_csv = self._resolve_initial_csv(job_dir, request)
+        requested_resume = self._resolve_requested_resume(request)
+        initial_csv = self._resolve_initial_csv(job_dir, request, requested_resume)
         effective_config = job_dir / "effective-config.yaml"
         module = self.exposed_registry.load_module(request.parameterModuleId)
         base_config = self._resolve_base_config(request, module)
@@ -481,6 +497,9 @@ class JobManager:
             config_search_dir=self.config.celluniverse.config_dir,
             use_pipeline_base_config=not has_user_config,
         )
+
+        if requested_resume:
+            self._write_resume_config(job_id, requested_resume["resumeFromFrame"], Path(requested_resume["resumeSourceDir"]))
 
         argv = build_tracking_argv(
             self.config,
@@ -500,11 +519,15 @@ class JobManager:
             raise ValueError("inputPath or datasetId is required")
         return validate_input_reference(request.inputPath, self.config.security.allowedInputRoots)
 
-    def _resolve_initial_csv(self, job_dir: Path, request: CreateJobRequest) -> Path:
+    def _resolve_initial_csv(self, job_dir: Path, request: CreateJobRequest, requested_resume: dict[str, Any] | None = None) -> Path:
         if request.initialCsvUploadId:
             source = self.dataset_service.upload_file_path(request.initialCsvUploadId)
         elif request.initialCsvPath:
             source = ensure_inside_roots(Path(request.initialCsvPath), self.config.security.allowedInitialCsvRoots)
+        elif requested_resume:
+            source = self.job_dir(requested_resume["resumeSourceJobId"]) / "initial.csv"
+            if not source.exists():
+                raise ValueError("resume source job is missing its stored initial.csv")
         else:
             raise ValueError("initialCsvPath or initialCsvUploadId is required")
         dest = job_dir / "initial.csv"
@@ -521,7 +544,43 @@ class JobManager:
             return ensure_inside_roots(base, self.config.security.allowedConfigRoots)
         return self.config.celluniverse.celluniverseCppRoot / base
 
-    def _write_resume_config(self, job_id: str, resume_from: int) -> None:
+    def _resolve_requested_resume(self, request: CreateJobRequest) -> dict[str, Any] | None:
+        has_source = bool(request.resumeSourceJobId)
+        has_frame = request.resumeFromFrame is not None
+        if not has_source and not has_frame:
+            return None
+        if not has_source or not has_frame:
+            raise ValueError("resume source job and resume frame must be provided together")
+        source_job_id = str(request.resumeSourceJobId or "").strip()
+        if not source_job_id:
+            raise ValueError("resume source job is required")
+        resume_from = int(request.resumeFromFrame)
+        if request.firstFrame != resume_from:
+            raise ValueError("firstFrame must match resumeFromFrame for a resumed job")
+        if request.lastFrame < resume_from:
+            raise ValueError("lastFrame must be greater than or equal to resumeFromFrame")
+
+        source_status = self.get_status(source_job_id)
+        if not source_status:
+            raise ValueError(f"resume source job does not exist: {source_job_id}")
+        source_first = int(source_status.get("firstFrame", 0))
+        source_last = int(source_status.get("lastFrame", resume_from))
+        if resume_from <= source_first:
+            raise ValueError("resumeFromFrame must be after the source job's first frame")
+        if resume_from > source_last + 1:
+            raise ValueError("resumeFromFrame is beyond the source job range")
+
+        source_job_dir = self.job_dir(source_job_id)
+        checkpoint_frame = resume_from - 1
+        if not self._checkpoint_has_resume_state(source_job_dir, checkpoint_frame, source_last):
+            raise ValueError(f"source job has no complete resume checkpoint for frame {checkpoint_frame}")
+        return {
+            "resumeSourceJobId": source_job_id,
+            "resumeFromFrame": resume_from,
+            "resumeSourceDir": str(source_job_dir / "output"),
+        }
+
+    def _write_resume_config(self, job_id: str, resume_from: int, resume_source_dir: Path | None = None) -> None:
         job_dir = self.job_dir(job_id)
         config_path = job_dir / "effective-config.yaml"
         if not config_path.exists():
@@ -534,7 +593,7 @@ class JobManager:
         if not isinstance(simulation, dict):
             raise ValueError("effective config simulation block must be a mapping")
         simulation["resume_from"] = resume_from
-        simulation["resume_source_dir"] = str(job_dir / "output")
+        simulation["resume_source_dir"] = str(resume_source_dir or (job_dir / "output"))
         with config_path.open("w", encoding="utf-8") as handle:
             yaml.safe_dump(data, handle, sort_keys=False)
 
