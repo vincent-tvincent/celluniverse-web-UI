@@ -248,6 +248,8 @@ export type LineageGraph = {
   activeByFrame?: Record<string, string[]>;
   updatedAt?: number | null;
   sourceSize?: number | null;
+  resumeFromFrame?: number | null;
+  resumeSourceJobId?: string | null;
 };
 
 export type LineageLayoutNode = {
@@ -276,6 +278,8 @@ export type LineageLayout = {
   rings: { frame: number; radius: number }[];
   nodes: Record<string, LineageLayoutNode>;
   edges: LineageEdge[];
+  resumeFromFrame?: number | null;
+  resumeSourceJobId?: string | null;
 };
 
 export type LineageFrameSnapshot = {

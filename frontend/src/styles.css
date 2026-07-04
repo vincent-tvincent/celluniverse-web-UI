@@ -1660,6 +1660,16 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
   vector-effect: non-scaling-stroke;
 }
 
+.lineage-ring.resume-ring circle {
+  stroke: var(--color-cyan);
+  stroke-width: 2;
+}
+
+.lineage-ring.resume-ring text {
+  fill: var(--color-cyan);
+  font-weight: 700;
+}
+
 .lineage-ring text {
   fill: var(--color-text-dim);
   font-size: 10px;

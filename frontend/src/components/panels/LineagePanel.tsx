@@ -27,6 +27,8 @@ type PanState = { x: number; y: number };
 
 const LINEAGE_MIN_ZOOM = 0.18;
 const LINEAGE_MAX_ZOOM = 18;
+const LINEAGE_MIN_NODE_ARC_SPACING = 24;
+const LINEAGE_MIN_RING_GAP = 18;
 
 export default function LineagePanel({
   graph,
@@ -53,7 +55,10 @@ export default function LineagePanel({
   const dragRef = useRef<{ id: number; x: number; y: number; pan: PanState } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const displayLayout = useMemo(() => resolveLineageLayout(layout, graph), [layout, graph]);
-  const sampledRings = useMemo(() => sampleRings(displayLayout?.rings ?? []), [displayLayout?.rings]);
+  const sampledRings = useMemo(
+    () => sampleRings(displayLayout?.rings ?? [], displayLayout?.resumeFromFrame ?? null),
+    [displayLayout?.resumeFromFrame, displayLayout?.rings],
+  );
   const edgePaths = useMemo(() => buildEdgePaths(displayLayout, snapshot), [displayLayout, snapshot]);
   const extent = useMemo(
     () => Math.max(220, ...(displayLayout?.rings ?? []).map((ring) => ring.radius + 80)),
@@ -184,7 +189,10 @@ export default function LineagePanel({
         >
           <g transform={`translate(${pan.x} ${pan.y}) scale(${scale})`}>
             {sampledRings.map((ring) => (
-              <g key={ring.frame} className="lineage-ring">
+              <g
+                key={ring.frame}
+                className={`lineage-ring ${ring.frame === displayLayout?.resumeFromFrame ? "resume-ring" : ""}`}
+              >
                 <circle cx={0} cy={0} r={ring.radius} />
                 {ring.label ? (
                   <text x={ring.radius + 7} y={-5}>
@@ -326,11 +334,15 @@ function resolveLineageLayout(
   }
   const sectorWidth = (Math.PI * 2) / roots.length;
   const gap = Math.min((Math.PI / 180) * 18, sectorWidth * 0.24);
+  const radiusRequirements = new Map<number, number>();
+
   for (const [rootIndex, root] of roots.entries()) {
     const start = -Math.PI + rootIndex * sectorWidth + gap / 2;
     const end = -Math.PI + (rootIndex + 1) * sectorWidth - gap / 2;
     const lanes = orderedLineageLanes(root, graphNodes, nodes, new Set()) || [root];
-    const width = end - start;
+    const width = Math.max(0.001, end - start);
+    const countsByRadius = new Map<number, number>();
+
     lanes.forEach((nodeId, laneIndex) => {
       const node = nodes[nodeId];
       if (!node) {
@@ -338,11 +350,48 @@ function resolveLineageLayout(
       }
       const angle = start + width * ((laneIndex + 0.5) / lanes.length);
       node.angle = angle;
-      node.x = node.radius * Math.cos(angle);
-      node.y = node.radius * Math.sin(angle);
+      const key = lineageRadiusKey(node);
+      countsByRadius.set(key, (countsByRadius.get(key) ?? 0) + 1);
+    });
+
+    countsByRadius.forEach((count, key) => {
+      const requiredRadius = (count * LINEAGE_MIN_NODE_ARC_SPACING) / width;
+      radiusRequirements.set(key, Math.max(radiusRequirements.get(key) ?? 0, requiredRadius));
     });
   }
-  return { ...layout, nodes };
+
+  const expandedRings: LineageLayout["rings"] = [];
+  const expandedRadiusByKey = new Map<number, number>();
+  const sortedRings = [...layout.rings].sort((a, b) => a.frame - b.frame);
+  let previousRadius = 0;
+  for (const ring of sortedRings) {
+    const requiredRadius = radiusRequirements.get(ring.frame) ?? 0;
+    const radius = Math.max(
+      ring.radius,
+      requiredRadius,
+      expandedRings.length ? previousRadius + LINEAGE_MIN_RING_GAP : ring.radius,
+    );
+    expandedRings.push({ ...ring, radius });
+    expandedRadiusByKey.set(ring.frame, radius);
+    previousRadius = radius;
+  }
+
+  Object.values(nodes).forEach((node) => {
+    const key = lineageRadiusKey(node);
+    const radius = expandedRadiusByKey.get(key) ?? Math.max(node.radius, radiusRequirements.get(key) ?? 0);
+    node.radius = radius;
+    node.x = radius * Math.cos(node.angle);
+    node.y = radius * Math.sin(node.angle);
+  });
+
+  return { ...layout, rings: expandedRings.length ? expandedRings : layout.rings, nodes };
+}
+
+function lineageRadiusKey(node: LineageLayout["nodes"][string]): number {
+  if (Number.isFinite(node.radiusFrame)) {
+    return node.radiusFrame;
+  }
+  return Math.round(node.radius);
 }
 
 function orderedLineageLanes(
@@ -448,19 +497,24 @@ function radiusForLineageFrame(frame: number | undefined, layout: LineageLayout)
   return innerRadius + Math.max(0, frame - layout.firstFrame) * layout.ringSpacing;
 }
 
-function sampleRings(rings: LineageLayout["rings"]): Array<LineageLayout["rings"][number] & { label: boolean }> {
+function sampleRings(
+  rings: LineageLayout["rings"],
+  resumeFromFrame: number | null,
+): Array<LineageLayout["rings"][number] & { label: boolean }> {
   if (rings.length <= 80) {
     return rings.map((ring, index) => ({
       ...ring,
-      label: index === 0 || index === rings.length - 1 || ring.frame % 10 === 0,
+      label: ring.frame === resumeFromFrame || index === 0 || index === rings.length - 1 || ring.frame % 10 === 0,
     }));
   }
   const step = Math.max(1, Math.ceil(rings.length / 80));
   return rings
-    .filter((ring, index) => index === 0 || index === rings.length - 1 || index % step === 0)
+    .filter((ring, index) => (
+      ring.frame === resumeFromFrame || index === 0 || index === rings.length - 1 || index % step === 0
+    ))
     .map((ring, index, sampled) => ({
       ...ring,
-      label: index === 0 || index === sampled.length - 1 || ring.frame % 20 === 0,
+      label: ring.frame === resumeFromFrame || index === 0 || index === sampled.length - 1 || ring.frame % 20 === 0,
     }));
 }
 
