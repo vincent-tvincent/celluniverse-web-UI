@@ -24,6 +24,9 @@ export type JobStatus = {
   resumeSourceDir?: string | null;
   resumeSourceJobId?: string | null;
   pid?: number | null;
+  runner?: "local" | "slurm";
+  slurmJobId?: string | null;
+  slurmState?: string | null;
   error?: string | null;
   createdAt?: string;
   startedAt?: string | null;
@@ -186,6 +189,27 @@ export type ParameterModule = {
   }[];
 };
 
+export type SlurmJobOptions = {
+  enabled: boolean;
+  jobName?: string | null;
+  partition?: string | null;
+  account?: string | null;
+  qos?: string | null;
+  timeLimit: string;
+  cpusPerTask: number;
+  memory: string;
+  nodes: number;
+};
+
+export type SlurmStatus = {
+  available: boolean;
+  sbatch?: string | null;
+  squeue?: string | null;
+  scancel?: string | null;
+  sacct?: string | null;
+  diagnostics: string[];
+};
+
 export type CreateJobPayload = {
   label?: string | null;
   type?: string;
@@ -201,6 +225,8 @@ export type CreateJobPayload = {
   resumeFromFrame?: number | null;
   parameterModuleId?: string;
   overrides?: Record<string, unknown>;
+  runner?: "local" | "slurm";
+  slurm?: SlurmJobOptions;
   autoStart?: boolean;
 };
 

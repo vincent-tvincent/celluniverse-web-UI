@@ -2985,6 +2985,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 
 .simple-config-panel,
 .startup-panel,
+.runner-panel,
 .advanced-yaml-panel {
   padding: 12px;
   color: var(--color-text-strong);
@@ -2994,27 +2995,46 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 }
 
 .simple-config-panel,
-.startup-panel {
+.startup-panel,
+.runner-panel {
   display: grid;
   gap: 10px;
 }
 
 .simple-config-panel legend,
-.startup-panel legend {
+.startup-panel legend,
+.runner-panel legend {
   color: var(--color-heading);
   font-size: 12px;
   font-weight: 650;
   text-transform: uppercase;
 }
 
-.start-mode-toggle {
+.start-mode-toggle,
+.runner-mode-toggle {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   width: 100%;
 }
 
-.start-mode-toggle button {
+.start-mode-toggle button,
+.runner-mode-toggle button {
   justify-content: center;
+}
+
+.slurm-config-group {
+  gap: 12px;
+}
+
+.slurm-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.slurm-status-row p {
+  margin: 4px 0 0;
 }
 
 .parameter-group {

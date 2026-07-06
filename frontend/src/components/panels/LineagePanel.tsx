@@ -19,6 +19,7 @@ type LineagePanelProps = {
   selectedNodeId: string | null;
   labeledNodeId: string | null;
   onSelectNode: (nodeId: string | null) => void;
+  onCloseNodeDetails: () => void;
   onGoToCell: (node: LineageNode) => void;
   onHide: () => void;
 };
@@ -40,6 +41,7 @@ export default function LineagePanel({
   selectedNodeId,
   labeledNodeId,
   onSelectNode,
+  onCloseNodeDetails,
   onGoToCell,
   onHide,
 }: LineagePanelProps) {
@@ -258,7 +260,7 @@ export default function LineagePanel({
             labeled={selectedNode.id === labeledNodeId}
             selectedFrame={frame}
             onGoToCell={() => onGoToCell(selectedNode)}
-            onClose={() => onSelectNode(null)}
+            onClose={onCloseNodeDetails}
           />
         ) : null}
       </div>

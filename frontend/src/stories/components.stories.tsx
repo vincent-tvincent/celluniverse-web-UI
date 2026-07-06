@@ -553,6 +553,10 @@ export const LineagePanelPreview: Story = {
           selectedNodeId={selectedNodeId}
           labeledNodeId={labeledNodeId}
           onSelectNode={setSelectedNodeId}
+          onCloseNodeDetails={() => {
+            setSelectedNodeId(null);
+            setLabeledNodeId(null);
+          }}
           onGoToCell={(node) => setLabeledNodeId(node.id)}
           onHide={() => {}}
         />

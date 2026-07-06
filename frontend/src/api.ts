@@ -12,6 +12,7 @@ import type {
   JobStatus,
   LocalDataset,
   ParameterModule,
+  SlurmStatus,
   LineageFrameSnapshot,
   LineageGraph,
   LineageLayout,
@@ -228,6 +229,14 @@ export function getParameterModule(moduleId: string): Promise<ParameterModule> {
 export function getBaseYaml(moduleId: string, pipelineMode?: string): Promise<{ moduleId: string; path: string; content: string }> {
   const query = pipelineMode ? `?pipelineMode=${encodeURIComponent(pipelineMode)}` : "";
   return requestJson<{ moduleId: string; path: string; content: string }>(`/config/base-yaml/${encodeURIComponent(moduleId)}${query}`);
+}
+
+export function getSlurmStatus(): Promise<SlurmStatus> {
+  return requestJson<SlurmStatus>("/slurm/status");
+}
+
+export function rescanSlurmStatus(): Promise<SlurmStatus> {
+  return requestJson<SlurmStatus>("/slurm/rescan", { method: "POST" });
 }
 
 export async function uploadDataset(

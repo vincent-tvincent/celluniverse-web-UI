@@ -23,6 +23,18 @@ class JobType(str, Enum):
     lineage_tree = "lineage_tree"
 
 
+class SlurmJobOptions(BaseModel):
+    enabled: bool = False
+    jobName: str | None = None
+    partition: str | None = None
+    account: str | None = None
+    qos: str | None = None
+    timeLimit: str = "24:00:00"
+    cpusPerTask: int = Field(default=32, ge=1, le=100)
+    memory: str = "64G"
+    nodes: int = Field(default=1, ge=1, le=4)
+
+
 class CreateJobRequest(BaseModel):
     label: str | None = None
     type: JobType = JobType.tracking
@@ -38,6 +50,8 @@ class CreateJobRequest(BaseModel):
     resumeFromFrame: int | None = None
     parameterModuleId: str = "debug-basic"
     overrides: dict[str, Any] = Field(default_factory=dict)
+    runner: Literal["local", "slurm"] = "local"
+    slurm: SlurmJobOptions = Field(default_factory=SlurmJobOptions)
     autoStart: bool = False
 
 
@@ -63,6 +77,8 @@ class JobStatus(BaseModel):
     totalFrames: int
     progress: float = 0.0
     pid: int | None = None
+    runner: Literal["local", "slurm"] = "local"
+    slurmJobId: str | None = None
     exitCode: int | None = None
     error: str | None = None
     queuePosition: int | None = None
@@ -97,3 +113,12 @@ class EngineStatus(BaseModel):
     scriptsDir: str
     modelsDir: str
     diagnostics: list[str]
+
+
+class SlurmStatus(BaseModel):
+    available: bool
+    sbatch: str | None = None
+    squeue: str | None = None
+    scancel: str | None = None
+    sacct: str | None = None
+    diagnostics: list[str] = Field(default_factory=list)

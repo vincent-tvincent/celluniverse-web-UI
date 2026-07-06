@@ -47,11 +47,13 @@ import {
   getJobEffectiveConfig,
   getJobRequest,
   getParameterModule,
+  getSlurmStatus,
   listDatasetRoots,
   listDatasetUploads,
   listInitialCsvPresets,
   listJobs,
   listLocalDatasets,
+  rescanSlurmStatus,
   resumeJob,
   startJob,
   unarchiveJob,
@@ -1085,10 +1087,20 @@ function NewJobPanel({
   const [yamlText, setYamlText] = useState("");
   const [yamlTouched, setYamlTouched] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [runner, setRunner] = useState<"local" | "slurm">("local");
+  const [slurmJobName, setSlurmJobName] = useState("");
+  const [slurmPartition, setSlurmPartition] = useState("");
+  const [slurmAccount, setSlurmAccount] = useState("");
+  const [slurmQos, setSlurmQos] = useState("");
+  const [slurmTimeLimit, setSlurmTimeLimit] = useState("24:00:00");
+  const [slurmCpus, setSlurmCpus] = useState(32);
+  const [slurmMemory, setSlurmMemory] = useState("64G");
+  const [slurmNodes, setSlurmNodes] = useState(1);
   const [formError, setFormError] = useState<string | null>(null);
 
   const pipelineMode = typeof overrides["pipeline.mode"] === "string" ? String(overrides["pipeline.mode"]) : undefined;
   const resumeMode = startMode === "resume";
+  const slurmMode = runner === "slurm";
   const moduleQuery = useQuery({ queryKey: ["parameter-module", moduleId], queryFn: () => getParameterModule(moduleId) });
   const yamlQuery = useQuery({
     queryKey: ["base-yaml", moduleId, pipelineMode ?? "default"],
@@ -1109,6 +1121,8 @@ function NewJobPanel({
     queryFn: () => getJobRequest(resumeSourceJobId),
     enabled: resumeMode && Boolean(resumeSourceJobId) && !editingJobId,
   });
+  const slurmQuery = useQuery({ queryKey: ["slurm-status"], queryFn: getSlurmStatus, staleTime: 30_000 });
+  const slurmRescanMutation = useMutation({ mutationFn: rescanSlurmStatus });
   const createMutation = useMutation({ mutationFn: createJob });
   const updateMutation = useMutation({ mutationFn: ({ jobId, payload }: { jobId: string; payload: CreateJobPayload }) => updatePreparedJob(jobId, payload) });
 
@@ -1167,6 +1181,15 @@ function NewJobPanel({
     setResumeSourceJobId(request.resumeSourceJobId ?? "");
     setResumeFromFrame(request.resumeFromFrame ?? null);
     setOverrides(request.overrides ?? {});
+    setRunner(request.runner === "slurm" || request.slurm?.enabled ? "slurm" : "local");
+    setSlurmJobName(request.slurm?.jobName ?? "");
+    setSlurmPartition(request.slurm?.partition ?? "");
+    setSlurmAccount(request.slurm?.account ?? "");
+    setSlurmQos(request.slurm?.qos ?? "");
+    setSlurmTimeLimit(request.slurm?.timeLimit ?? "24:00:00");
+    setSlurmCpus(request.slurm?.cpusPerTask ?? 32);
+    setSlurmMemory(request.slurm?.memory ?? "64G");
+    setSlurmNodes(request.slurm?.nodes ?? 1);
     const match = datasetSources.find((dataset) => (
       dataset.kind === "upload"
         ? dataset.upload.uploadId === request.datasetId
@@ -1259,6 +1282,10 @@ function NewJobPanel({
         return;
       }
     }
+    if (slurmMode && !slurmQuery.data?.available) {
+      setFormError("Slurm is not available on this machine yet. Rescan after installing or loading Slurm.");
+      return;
+    }
     const yamlError = validateYamlSanity(yamlText);
     if (yamlError) {
       setFormError(yamlError);
@@ -1291,6 +1318,18 @@ function NewJobPanel({
         resumeFromFrame: resumeMode ? resumeFromFrame : null,
         parameterModuleId: moduleId,
         overrides,
+        runner,
+        slurm: {
+          enabled: slurmMode,
+          jobName: slurmJobName.trim() || label.trim() || null,
+          partition: slurmPartition.trim() || null,
+          account: slurmAccount.trim() || null,
+          qos: slurmQos.trim() || null,
+          timeLimit: slurmTimeLimit.trim() || "24:00:00",
+          cpusPerTask: Math.max(1, Math.min(100, Math.floor(slurmCpus || 1))),
+          memory: slurmMemory.trim() || "64G",
+          nodes: Math.max(1, Math.floor(slurmNodes || 1)),
+        },
         autoStart: false,
       };
       if (selectedDataset.kind === "upload") {
@@ -1417,6 +1456,91 @@ function NewJobPanel({
         )}
       </fieldset>
 
+      <fieldset className="runner-panel">
+        <legend>Runner</legend>
+        <div className="segmented-control runner-mode-toggle" role="group" aria-label="Job runner">
+          <button
+            type="button"
+            className={runner === "local" ? "active" : undefined}
+            onClick={() => setRunner("local")}
+          >
+            Local Process
+          </button>
+          <button
+            type="button"
+            className={slurmMode ? "active" : undefined}
+            onClick={() => setRunner("slurm")}
+          >
+            Slurm
+          </button>
+        </div>
+        {slurmMode ? (
+          <div className="parameter-group parameter-group-runtime slurm-config-group">
+            <div className="slurm-status-row">
+              <div>
+                <strong>{slurmQuery.data?.available ? "Slurm available" : "Slurm unavailable"}</strong>
+                <p className="dashboard-muted">{slurmQuery.data?.available ? "Jobs will be submitted with sbatch and monitored from the same output folder." : "Install or load Slurm on this machine, then rescan."}</p>
+              </div>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={slurmQuery.isFetching || slurmRescanMutation.isPending}
+                onClick={() => {
+                  void slurmRescanMutation.mutateAsync().then(() => slurmQuery.refetch());
+                }}
+              >
+                <RefreshCcw size={15} /> Rescan
+              </button>
+            </div>
+            {!slurmQuery.data?.available ? (
+              <p className="dashboard-error">{slurmQuery.data?.diagnostics?.join("; ") || "Slurm command line tools were not found."}</p>
+            ) : null}
+            <div className="form-grid three-column-form">
+              <label>
+                <span>Slurm Job Name</span>
+                <input value={slurmJobName} onChange={(event) => setSlurmJobName(event.target.value)} placeholder="defaults to job name" />
+              </label>
+              <label>
+                <span>Partition</span>
+                <input value={slurmPartition} onChange={(event) => setSlurmPartition(event.target.value)} placeholder="optional" />
+              </label>
+              <label>
+                <span>Account</span>
+                <input value={slurmAccount} onChange={(event) => setSlurmAccount(event.target.value)} placeholder="optional" />
+              </label>
+              <label>
+                <span>QoS</span>
+                <input value={slurmQos} onChange={(event) => setSlurmQos(event.target.value)} placeholder="optional" />
+              </label>
+              <label>
+                <span>Time Limit</span>
+                <input value={slurmTimeLimit} onChange={(event) => setSlurmTimeLimit(event.target.value)} placeholder="24:00:00" />
+              </label>
+              <label>
+                <span>Memory</span>
+                <input value={slurmMemory} onChange={(event) => setSlurmMemory(event.target.value)} placeholder="64G" />
+              </label>
+              <label>
+                <span>CPUs Per Task</span>
+                <input type="number" min={1} max={100} value={slurmCpus} onChange={(event) => setSlurmCpus(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>Nodes</span>
+                <input type="number" min={1} max={4} value={slurmNodes} onChange={(event) => setSlurmNodes(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>Submitter</span>
+                <input value="sbatch" readOnly />
+              </label>
+            </div>
+          </div>
+        ) : (
+          <div className="parameter-group parameter-group-runtime">
+            <p className="dashboard-muted">Local jobs run from the backend process and keep the current direct worker behavior.</p>
+          </div>
+        )}
+      </fieldset>
+
       <fieldset className="simple-config-panel">
         <legend>Simple Configuration</legend>
         {moduleQuery.data?.groups.map((group) => (
@@ -1456,7 +1580,7 @@ function NewJobPanel({
 
       {formError ? <p className="dashboard-error">{formError}</p> : null}
       <div className="form-actions">
-        <button className="action-button prepared-job-submit-button" type="submit" disabled={pending || !selectedDataset}>
+        <button className="action-button prepared-job-submit-button" type="submit" disabled={pending || !selectedDataset || (slurmMode && !slurmQuery.data?.available)}>
           {pending ? <LoaderCircle size={15} /> : <FileCog size={15} />}
           {editingJobId ? "Save Prepared Job" : "Create Prepared Job"}
         </button>

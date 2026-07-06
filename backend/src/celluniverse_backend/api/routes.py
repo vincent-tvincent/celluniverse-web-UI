@@ -28,6 +28,7 @@ from celluniverse_backend.preview.manifest import build_preview_artifacts
 from celluniverse_backend.preview.pointcloud import ensure_pointcloud_preview
 from celluniverse_backend.preview.slice import ensure_slice_preview
 from celluniverse_backend.runners.engine import inspect_engine
+from celluniverse_backend.runners.slurm import inspect_slurm
 from celluniverse_backend.security.paths import PathSecurityError, safe_child_path, validate_input_reference
 from celluniverse_backend.storage.json_store import read_json
 
@@ -119,6 +120,14 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
     @router.get("/engine/status")
     def engine_status(_: None = Depends(require_auth)) -> dict[str, Any]:
         return inspect_engine(config).model_dump()
+
+    @router.get("/slurm/status")
+    def slurm_status(_: None = Depends(require_auth)) -> dict[str, Any]:
+        return inspect_slurm().model_dump()
+
+    @router.post("/slurm/rescan")
+    def slurm_rescan(_: None = Depends(require_auth)) -> dict[str, Any]:
+        return inspect_slurm().model_dump()
 
     @router.get("/config/exposed-parameter-modules")
     def list_parameter_modules(_: None = Depends(require_auth)) -> list[dict[str, str]]:

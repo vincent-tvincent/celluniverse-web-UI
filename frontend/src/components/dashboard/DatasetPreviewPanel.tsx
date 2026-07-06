@@ -220,6 +220,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
   const activeRenderPending = mode === "slice" ? sliceRenderPending : volumeRenderPending;
 
   const metadataLoading = manifestQuery.isFetching || configQuery.isLoading;
+  const metadataBlockingLoading = configQuery.isLoading || (manifestQuery.isFetching && !manifestQuery.data);
   const slicePreviewLoading = realEnabled && Boolean(realSliceUrl) && realSliceQuery.isLoading;
   const pointCloudLoading = realEnabled && Boolean(realPointCloudUrl) && realPointCloudQuery.isLoading;
   const activePointCloudPreload = pointCloudLoading
@@ -240,7 +241,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
       : Boolean(realUrl) && !realVolume && !realPreloadError
   );
   const activeVolumeWaiting = Boolean(activeFrame && realVolumeWaiting);
-  const rawLoadingVisible = metadataLoading || (
+  const rawLoadingVisible = metadataBlockingLoading || (
     mode === "slice"
       ? activeSliceWaiting || slicePreviewLoading
       : pointCloudLoading || activeVolumeWaiting
@@ -547,7 +548,7 @@ export default function DatasetPreviewPanel({ kind, datasetId, onBack, onCreateJ
             {viewerLoadingOverlayVisible ? (
               <ViewerLoadingOverlay
                 preload={preload}
-                metadataLoading={metadataLoading}
+                metadataLoading={metadataBlockingLoading}
                 metadataProgress={manifestLoadProgress}
                 pointCloudLoading={mode === "slice" ? slicePreviewLoading : pointCloudLoading}
                 previewLoadingLabel={mode === "slice" ? "loading 2D slice" : "loading point cloud preview"}

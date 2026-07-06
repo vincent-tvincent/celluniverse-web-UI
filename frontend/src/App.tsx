@@ -664,6 +664,7 @@ function LiveMonitor({
     void queryClient.invalidateQueries();
   };
   const viewerMetadataLoading = manifestQuery.isFetching || configQuery.isLoading;
+  const viewerMetadataBlockingLoading = configQuery.isLoading || (manifestQuery.isFetching && !manifestQuery.data);
   const activeSliceWaiting = Boolean(
     activeFrame &&
     (
@@ -693,7 +694,7 @@ function LiveMonitor({
       : Boolean(synthUrl) && !synthVolume && !synthPreloadError
   );
   const activeVolumeWaiting = Boolean(activeFrame && (realVolumeWaiting || synthVolumeWaiting));
-  const nonRenderLoadingOverlayVisible = viewerMetadataLoading || (
+  const nonRenderLoadingOverlayVisible = viewerMetadataBlockingLoading || (
     mode === "slice"
       ? activeSliceWaiting || slicePreviewLoading
       : pointCloudLoading || activeVolumeWaiting
@@ -762,10 +763,14 @@ function LiveMonitor({
   }, []);
   const showLeftPanels = useCallback(() => showPanels(LEFT_PANEL_KEYS), [showPanels]);
   const hideLeftPanels = useCallback(() => hidePanels(LEFT_PANEL_KEYS), [hidePanels]);
+  const clearLineageCellLabel = useCallback(() => {
+    setLabeledLineageNodeId(null);
+    setLabeledCellIds(EMPTY_FOCUS_IDS);
+    setCellFocusRequest(null);
+  }, []);
   const handleGoToLineageCell = useCallback((node: LineageNode) => {
     if (labeledLineageNodeId === node.id) {
-      setLabeledLineageNodeId(null);
-      setLabeledCellIds(EMPTY_FOCUS_IDS);
+      clearLineageCellLabel();
       return;
     }
     const targetFrame = chooseLineageFocusFrame(node, frame, availableFrameNumbers);
@@ -780,7 +785,11 @@ function LiveMonitor({
       frame: targetFrame,
       requestId: Date.now(),
     });
-  }, [availableFrameNumbers, frame, labeledLineageNodeId, lineageQuery.data?.nodes, selectFrame, setMode, showPanel]);
+  }, [availableFrameNumbers, clearLineageCellLabel, frame, labeledLineageNodeId, lineageQuery.data?.nodes, selectFrame, setMode, showPanel]);
+  const handleCloseLineageNodeDetails = useCallback(() => {
+    setSelectedLineageNodeId(null);
+    clearLineageCellLabel();
+  }, [clearLineageCellLabel]);
   const resizePanel = useCallback((panel: "left" | "right", nextWidth: number) => {
     const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width ?? window.innerWidth;
     const maxByViewport = panel === "right"
@@ -1057,7 +1066,7 @@ function LiveMonitor({
             {viewerLoadingOverlayVisible ? (
               <ViewerLoadingOverlay
                 preload={preload}
-                metadataLoading={viewerMetadataLoading}
+                metadataLoading={viewerMetadataBlockingLoading}
                 metadataProgress={manifestLoadProgress}
                 pointCloudLoading={mode === "slice" ? slicePreviewLoading : pointCloudLoading}
                 previewLoadingLabel={mode === "slice" ? "loading 2D slice" : "loading point cloud preview"}
@@ -1132,6 +1141,7 @@ function LiveMonitor({
               selectedNodeId={selectedLineageNodeId}
               labeledNodeId={labeledLineageNodeId}
               onSelectNode={setSelectedLineageNodeId}
+              onCloseNodeDetails={handleCloseLineageNodeDetails}
               onGoToCell={handleGoToLineageCell}
               onHide={() => hidePanel("lineage")}
             />

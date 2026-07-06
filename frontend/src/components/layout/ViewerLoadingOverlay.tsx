@@ -1,6 +1,5 @@
 import type { JsonLoadProgress } from "../../api";
 import type { VolumePreloadState } from "../../viewer/useVolumePreload";
-import { formatPreloadLabel } from "./preloadFormat";
 
 type ViewerLoadingOverlayProps = {
   preload: VolumePreloadState;
@@ -29,25 +28,23 @@ export default function ViewerLoadingOverlay({
   renderLabel,
   renderDetail,
 }: ViewerLoadingOverlayProps) {
-  const label = preload.currentLabel
-    ? formatPreloadLabel(preload.currentLabel)
-    : metadataLoading
-      ? "loading viewer metadata"
+  const label = metadataLoading
+    ? "loading viewer metadata"
     : pointCloudLoading
       ? previewLoadingLabel
     : renderPending
       ? renderLabel
     : activeFrameWaiting
-      ? "waiting for frame"
+      ? "waiting for focused frame"
       : "preparing volume";
-  const detail = preload.isLoading
-    ? `${preload.readyFiles}/${preload.totalFiles} cached`
-    : metadataLoading
-      ? formatMetadataProgress(metadataProgress) ?? "refreshing manifest"
+  const detail = metadataLoading
+    ? formatMetadataProgress(metadataProgress) ?? "refreshing manifest"
     : pointCloudLoading
       ? formatMetadataProgress(previewProgress) ?? previewLoadingDetail
     : renderPending
       ? renderDetail
+    : activeFrameWaiting && preload.isLoading
+      ? `${preload.readyFiles}/${preload.totalFiles} cached`
     : "waiting for preview data";
 
   return (
