@@ -768,16 +768,13 @@ function LiveMonitor({
     setLabeledCellIds(EMPTY_FOCUS_IDS);
     setCellFocusRequest(null);
   }, []);
-  const handleGoToLineageCell = useCallback((node: LineageNode) => {
-    if (labeledLineageNodeId === node.id) {
-      clearLineageCellLabel();
-      return;
-    }
+  const activateLineageCell = useCallback((node: LineageNode) => {
     const targetFrame = chooseLineageFocusFrame(node, frame, availableFrameNumbers);
     const focusIds = collectLineageFocusCellIds(node, lineageQuery.data?.nodes ?? [], targetFrame);
     selectFrame(targetFrame, { manual: true });
     setMode("volume");
-    showPanel("viewer");
+    showPanels(["viewer", "lineage"]);
+    setSelectedLineageNodeId(node.id);
     setLabeledLineageNodeId(node.id);
     setLabeledCellIds(focusIds);
     setCellFocusRequest({
@@ -785,7 +782,21 @@ function LiveMonitor({
       frame: targetFrame,
       requestId: Date.now(),
     });
-  }, [availableFrameNumbers, clearLineageCellLabel, frame, labeledLineageNodeId, lineageQuery.data?.nodes, selectFrame, setMode, showPanel]);
+  }, [availableFrameNumbers, frame, lineageQuery.data?.nodes, selectFrame, setMode, showPanels]);
+  const handleGoToLineageCell = useCallback((node: LineageNode) => {
+    if (labeledLineageNodeId === node.id) {
+      clearLineageCellLabel();
+      return;
+    }
+    activateLineageCell(node);
+  }, [activateLineageCell, clearLineageCellLabel, labeledLineageNodeId]);
+  const handleViewerCellDoubleClick = useCallback((cellName: string) => {
+    const node = (lineageQuery.data?.nodes ?? []).find((candidate) => candidate.id === cellName || candidate.name === cellName);
+    if (!node) {
+      return;
+    }
+    activateLineageCell(node);
+  }, [activateLineageCell, lineageQuery.data?.nodes]);
   const handleCloseLineageNodeDetails = useCallback(() => {
     setSelectedLineageNodeId(null);
     clearLineageCellLabel();
@@ -1041,6 +1052,7 @@ function LiveMonitor({
                 onBackgroundModeChange={setDefault3dBackgroundMode}
                 onFirstRender={handleVolumeFirstRender}
                 onHoverSample={setHoverSample}
+                onCellDoubleClick={handleViewerCellDoubleClick}
               />
             )}
             <ViewerReadout
@@ -1140,6 +1152,8 @@ function LiveMonitor({
               error={lineageQuery.error ?? lineageLayoutQuery.error ?? lineageFrameQuery.error}
               selectedNodeId={selectedLineageNodeId}
               labeledNodeId={labeledLineageNodeId}
+              focusNodeId={labeledLineageNodeId}
+              focusRequestId={cellFocusRequest?.requestId ?? 0}
               onSelectNode={setSelectedLineageNodeId}
               onCloseNodeDetails={handleCloseLineageNodeDetails}
               onGoToCell={handleGoToLineageCell}

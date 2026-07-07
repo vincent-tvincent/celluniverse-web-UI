@@ -15,6 +15,8 @@ export const uiPalette = {
   cellTrashLineage: "#60616d",
   // Highlight color for the currently selected or lineage-focused cell.
   cellSelected: "#00e7c8",
+  // Secondary highlight for hovered 3D cell outlines.
+  cellHoverHighlight: "#ffaf90",
   // Stroke for normal cell outlines in the 2D slice overlay.
   cellNormalStroke: "#00df82",
   // Stroke for trash/rejected cell outlines in the 2D slice overlay.

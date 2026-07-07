@@ -40,6 +40,7 @@ type Props = {
   onBackgroundModeChange: (mode: ViewerBackgroundMode) => void;
   onFirstRender?: () => void;
   onHoverSample?: (sample: ViewerHoverSample | null) => void;
+  onCellDoubleClick?: (cellName: string) => void;
 };
 
 type PointCloudData = {
@@ -98,6 +99,7 @@ export default function ThreeVolumeViewer({
   onBackgroundModeChange,
   onFirstRender,
   onHoverSample,
+  onCellDoubleClick,
 }: Props) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const cameraViewRef = useRef<CameraViewState | null>(null);
@@ -209,6 +211,9 @@ export default function ThreeVolumeViewer({
     if (cellsEnabled && cells.length) {
       addCells(group, cells, base, worldWidth, worldHeight, worldDepth, cellOutlineColors);
     }
+    const cellHitTargets = cells.length ? addCellHitTargets(group, cells, base, worldWidth, worldHeight, worldDepth) : [];
+    let hoveredCellName: string | null = null;
+    let hoveredCellOutline: THREE.Mesh | null = null;
 
     const box = new THREE.Box3(
       new THREE.Vector3(-worldWidth / 2, -worldHeight / 2, -worldDepth / 2),
@@ -240,14 +245,57 @@ export default function ThreeVolumeViewer({
     });
     resizeObserver.observe(mount);
 
-    const handlePointerMove = (event: PointerEvent) => {
-      if (!onHoverSample || !realHoverTargets.length) {
+    const clearHoveredCell = () => {
+      hoveredCellName = null;
+      renderer.domElement.style.cursor = "";
+      if (hoveredCellOutline) {
+        group.remove(hoveredCellOutline);
+        disposeMeshResources(hoveredCellOutline);
+        hoveredCellOutline = null;
+      }
+    };
+    const setHoveredCell = (cell: CellRecord | null) => {
+      if (hoveredCellName === (cell?.name ?? null)) {
         return;
       }
+      clearHoveredCell();
+      if (!cell) {
+        return;
+      }
+      hoveredCellName = cell.name;
+      renderer.domElement.style.cursor = "pointer";
+      hoveredCellOutline = createCellOutlineMesh(cell, cells, base, worldWidth, worldHeight, worldDepth, {
+        color: uiPalette.cellHoverHighlight,
+        opacity: 0.98,
+        scaleFactor: 1.16,
+        widthSegments: 32,
+        heightSegments: 20,
+        depthTest: false,
+        depthWrite: false,
+        renderOrder: 42,
+      });
+      group.add(hoveredCellOutline);
+    };
+    const updateRaycasterFromEvent = (event: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
       pointer.y = -(((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1);
       raycaster.setFromCamera(pointer, camera);
+    };
+    const pickCellFromEvent = (event: PointerEvent): CellRecord | null => {
+      if (!cellHitTargets.length) {
+        return null;
+      }
+      updateRaycasterFromEvent(event);
+      const [hit] = raycaster.intersectObjects(cellHitTargets, false);
+      return (hit?.object.userData as CellHitTargetData | undefined)?.cell ?? null;
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      const hoveredCell = pickCellFromEvent(event);
+      setHoveredCell(hoveredCell);
+      if (!onHoverSample || !realHoverTargets.length) {
+        return;
+      }
       const [hit] = raycaster.intersectObjects(realHoverTargets, false);
       if (!hit || hit.index == null) {
         const boxHit = new THREE.Vector3();
@@ -266,9 +314,21 @@ export default function ThreeVolumeViewer({
         brightness: data.brightness[hit.index] ?? null,
       });
     };
-    const handlePointerLeave = () => onHoverSample?.(null);
+    const handleDoubleClick = (event: MouseEvent) => {
+      const cell = pickCellFromEvent(event as PointerEvent);
+      if (!cell) {
+        return;
+      }
+      event.preventDefault();
+      onCellDoubleClick?.(cell.name);
+    };
+    const handlePointerLeave = () => {
+      clearHoveredCell();
+      onHoverSample?.(null);
+    };
     renderer.domElement.addEventListener("pointermove", handlePointerMove);
     renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
+    renderer.domElement.addEventListener("dblclick", handleDoubleClick);
 
     let animationId = 0;
     let reportedFirstRender = false;
@@ -290,6 +350,7 @@ export default function ThreeVolumeViewer({
       controls.removeEventListener("change", saveCameraView);
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
       renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
+      renderer.domElement.removeEventListener("dblclick", handleDoubleClick);
       controls.dispose();
       scene.traverse((object) => {
         if (object instanceof THREE.Sprite) {
@@ -339,6 +400,7 @@ export default function ThreeVolumeViewer({
     frame,
     onFirstRender,
     onHoverSample,
+    onCellDoubleClick,
     backgroundMode,
   ]);
 
@@ -378,6 +440,10 @@ type PointCloudHoverData = {
   sourceY: Float32Array;
   sourceZ: Float32Array;
   brightness: Float32Array;
+};
+
+type CellHitTargetData = {
+  cell: CellRecord;
 };
 
 function makeEmptyBoxHoverSample(
@@ -1046,32 +1112,46 @@ function addCells(
   worldDepth: number,
   cellOutlineColors?: Record<string, string>,
 ) {
-  const maxCellZ = cells.reduce((max, cell) => Math.max(max, Number(cell.z) || 0), 0);
-  const zScale = Math.max(volume.depth - 1, maxCellZ, 1);
-  const cellSpaceWidth = Math.max(1, volume.sourceWidth);
-  const cellSpaceHeight = Math.max(1, volume.sourceHeight);
+  const lineageColorMode = cellOutlineColors !== undefined;
+  const trashColor = lineageColorMode ? uiPalette.cellTrashLineage : uiPalette.cellTrash;
   for (const cell of cells) {
-    const geometry = new THREE.SphereGeometry(1, 18, 12);
-    const lineageColorMode = cellOutlineColors !== undefined;
-    const trashColor = lineageColorMode ? uiPalette.cellTrashLineage : uiPalette.cellTrash;
-    const material = new THREE.MeshBasicMaterial({
+    const mesh = createCellOutlineMesh(cell, cells, volume, worldWidth, worldHeight, worldDepth, {
       color: cellOutlineColors?.[cell.name] ?? (cell.isTrash ? trashColor : uiPalette.cellNormal),
-      wireframe: true,
-      transparent: true,
       opacity: cell.isTrash ? 0.34 : 0.42,
+      scaleFactor: 1,
+      widthSegments: 18,
+      heightSegments: 12,
+      depthTest: true,
+      depthWrite: true,
     });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.x = ((Number(cell.x) || 0) / cellSpaceWidth - 0.5) * worldWidth;
-    mesh.position.y = (0.5 - (Number(cell.y) || 0) / cellSpaceHeight) * worldHeight;
-    mesh.position.z = ((Number(cell.z) || 0) / zScale - 0.5) * worldDepth;
-    mesh.scale.set(
-      Math.max(0.01, ((Number(cell.aRadius) || 1) / cellSpaceWidth) * worldWidth),
-      Math.max(0.01, ((Number(cell.bRadius) || 1) / cellSpaceHeight) * worldHeight),
-      Math.max(0.01, ((Number(cell.cRadius) || 1) / zScale) * worldDepth),
-    );
-    mesh.quaternion.copy(getCellWorldRotation(cell));
     group.add(mesh);
   }
+}
+
+function addCellHitTargets(
+  group: THREE.Group,
+  cells: CellRecord[],
+  volume: VolumeDimensions,
+  worldWidth: number,
+  worldHeight: number,
+  worldDepth: number,
+): THREE.Mesh[] {
+  return cells.map((cell) => {
+    const mesh = createCellOutlineMesh(cell, cells, volume, worldWidth, worldHeight, worldDepth, {
+      color: uiPalette.cellHoverHighlight,
+      opacity: 0,
+      scaleFactor: 1.12,
+      widthSegments: 12,
+      heightSegments: 8,
+      depthTest: false,
+      depthWrite: false,
+      colorWrite: false,
+    });
+    mesh.userData = { cell } satisfies CellHitTargetData;
+    mesh.renderOrder = -1;
+    group.add(mesh);
+    return mesh;
+  });
 }
 
 function addSelectedCellOutlines(
@@ -1083,30 +1163,75 @@ function addSelectedCellOutlines(
   worldHeight: number,
   worldDepth: number,
 ) {
-  const maxCellZ = frameCells.reduce((max, cell) => Math.max(max, Number(cell.z) || 0), 0);
-  const zScale = Math.max(volume.depth - 1, maxCellZ, 1);
-  const cellSpaceWidth = Math.max(1, volume.sourceWidth);
-  const cellSpaceHeight = Math.max(1, volume.sourceHeight);
   for (const cell of cells) {
-    const geometry = new THREE.SphereGeometry(1, 28, 18);
-    const material = new THREE.MeshBasicMaterial({
+    const mesh = createCellOutlineMesh(cell, frameCells, volume, worldWidth, worldHeight, worldDepth, {
       color: uiPalette.cellSelected,
-      wireframe: true,
-      transparent: true,
       opacity: 0.96,
+      scaleFactor: 1.08,
+      widthSegments: 28,
+      heightSegments: 18,
       depthTest: false,
       depthWrite: false,
+      renderOrder: 30,
     });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(cellToWorldPosition(cell, volume, worldWidth, worldHeight, worldDepth, zScale));
-    mesh.scale.set(
-      Math.max(0.012, ((Number(cell.aRadius) || 1) / cellSpaceWidth) * worldWidth * 1.08),
-      Math.max(0.012, ((Number(cell.bRadius) || 1) / cellSpaceHeight) * worldHeight * 1.08),
-      Math.max(0.012, ((Number(cell.cRadius) || 1) / zScale) * worldDepth * 1.08),
-    );
-    mesh.quaternion.copy(getCellWorldRotation(cell));
-    mesh.renderOrder = 30;
     group.add(mesh);
+  }
+}
+
+type CellOutlineOptions = {
+  color: string;
+  opacity: number;
+  scaleFactor: number;
+  widthSegments: number;
+  heightSegments: number;
+  depthTest: boolean;
+  depthWrite: boolean;
+  colorWrite?: boolean;
+  renderOrder?: number;
+};
+
+function createCellOutlineMesh(
+  cell: CellRecord,
+  frameCells: CellRecord[],
+  volume: VolumeDimensions,
+  worldWidth: number,
+  worldHeight: number,
+  worldDepth: number,
+  options: CellOutlineOptions,
+): THREE.Mesh {
+  const maxCellZ = frameCells.reduce((max, frameCell) => Math.max(max, Number(frameCell.z) || 0), 0);
+  const zScale = Math.max(volume.depth - 1, maxCellZ, 1);
+  const geometry = new THREE.SphereGeometry(1, options.widthSegments, options.heightSegments);
+  const material = new THREE.MeshBasicMaterial({
+    color: options.color,
+    wireframe: true,
+    transparent: true,
+    opacity: options.opacity,
+    depthTest: options.depthTest,
+    depthWrite: options.depthWrite,
+    colorWrite: options.colorWrite ?? true,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.copy(cellToWorldPosition(cell, volume, worldWidth, worldHeight, worldDepth, zScale));
+  mesh.scale.set(
+    Math.max(0.012, ((Number(cell.aRadius) || 1) / Math.max(1, volume.sourceWidth)) * worldWidth * options.scaleFactor),
+    Math.max(0.012, ((Number(cell.bRadius) || 1) / Math.max(1, volume.sourceHeight)) * worldHeight * options.scaleFactor),
+    Math.max(0.012, ((Number(cell.cRadius) || 1) / zScale) * worldDepth * options.scaleFactor),
+  );
+  mesh.quaternion.copy(getCellWorldRotation(cell));
+  if (options.renderOrder !== undefined) {
+    mesh.renderOrder = options.renderOrder;
+  }
+  return mesh;
+}
+
+function disposeMeshResources(mesh: THREE.Mesh) {
+  mesh.geometry.dispose();
+  const material = mesh.material;
+  if (Array.isArray(material)) {
+    material.forEach((entry) => entry.dispose());
+  } else {
+    material.dispose();
   }
 }
 

@@ -18,6 +18,8 @@ type LineagePanelProps = {
   error?: unknown;
   selectedNodeId: string | null;
   labeledNodeId: string | null;
+  focusNodeId?: string | null;
+  focusRequestId?: number;
   onSelectNode: (nodeId: string | null) => void;
   onCloseNodeDetails: () => void;
   onGoToCell: (node: LineageNode) => void;
@@ -40,6 +42,8 @@ export default function LineagePanel({
   error,
   selectedNodeId,
   labeledNodeId,
+  focusNodeId = null,
+  focusRequestId = 0,
   onSelectNode,
   onCloseNodeDetails,
   onGoToCell,
@@ -56,6 +60,7 @@ export default function LineagePanel({
   const [scale, setScale] = useState(0.9);
   const dragRef = useRef<{ id: number; x: number; y: number; pan: PanState } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const appliedFocusRequestRef = useRef(0);
   const displayLayout = useMemo(() => resolveLineageLayout(layout, graph), [layout, graph]);
   const sampledRings = useMemo(
     () => sampleRings(displayLayout?.rings ?? [], displayLayout?.resumeFromFrame ?? null),
@@ -154,6 +159,20 @@ export default function LineagePanel({
       svg.removeEventListener("gesturechange", stopBrowserGesture);
     };
   }, []);
+
+  useEffect(() => {
+    if (!focusNodeId || !focusRequestId || appliedFocusRequestRef.current === focusRequestId || !displayLayout) {
+      return;
+    }
+    const node = displayLayout.nodes[focusNodeId];
+    if (!node) {
+      return;
+    }
+    const nextScale = Math.max(scale, 3.2);
+    setScale(nextScale);
+    setPan({ x: -node.x * nextScale, y: -node.y * nextScale });
+    appliedFocusRequestRef.current = focusRequestId;
+  }, [displayLayout, focusNodeId, focusRequestId, scale]);
 
   const resetView = () => {
     setPan({ x: 0, y: 0 });
