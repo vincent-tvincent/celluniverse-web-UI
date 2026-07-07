@@ -17,6 +17,10 @@ export const uiPalette = {
   cellSelected: "#00e7c8",
   // Secondary highlight for hovered 3D cell outlines.
   cellHoverHighlight: "#ffaf90",
+  // Default trajectory stroke when lineage family colors are disabled.
+  cellTrajectory: "#8ea0ff",
+  // Emphasized trajectory stroke for a selected lineage cell.
+  cellTrajectorySelected: "#00e7c8",
   // Stroke for normal cell outlines in the 2D slice overlay.
   cellNormalStroke: "#00df82",
   // Stroke for trash/rejected cell outlines in the 2D slice overlay.

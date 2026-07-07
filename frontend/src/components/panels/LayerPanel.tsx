@@ -1,5 +1,5 @@
 import { useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Check, ChevronDown, Crosshair, Eye, EyeOff, Palette } from "lucide-react";
+import { Check, ChevronDown, Crosshair, Eye, EyeOff, Palette, Route } from "lucide-react";
 import { colorMaps, getColorMap, type ColorMap, type ColorMapId } from "../../viewer/colorMaps";
 import { clampContrastLimits, type ContrastLimits } from "../../viewer/contrast";
 import PanelHeading from "./PanelHeading";
@@ -26,6 +26,8 @@ type LayerPanelProps = {
   setPointAlphaByBrightness?: (enabled: boolean) => void;
   lineageOutlineColorsEnabled?: boolean;
   setLineageOutlineColorsEnabled?: (enabled: boolean) => void;
+  cellTrajectoriesEnabled?: boolean;
+  setCellTrajectoriesEnabled?: (enabled: boolean) => void;
   showCells?: boolean;
   showSynth?: boolean;
   onHide: () => void;
@@ -53,6 +55,8 @@ export default function LayerPanel({
   setPointAlphaByBrightness,
   lineageOutlineColorsEnabled = false,
   setLineageOutlineColorsEnabled,
+  cellTrajectoriesEnabled = false,
+  setCellTrajectoriesEnabled,
   showCells = true,
   showSynth = true,
   onHide,
@@ -80,6 +84,17 @@ export default function LayerPanel({
                 {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
                 Cell outlines
               </button>
+              {setCellTrajectoriesEnabled ? (
+                <button
+                  type="button"
+                  className={`toggle-button ${cellTrajectoriesEnabled ? "active" : ""}`}
+                  onClick={() => setCellTrajectoriesEnabled(!cellTrajectoriesEnabled)}
+                  title="Display cell center trajectories in the 3D viewer"
+                >
+                  {cellTrajectoriesEnabled ? <Route size={16} /> : <EyeOff size={16} />}
+                  Cell trajectories
+                </button>
+              ) : null}
               {setLineageOutlineColorsEnabled ? (
                 <button
                   type="button"

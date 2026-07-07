@@ -6,7 +6,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { EyeOff, GitBranch, LocateFixed, Minus, Plus, RefreshCw, X as XIcon } from "lucide-react";
+import { EyeOff, GitBranch, LocateFixed, Minus, Plus, RefreshCw, Route, X as XIcon } from "lucide-react";
 import type { LineageFrameSnapshot, LineageGraph, LineageLayout, LineageNode } from "../../types";
 
 type LineagePanelProps = {
@@ -18,11 +18,13 @@ type LineagePanelProps = {
   error?: unknown;
   selectedNodeId: string | null;
   labeledNodeId: string | null;
+  trajectoryNodeId?: string | null;
   focusNodeId?: string | null;
   focusRequestId?: number;
   onSelectNode: (nodeId: string | null) => void;
   onCloseNodeDetails: () => void;
   onGoToCell: (node: LineageNode) => void;
+  onToggleTrajectory: (node: LineageNode) => void;
   onHide: () => void;
 };
 
@@ -42,11 +44,13 @@ export default function LineagePanel({
   error,
   selectedNodeId,
   labeledNodeId,
+  trajectoryNodeId = null,
   focusNodeId = null,
   focusRequestId = 0,
   onSelectNode,
   onCloseNodeDetails,
   onGoToCell,
+  onToggleTrajectory,
   onHide,
 }: LineagePanelProps) {
   const nodesById = useMemo(
@@ -277,8 +281,10 @@ export default function LineagePanel({
             node={selectedNode}
             active={activeNodes.has(selectedNode.id)}
             labeled={selectedNode.id === labeledNodeId}
+            trajectoryActive={selectedNode.id === trajectoryNodeId}
             selectedFrame={frame}
             onGoToCell={() => onGoToCell(selectedNode)}
+            onToggleTrajectory={() => onToggleTrajectory(selectedNode)}
             onClose={onCloseNodeDetails}
           />
         ) : null}
@@ -291,15 +297,19 @@ function NodeDetails({
   node,
   active,
   labeled,
+  trajectoryActive,
   selectedFrame,
   onGoToCell,
+  onToggleTrajectory,
   onClose,
 }: {
   node: LineageNode;
   active: boolean;
   labeled: boolean;
+  trajectoryActive: boolean;
   selectedFrame: number;
   onGoToCell: () => void;
+  onToggleTrajectory: () => void;
   onClose: () => void;
 }) {
   return (
@@ -331,6 +341,10 @@ function NodeDetails({
       <button type="button" className={`lineage-goto-button ${labeled ? "active" : ""}`} onClick={onGoToCell}>
         <LocateFixed size={15} />
         {labeled ? "Remove label" : "Go to cell"}
+      </button>
+      <button type="button" className={`lineage-goto-button ${trajectoryActive ? "active" : ""}`} onClick={onToggleTrajectory}>
+        <Route size={15} />
+        {trajectoryActive ? "Hide trajectory" : "Show trajectory"}
       </button>
     </div>
   );

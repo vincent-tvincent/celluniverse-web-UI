@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getFrameCells,
   getJob,
@@ -52,12 +52,13 @@ import { useJobEvents } from "./hooks";
 import { useViewerStore } from "./store";
 import type { CellRecord, JobManifest, JobStatus, LayerEntry, LineageLayout, LineageNode } from "./types";
 import CanvasSliceViewer from "./viewer/CanvasSliceViewer";
-import ThreeVolumeViewer from "./viewer/ThreeVolumeViewer";
+import ThreeVolumeViewer, { type CellTrajectory } from "./viewer/ThreeVolumeViewer";
 import type { ViewerHoverSample } from "./viewer/hover";
 import { userFacingViewerError } from "./viewer/errors";
 import { loadPointCloudPreview } from "./viewer/pointCloud";
 import { loadSlicePreview } from "./viewer/slicePreview";
 import type { VolumeData } from "./viewer/tiff";
+import { uiPalette } from "./theme/palette";
 import { usePointCloudPreload, type PointCloudPreloadTarget } from "./viewer/usePointCloudPreload";
 import { useVolumePreload, type VolumePreloadTarget } from "./viewer/useVolumePreload";
 
@@ -71,6 +72,7 @@ const MAX_PANEL_WIDTH = 520;
 const MIN_LOG_HEIGHT = 150;
 const MAX_LOG_HEIGHT = 520;
 const VIEWER_LOADING_OVERLAY_DELAY_MS = 10000;
+const GLOBAL_TRAJECTORY_FRAME_LIMIT = 24;
 
 type AppRoute =
   | { name: "dashboard"; tab: DashboardTab; seedDatasetId: string }
@@ -242,6 +244,8 @@ function LiveMonitor({
   } | null>(null);
   const [labeledLineageNodeId, setLabeledLineageNodeId] = useState<string | null>(null);
   const [labeledCellIds, setLabeledCellIds] = useState<string[]>(EMPTY_FOCUS_IDS);
+  const [cellTrajectoriesEnabled, setCellTrajectoriesEnabled] = useState(false);
+  const [selectedTrajectoryNodeId, setSelectedTrajectoryNodeId] = useState<string | null>(null);
   const frameHistoryRef = useRef<{ jobId: string; frames: Set<number> } | null>(null);
   const autoFollowLatestFrameRef = useRef(true);
   const workspaceRef = useRef<HTMLElement | null>(null);
@@ -591,7 +595,108 @@ function LiveMonitor({
     [lineageLayoutQuery.data?.nodes],
   );
   const activeCellOutlineColors = lineageOutlineColorsEnabled ? (lineageCellColors ?? {}) : undefined;
-
+  const trajectoryRequested = Boolean(selectedJobId && (cellTrajectoriesEnabled || selectedTrajectoryNodeId));
+  const selectedTrajectoryFrameNumbers = useMemo(() => {
+    if (!selectedJobId || !selectedTrajectoryNodeId) {
+      return [];
+    }
+    const current = activeFrameNumber ?? frame;
+    const node = (lineageQuery.data?.nodes ?? []).find((candidate) => candidate.id === selectedTrajectoryNodeId);
+    if (!node) {
+      return [];
+    }
+    const available = availableFrameNumbers.length ? new Set(availableFrameNumbers) : null;
+    return node.observedFrames
+      .filter((observedFrame) => observedFrame <= current && (!available || available.has(observedFrame)))
+      .sort((a, b) => a - b);
+  }, [activeFrameNumber, availableFrameNumbers, frame, lineageQuery.data?.nodes, selectedJobId, selectedTrajectoryNodeId]);
+  const globalTrajectoryFrameNumbers = useMemo(() => {
+    if (!selectedJobId || !cellTrajectoriesEnabled) {
+      return [];
+    }
+    const current = activeFrameNumber ?? frame;
+    const available = availableFrameNumbers.length ? new Set(availableFrameNumbers) : null;
+    const frameSet = new Set<number>();
+    for (const node of lineageQuery.data?.nodes ?? []) {
+      for (const observedFrame of node.observedFrames) {
+        if (observedFrame <= current && (!available || available.has(observedFrame))) {
+          frameSet.add(observedFrame);
+        }
+      }
+    }
+    return [...frameSet].sort((a, b) => a - b).slice(-GLOBAL_TRAJECTORY_FRAME_LIMIT);
+  }, [activeFrameNumber, availableFrameNumbers, cellTrajectoriesEnabled, frame, lineageQuery.data?.nodes, selectedJobId]);
+  const trajectoryFrameNumbers = useMemo(() => (
+    [...new Set([...selectedTrajectoryFrameNumbers, ...globalTrajectoryFrameNumbers])].sort((a, b) => a - b)
+  ), [globalTrajectoryFrameNumbers, selectedTrajectoryFrameNumbers]);
+  const trajectoryCellQueries = useQueries({
+    queries: trajectoryFrameNumbers.map((frameNumber) => ({
+      queryKey: ["cells", selectedJobId, frameNumber],
+      queryFn: () => getFrameCells(selectedJobId!, frameNumber),
+      enabled: Boolean(selectedJobId && trajectoryFrameNumbers.length),
+      staleTime: 30_000,
+    })),
+  });
+  const trajectoryQuerySignature = trajectoryCellQueries
+    .map((query, index) => `${trajectoryFrameNumbers[index]}:${query.dataUpdatedAt}:${query.data?.length ?? 0}`)
+    .join("|");
+  const trajectoryRelevantFrameNumbers = useMemo(() => {
+    if (!trajectoryRequested) {
+      return [];
+    }
+    const current = activeFrameNumber ?? frame;
+    const nodes = lineageQuery.data?.nodes ?? [];
+    const relevantNodes = cellTrajectoriesEnabled
+      ? nodes
+      : nodes.filter((node) => node.id === selectedTrajectoryNodeId);
+    const available = availableFrameNumbers.length ? new Set(availableFrameNumbers) : null;
+    const frameSet = new Set<number>();
+    for (const node of relevantNodes) {
+      for (const observedFrame of node.observedFrames) {
+        if (observedFrame <= current && (!available || available.has(observedFrame))) {
+          frameSet.add(observedFrame);
+        }
+      }
+    }
+    return [...frameSet].sort((a, b) => a - b);
+  }, [activeFrameNumber, availableFrameNumbers, cellTrajectoriesEnabled, frame, lineageQuery.data?.nodes, selectedTrajectoryNodeId, trajectoryRequested]);
+  const trajectoryCellsByFrame = useMemo(() => {
+    const cellsByFrame = new Map<number, CellRecord[]>();
+    trajectoryRelevantFrameNumbers.forEach((frameNumber) => {
+      const cached = selectedJobId ? queryClient.getQueryData<CellRecord[]>(["cells", selectedJobId, frameNumber]) : undefined;
+      if (cached?.length) {
+        cellsByFrame.set(frameNumber, cached);
+      }
+    });
+    trajectoryFrameNumbers.forEach((frameNumber, index) => {
+      const queried = trajectoryCellQueries[index]?.data;
+      if (queried?.length) {
+        cellsByFrame.set(frameNumber, queried);
+      }
+    });
+    if (activeFrame?.t != null && frameCells.length) {
+      cellsByFrame.set(activeFrame.t, frameCells);
+    }
+    return cellsByFrame;
+  }, [activeFrame?.t, frameCells, queryClient, selectedJobId, trajectoryFrameNumbers, trajectoryQuerySignature, trajectoryRelevantFrameNumbers]);
+  const cellTrajectories = useMemo(() => buildCellTrajectories({
+    nodes: lineageQuery.data?.nodes ?? [],
+    cellsByFrame: trajectoryCellsByFrame,
+    currentFrame: activeFrameNumber ?? frame,
+    globalEnabled: cellTrajectoriesEnabled,
+    selectedNodeId: selectedTrajectoryNodeId,
+    lineageColorsEnabled: lineageOutlineColorsEnabled,
+    lineageCellColors,
+  }), [
+    activeFrameNumber,
+    cellTrajectoriesEnabled,
+    frame,
+    lineageCellColors,
+    lineageOutlineColorsEnabled,
+    lineageQuery.data?.nodes,
+    selectedTrajectoryNodeId,
+    trajectoryCellsByFrame,
+  ]);
   const logsQuery = useQuery({
     queryKey: ["logs", selectedJobId, logStream],
     queryFn: () => getLogs(selectedJobId, logStream, 80),
@@ -768,6 +873,9 @@ function LiveMonitor({
     setLabeledCellIds(EMPTY_FOCUS_IDS);
     setCellFocusRequest(null);
   }, []);
+  const clearSelectedTrajectory = useCallback(() => {
+    setSelectedTrajectoryNodeId(null);
+  }, []);
   const activateLineageCell = useCallback((node: LineageNode) => {
     const targetFrame = chooseLineageFocusFrame(node, frame, availableFrameNumbers);
     const focusIds = collectLineageFocusCellIds(node, lineageQuery.data?.nodes ?? [], targetFrame);
@@ -797,10 +905,14 @@ function LiveMonitor({
     }
     activateLineageCell(node);
   }, [activateLineageCell, lineageQuery.data?.nodes]);
+  const handleToggleLineageTrajectory = useCallback((node: LineageNode) => {
+    setSelectedTrajectoryNodeId((current) => (current === node.id ? null : node.id));
+  }, []);
   const handleCloseLineageNodeDetails = useCallback(() => {
     setSelectedLineageNodeId(null);
     clearLineageCellLabel();
-  }, [clearLineageCellLabel]);
+    clearSelectedTrajectory();
+  }, [clearLineageCellLabel, clearSelectedTrajectory]);
   const resizePanel = useCallback((panel: "left" | "right", nextWidth: number) => {
     const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width ?? window.innerWidth;
     const maxByViewport = panel === "right"
@@ -968,6 +1080,8 @@ function LiveMonitor({
                   setPointAlphaByBrightness={setPointAlphaByBrightness}
                   lineageOutlineColorsEnabled={lineageOutlineColorsEnabled}
                   setLineageOutlineColorsEnabled={setLineageOutlineColorsEnabled}
+                  cellTrajectoriesEnabled={cellTrajectoriesEnabled}
+                  setCellTrajectoriesEnabled={setCellTrajectoriesEnabled}
                   onHide={() => hidePanel("layers")}
                 />
               ) : (
@@ -1047,6 +1161,7 @@ function LiveMonitor({
                 focusFrame={cellFocusRequest?.frame ?? null}
                 focusRequestId={cellFocusRequest?.requestId ?? 0}
                 labeledCellIds={labeledCellIds}
+                cellTrajectories={cellTrajectories}
                 frame={activeFrame?.t ?? frame}
                 backgroundMode={default3dBackgroundMode}
                 onBackgroundModeChange={setDefault3dBackgroundMode}
@@ -1152,11 +1267,13 @@ function LiveMonitor({
               error={lineageQuery.error ?? lineageLayoutQuery.error ?? lineageFrameQuery.error}
               selectedNodeId={selectedLineageNodeId}
               labeledNodeId={labeledLineageNodeId}
+              trajectoryNodeId={selectedTrajectoryNodeId}
               focusNodeId={labeledLineageNodeId}
               focusRequestId={cellFocusRequest?.requestId ?? 0}
               onSelectNode={setSelectedLineageNodeId}
               onCloseNodeDetails={handleCloseLineageNodeDetails}
               onGoToCell={handleGoToLineageCell}
+              onToggleTrajectory={handleToggleLineageTrajectory}
               onHide={() => hidePanel("lineage")}
             />
           </>
@@ -1260,6 +1377,73 @@ function getSlicePreviewUrl(
   }
   const requestedSlice = Math.max(0, Math.round(slice));
   return `/api/jobs/${encodeURIComponent(jobId)}/slices/${layer}/${frame}/${requestedSlice}.cusl?max_xy=${previewConfig.maxXY}`;
+}
+
+type BuildCellTrajectoriesArgs = {
+  nodes: LineageNode[];
+  cellsByFrame: Map<number, CellRecord[]>;
+  currentFrame: number;
+  globalEnabled: boolean;
+  selectedNodeId: string | null;
+  lineageColorsEnabled: boolean;
+  lineageCellColors?: Record<string, string>;
+};
+
+function buildCellTrajectories({
+  nodes,
+  cellsByFrame,
+  currentFrame,
+  globalEnabled,
+  selectedNodeId,
+  lineageColorsEnabled,
+  lineageCellColors,
+}: BuildCellTrajectoriesArgs): CellTrajectory[] {
+  if (!globalEnabled && !selectedNodeId) {
+    return [];
+  }
+  const selected = selectedNodeId ? new Set([selectedNodeId]) : new Set<string>();
+  const relevantNodes = nodes.filter((node) => globalEnabled || selected.has(node.id));
+  return relevantNodes
+    .map((node) => {
+      const points = node.observedFrames
+        .filter((observedFrame) => observedFrame <= currentFrame)
+        .sort((a, b) => a - b)
+        .map((observedFrame) => {
+          const cell = findTrajectoryCell(cellsByFrame.get(observedFrame), node);
+          return cell ? { frame: observedFrame, cell } : null;
+        })
+        .filter((point): point is CellTrajectory["points"][number] => Boolean(point));
+      const highlighted = node.id === selectedNodeId;
+      return {
+        id: node.id,
+        color: resolveTrajectoryColor(node, lineageColorsEnabled, lineageCellColors, highlighted),
+        points,
+        highlighted,
+      };
+    })
+    .filter((trajectory) => trajectory.points.length >= 2);
+}
+
+function findTrajectoryCell(cells: CellRecord[] | undefined, node: LineageNode): CellRecord | undefined {
+  if (!cells?.length) {
+    return undefined;
+  }
+  return cells.find((cell) => cell.name === node.id || cell.name === node.name);
+}
+
+function resolveTrajectoryColor(
+  node: LineageNode,
+  lineageColorsEnabled: boolean,
+  lineageCellColors?: Record<string, string>,
+  highlighted = false,
+): string {
+  if (highlighted) {
+    return uiPalette.cellTrajectorySelected;
+  }
+  if (!lineageColorsEnabled) {
+    return uiPalette.cellTrajectory;
+  }
+  return lineageCellColors?.[node.rootId] ?? lineageCellColors?.[node.id] ?? uiPalette.cellTrajectory;
 }
 
 function buildLineageCellColorMap(nodes?: LineageLayout["nodes"]): Record<string, string> | undefined {

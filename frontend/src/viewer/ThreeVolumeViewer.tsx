@@ -11,6 +11,18 @@ import type { ViewerHoverSample } from "./hover";
 import type { PointCloudPreviewData } from "./pointCloud";
 import type { VolumeData } from "./tiff";
 
+export type CellTrajectoryPoint = {
+  frame: number;
+  cell: CellRecord;
+};
+
+export type CellTrajectory = {
+  id: string;
+  color: string;
+  points: CellTrajectoryPoint[];
+  highlighted?: boolean;
+};
+
 type Props = {
   real?: VolumeData;
   synth?: VolumeData;
@@ -35,6 +47,7 @@ type Props = {
   focusFrame: number | null;
   focusRequestId: number;
   labeledCellIds: string[];
+  cellTrajectories?: CellTrajectory[];
   frame: number;
   backgroundMode: ViewerBackgroundMode;
   onBackgroundModeChange: (mode: ViewerBackgroundMode) => void;
@@ -94,6 +107,7 @@ export default function ThreeVolumeViewer({
   focusFrame,
   focusRequestId,
   labeledCellIds,
+  cellTrajectories = [],
   frame,
   backgroundMode,
   onBackgroundModeChange,
@@ -124,6 +138,27 @@ export default function ThreeVolumeViewer({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     mount.appendChild(renderer.domElement);
+
+    const trajectoryCanvas = document.createElement("canvas");
+    trajectoryCanvas.style.position = "absolute";
+    trajectoryCanvas.style.inset = "0";
+    trajectoryCanvas.style.width = "100%";
+    trajectoryCanvas.style.height = "100%";
+    trajectoryCanvas.style.pointerEvents = "none";
+    trajectoryCanvas.style.zIndex = "2";
+    mount.appendChild(trajectoryCanvas);
+    const trajectoryContext = trajectoryCanvas.getContext("2d");
+    const syncTrajectoryCanvasSize = () => {
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, maxPixelRatio);
+      const width = Math.max(1, mount.clientWidth);
+      const height = Math.max(1, mount.clientHeight);
+      trajectoryCanvas.width = Math.round(width * pixelRatio);
+      trajectoryCanvas.height = Math.round(height * pixelRatio);
+      if (trajectoryContext) {
+        trajectoryContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      }
+    };
+    syncTrajectoryCanvasSize();
 
     const group = new THREE.Group();
     scene.add(group);
@@ -211,9 +246,11 @@ export default function ThreeVolumeViewer({
     if (cellsEnabled && cells.length) {
       addCells(group, cells, base, worldWidth, worldHeight, worldDepth, cellOutlineColors);
     }
-    const cellHitTargets = cells.length ? addCellHitTargets(group, cells, base, worldWidth, worldHeight, worldDepth) : [];
+    const cellInteractionEnabled = Boolean(onCellDoubleClick);
+    const cellHitTargets = cellInteractionEnabled && cells.length ? addCellHitTargets(group, cells, base, worldWidth, worldHeight, worldDepth) : [];
     let hoveredCellName: string | null = null;
     let hoveredCellOutline: THREE.Mesh | null = null;
+    let viewerPointerDragging = false;
 
     const box = new THREE.Box3(
       new THREE.Vector3(-worldWidth / 2, -worldHeight / 2, -worldDepth / 2),
@@ -226,6 +263,9 @@ export default function ThreeVolumeViewer({
     if (labeledCells.length) {
       addSelectedCellOutlines(group, labeledCells, cells, base, worldWidth, worldHeight, worldDepth);
     }
+    const trajectoryProjector = cellTrajectories.length
+      ? createTrajectoryProjector(cellTrajectories, cells, base, worldWidth, worldHeight, worldDepth)
+      : null;
 
     if (focusRequestId && focusFrame === frame && appliedFocusRequestRef.current !== focusRequestId) {
       const focusCells = cells.filter((cell) => focusCellIds.includes(cell.name));
@@ -242,6 +282,7 @@ export default function ThreeVolumeViewer({
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
+      syncTrajectoryCanvasSize();
     });
     resizeObserver.observe(mount);
 
@@ -291,6 +332,11 @@ export default function ThreeVolumeViewer({
       return (hit?.object.userData as CellHitTargetData | undefined)?.cell ?? null;
     };
     const handlePointerMove = (event: PointerEvent) => {
+      if (viewerPointerDragging) {
+        clearHoveredCell();
+        onHoverSample?.(null);
+        return;
+      }
       const hoveredCell = pickCellFromEvent(event);
       setHoveredCell(hoveredCell);
       if (!onHoverSample || !realHoverTargets.length) {
@@ -322,19 +368,30 @@ export default function ThreeVolumeViewer({
       event.preventDefault();
       onCellDoubleClick?.(cell.name);
     };
+    const handlePointerDown = (event: PointerEvent) => {
+      viewerPointerDragging = event.button === 0 || event.button === 1 || event.button === 2;
+      clearHoveredCell();
+    };
+    const handlePointerUp = () => {
+      viewerPointerDragging = false;
+    };
     const handlePointerLeave = () => {
       clearHoveredCell();
       onHoverSample?.(null);
     };
+    renderer.domElement.addEventListener("pointerdown", handlePointerDown);
     renderer.domElement.addEventListener("pointermove", handlePointerMove);
     renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
     renderer.domElement.addEventListener("dblclick", handleDoubleClick);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
 
     let animationId = 0;
     let reportedFirstRender = false;
     const animate = () => {
       controls.update();
       renderer.render(scene, camera);
+      drawTrajectoryOverlay(trajectoryContext, trajectoryCanvas, trajectoryProjector, camera, mount.clientWidth, mount.clientHeight);
       if (!reportedFirstRender) {
         reportedFirstRender = true;
         onFirstRender?.();
@@ -348,9 +405,12 @@ export default function ThreeVolumeViewer({
       window.cancelAnimationFrame(animationId);
       resizeObserver.disconnect();
       controls.removeEventListener("change", saveCameraView);
+      renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
       renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
       renderer.domElement.removeEventListener("dblclick", handleDoubleClick);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
       controls.dispose();
       scene.traverse((object) => {
         if (object instanceof THREE.Sprite) {
@@ -358,7 +418,7 @@ export default function ThreeVolumeViewer({
           object.material.dispose();
           return;
         }
-        if (object instanceof THREE.Mesh || object instanceof THREE.Points) {
+        if (object instanceof THREE.Mesh || object instanceof THREE.Points || object instanceof THREE.Line) {
           object.geometry.dispose();
           const material = object.material;
           if (Array.isArray(material)) {
@@ -369,6 +429,9 @@ export default function ThreeVolumeViewer({
         }
       });
       renderer.dispose();
+      if (trajectoryCanvas.parentElement === mount) {
+        mount.removeChild(trajectoryCanvas);
+      }
       if (renderer.domElement.parentElement === mount) {
         mount.removeChild(renderer.domElement);
       }
@@ -397,6 +460,7 @@ export default function ThreeVolumeViewer({
     focusFrame,
     focusRequestId,
     labeledCellIds,
+    cellTrajectories,
     frame,
     onFirstRender,
     onHoverSample,
@@ -1101,6 +1165,86 @@ function drawRoundedRect(context: CanvasRenderingContext2D, x: number, y: number
   context.lineTo(x, y + safeRadius);
   context.quadraticCurveTo(x, y, x + safeRadius, y);
   context.closePath();
+}
+
+type TrajectoryProjectedPath = {
+  color: string;
+  highlighted: boolean;
+  points: THREE.Vector3[];
+};
+
+function createTrajectoryProjector(
+  trajectories: CellTrajectory[],
+  frameCells: CellRecord[],
+  volume: VolumeDimensions,
+  worldWidth: number,
+  worldHeight: number,
+  worldDepth: number,
+): TrajectoryProjectedPath[] {
+  const allCells = trajectories.flatMap((trajectory) => trajectory.points.map((point) => point.cell));
+  const zScaleCells = frameCells.length ? frameCells.concat(allCells) : allCells;
+  const maxCellZ = zScaleCells.reduce((max, cell) => Math.max(max, Number(cell.z) || 0), 0);
+  const zScale = Math.max(volume.depth - 1, maxCellZ, 1);
+
+  return trajectories
+    .map((trajectory) => {
+      const points = [...trajectory.points]
+        .sort((a, b) => a.frame - b.frame)
+        .map((point) => cellToWorldPosition(point.cell, volume, worldWidth, worldHeight, worldDepth, zScale));
+      return { color: trajectory.color, highlighted: Boolean(trajectory.highlighted), points };
+    })
+    .filter((trajectory) => trajectory.points.length >= 2);
+}
+
+function drawTrajectoryOverlay(
+  context: CanvasRenderingContext2D | null,
+  canvas: HTMLCanvasElement,
+  trajectories: TrajectoryProjectedPath[] | null,
+  camera: THREE.Camera,
+  width: number,
+  height: number,
+) {
+  if (!context) {
+    return;
+  }
+  context.clearRect(0, 0, width, height);
+  if (!trajectories?.length) {
+    return;
+  }
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const trajectory of trajectories) {
+    const projected = trajectory.points
+      .map((point) => point.clone().project(camera))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y) && point.z > -1 && point.z < 1)
+      .map((point) => ({
+        x: (point.x * 0.5 + 0.5) * width,
+        y: (-point.y * 0.5 + 0.5) * height,
+      }));
+    if (projected.length < 2) {
+      continue;
+    }
+    context.save();
+    context.globalAlpha = trajectory.highlighted ? 0.34 : 0.22;
+    context.strokeStyle = uiPalette.viewerBackgroundDark;
+    context.lineWidth = trajectory.highlighted ? 8 : 5;
+    strokeProjectedPath(context, projected);
+    context.globalAlpha = trajectory.highlighted ? 1 : 0.86;
+    context.strokeStyle = trajectory.color;
+    context.lineWidth = trajectory.highlighted ? 4 : 2.4;
+    strokeProjectedPath(context, projected);
+    context.restore();
+  }
+  void canvas.offsetWidth;
+}
+
+function strokeProjectedPath(context: CanvasRenderingContext2D, points: { x: number; y: number }[]) {
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y);
+  for (let index = 1; index < points.length; index += 1) {
+    context.lineTo(points[index].x, points[index].y);
+  }
+  context.stroke();
 }
 
 function addCells(

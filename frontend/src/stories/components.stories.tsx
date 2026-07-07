@@ -558,6 +558,7 @@ export const LineagePanelPreview: Story = {
             setLabeledNodeId(null);
           }}
           onGoToCell={(node) => setLabeledNodeId(node.id)}
+          onToggleTrajectory={() => {}}
           onHide={() => {}}
         />
       </div>
