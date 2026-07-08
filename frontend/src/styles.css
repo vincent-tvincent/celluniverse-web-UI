@@ -483,7 +483,8 @@ button {
   color: currentColor;
 }
 
-.status-heading-icon.queued {
+.status-heading-icon.queued,
+.status-heading-icon.cancelling {
   color: var(--color-warn);
 }
 
@@ -683,6 +684,10 @@ button {
 
 .state-dot.completed {
   background: var(--color-cyan);
+}
+
+.state-dot.cancelling {
+  background: var(--color-warn);
 }
 
 .state-dot.failed,
@@ -2614,6 +2619,11 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 .state-pill.running {
   color: var(--color-strong-action-text);
   background: var(--surface-strong-action);
+}
+
+.state-pill.cancelling {
+  color: var(--color-on-accent);
+  background: var(--color-warn);
 }
 
 .state-pill.completed {

@@ -494,7 +494,7 @@ export default function Dashboard({
                   setSeedDatasetId("");
                   onChangeTab("jobs");
                   void queryClient.invalidateQueries({ queryKey: ["jobs"] });
-                  if (job.state === "running" || job.state === "queued") {
+                  if (job.state === "running" || job.state === "queued" || job.state === "cancelling") {
                     onOpenMonitor(job);
                   }
                 }}
@@ -884,7 +884,7 @@ function JobItem({
   const canMonitor = job.partialOutputsAvailable || job.completedFrames > 0 || job.state === "completed" || job.state === "failed" || job.state === "cancelled";
   const lifecycle = getLifecycleLabel(job);
   const lifecycleIcon = lifecycle?.danger ? <Square size={14} /> : <Play size={14} />;
-  const canClone = job.state !== "running" && job.state !== "queued";
+  const canClone = !isJobBusy(job);
   const rowClass = view === "block" ? "job-card dashboard-card job-item" : "dashboard-row job-item";
   return (
     <article className={rowClass} onContextMenu={(event) => onContextMenu(event, job)}>
@@ -906,7 +906,7 @@ function JobItem({
         <button
           type="button"
           className={`${lifecycle?.danger ? "cancel-button" : "action-button"} job-lifecycle-button`}
-          disabled={!lifecycle || lifecyclePending}
+          disabled={!lifecycle || lifecyclePending || lifecycle.disabled}
           onClick={() => lifecycle ? onLifecycle(job) : undefined}
         >
           {lifecycleIcon}
@@ -933,7 +933,7 @@ function JobItem({
           <button className="action-button" type="button" onClick={() => onDownload(job)}>
             <Download size={15} /> Download
           </button>
-          <button className="action-button" type="button" disabled={job.state === "running" || job.state === "queued"} onClick={() => onArchive(job)} title="Archive">
+          <button className="action-button" type="button" disabled={isJobBusy(job)} onClick={() => onArchive(job)} title="Archive">
             <Archive size={15} /> Archive
           </button>
         </div>
@@ -1994,11 +1994,11 @@ function ContextMenu({
         <>
           <button type="button" disabled={!job.partialOutputsAvailable && job.completedFrames === 0} onClick={() => onOpenMonitor(job)}><MonitorPlay size={14} /> View all</button>
           <button type="button" disabled={!job.partialOutputsAvailable && job.completedFrames === 0} onClick={() => onOpenMonitor(job, true)}><MonitorPlay size={14} /> View last frame</button>
-          {getLifecycleLabel(job) ? <button type="button" onClick={() => onLifecycle(job)}>{getLifecycleLabel(job)?.label}</button> : null}
+          {getLifecycleLabel(job) ? <button type="button" disabled={getLifecycleLabel(job)?.disabled} onClick={() => onLifecycle(job)}>{getLifecycleLabel(job)?.label}</button> : null}
           {job.state === "prepared" ? <button type="button" onClick={() => onEdit(job.id)}><Edit3 size={14} /> Edit</button> : null}
-          {job.state !== "running" && job.state !== "queued" ? <button type="button" onClick={() => onClone(job)}><Copy size={14} /> Duplicate for editing</button> : null}
+          {!isJobBusy(job) ? <button type="button" onClick={() => onClone(job)}><Copy size={14} /> Duplicate for editing</button> : null}
           <button type="button" onClick={() => onDownloadJob(job)}><Download size={14} /> Download</button>
-          <button type="button" disabled={job.state === "running" || job.state === "queued"} onClick={() => onArchive(job)}><Archive size={14} /> Archive</button>
+          <button type="button" disabled={isJobBusy(job)} onClick={() => onArchive(job)}><Archive size={14} /> Archive</button>
         </>
       ) : null}
       {dataset ? (
@@ -2037,11 +2037,16 @@ export function DangerConfirmDialog({ intent, onClose }: { intent: ConfirmIntent
   );
 }
 
-function getLifecycleLabel(job: JobStatus): { label: string; danger: boolean } | null {
+function getLifecycleLabel(job: JobStatus): { label: string; danger: boolean; disabled?: boolean } | null {
   if (job.state === "prepared") return { label: "Start", danger: false };
+  if (job.state === "cancelling") return { label: "Terminating", danger: true, disabled: true };
   if (job.resumeAvailable) return { label: "Resume", danger: false };
   if (job.state === "running" || job.state === "queued") return { label: "Stop", danger: true };
   return null;
+}
+
+function isJobBusy(job: JobStatus): boolean {
+  return job.state === "running" || job.state === "queued" || job.state === "cancelling";
 }
 
 function buildDatasetSources(uploads: DatasetUpload[], localDatasets: LocalDataset[]): DatasetSource[] {

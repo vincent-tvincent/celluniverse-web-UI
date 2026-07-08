@@ -1,4 +1,4 @@
-export type JobState = "prepared" | "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted" | "archived";
+export type JobState = "prepared" | "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled" | "interrupted" | "archived";
 
 export type JobStatus = {
   id: string;

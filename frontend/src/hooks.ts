@@ -28,7 +28,7 @@ export function useJobEvents(jobId: string) {
         const payload = JSON.parse(event.data) as JobEvent;
         if (payload.type === "job.finished" || payload.type === "job.cancelled") {
           refreshTerminalState();
-        } else if (payload.type === "job.updated") {
+        } else if (payload.type === "job.updated" || payload.type === "job.cancelling") {
           refreshStatus();
         } else if (payload.type === "log.line") {
           refreshLogs();
@@ -39,6 +39,7 @@ export function useJobEvents(jobId: string) {
     };
     source.addEventListener("job.updated", refreshStatus);
     source.addEventListener("job.finished", refreshTerminalState);
+    source.addEventListener("job.cancelling", refreshStatus);
     source.addEventListener("job.cancelled", refreshTerminalState);
     source.addEventListener("log.line", refreshLogs);
 

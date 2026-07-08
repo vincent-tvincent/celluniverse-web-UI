@@ -16,7 +16,7 @@ export default function StatusPanel({ job, loading, actionPending = false, onSta
   const progress = Math.round((job?.progress ?? 0) * 100);
   const stateClass = job?.state ?? "idle";
   const stateIcon =
-    job?.state === "running" ? (
+    job?.state === "running" || job?.state === "cancelling" ? (
       <LoaderCircle className="spin-small" size={17} />
     ) : job?.state === "queued" ? (
       <Clock3 size={17} />
@@ -67,6 +67,11 @@ export default function StatusPanel({ job, loading, actionPending = false, onSta
             {job.resumeAvailable && onResume ? (
               <button className="action-button" type="button" disabled={actionPending} onClick={() => onResume(job.id)}>
                 <Play size={14} /> Resume
+              </button>
+            ) : null}
+            {job.state === "cancelling" ? (
+              <button className="cancel-button" type="button" disabled>
+                <LoaderCircle className="spin-small" size={14} /> Terminating
               </button>
             ) : null}
             {(job.state === "running" || job.state === "queued") && onTerminate ? (

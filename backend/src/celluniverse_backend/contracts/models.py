@@ -10,6 +10,7 @@ class JobState(str, Enum):
     prepared = "prepared"
     queued = "queued"
     running = "running"
+    cancelling = "cancelling"
     completed = "completed"
     failed = "failed"
     cancelled = "cancelled"

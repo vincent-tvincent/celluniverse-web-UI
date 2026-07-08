@@ -1808,7 +1808,7 @@ function sortJobs(jobs: JobStatus[]): JobStatus[] {
 }
 
 function activeRank(job: JobStatus): number {
-  if (job.state === "running") {
+  if (job.state === "running" || job.state === "cancelling") {
     return 0;
   }
   if (job.state === "queued") {

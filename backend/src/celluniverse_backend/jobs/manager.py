@@ -105,6 +105,7 @@ class JobManager:
             data = read_json(path, {})
             if data.get("state") in {
                 JobState.running.value,
+                JobState.cancelling.value,
                 JobState.cancelled.value,
                 JobState.failed.value,
                 JobState.interrupted.value,
@@ -128,6 +129,7 @@ class JobManager:
         status = self.get_status(job_id)
         if status.get("state") in {
             JobState.running.value,
+            JobState.cancelling.value,
             JobState.cancelled.value,
             JobState.failed.value,
             JobState.interrupted.value,
@@ -306,44 +308,53 @@ class JobManager:
         status = self.get_status(job_id)
         if not status:
             raise KeyError(job_id)
-        if status.get("state") == JobState.prepared.value:
+        if status.get("state") in {JobState.prepared.value, JobState.queued.value}:
             status["state"] = JobState.cancelled.value
             status["finishedAt"] = utc_now()
             status["error"] = "Cancelled by user"
+            status["partialOutputsAvailable"] = True
             self._write_status_dict(job_id, status)
             self._event(job_id, "job.cancelled", {"jobId": job_id})
             return status
-        if status.get("state") == JobState.queued.value:
-            status["state"] = JobState.cancelled.value
-            status["finishedAt"] = utc_now()
-            status["error"] = "Cancelled by user"
-            self._write_status_dict(job_id, status)
-            self._event(job_id, "job.cancelled", {"jobId": job_id})
+        if status.get("state") == JobState.cancelling.value:
             return status
+        if status.get("state") != JobState.running.value:
+            return status
+
+        status["state"] = JobState.cancelling.value
+        status["error"] = "Cancellation requested"
+        status["partialOutputsAvailable"] = True
+        self._write_status_dict(job_id, status)
+        self._event(job_id, "job.cancelling", {"jobId": job_id})
+        threading.Thread(target=self._finish_cancel_job, args=(job_id,), name=f"cancel-{job_id}", daemon=True).start()
+        return status
+
+    def _finish_cancel_job(self, job_id: str) -> None:
+        status = self.get_status(job_id)
         slurm_job_id = status.get("slurmJobId")
         if status.get("runner") == "slurm" and isinstance(slurm_job_id, str) and slurm_job_id:
             try:
                 cancel_slurm_job(slurm_job_id)
             except RuntimeError as exc:
                 status["error"] = str(exc)
+                self._write_status_dict(job_id, status)
         process = self._processes.get(job_id)
         if process and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-        elif status.get("state") == JobState.running.value:
+            self._terminate_process(process)
+        else:
             pid = status.get("pid")
             if isinstance(pid, int):
                 self._terminate_process_group(pid)
-        status["state"] = JobState.cancelled.value
-        status["finishedAt"] = utc_now()
-        status["error"] = "Cancelled by user"
-        status["partialOutputsAvailable"] = True
-        self._write_status_dict(job_id, status)
+
+        latest = self.get_status(job_id)
+        if latest.get("state") not in {JobState.cancelling.value, JobState.running.value}:
+            return
+        latest["state"] = JobState.cancelled.value
+        latest["finishedAt"] = utc_now()
+        latest["error"] = "Cancelled by user"
+        latest["partialOutputsAvailable"] = True
+        self._write_status_dict(job_id, latest)
         self._event(job_id, "job.cancelled", {"jobId": job_id})
-        return status
 
     def job_dir(self, job_id: str, create: bool = False) -> Path:
         if "/" in job_id or "\\" in job_id or not job_id.startswith("job_"):
@@ -393,7 +404,7 @@ class JobManager:
             if process:
                 self._terminate_process(process)
             status = self.get_status(job_id)
-            if status and status.get("state") != JobState.cancelled.value:
+            if status and status.get("state") not in {JobState.cancelled.value, JobState.cancelling.value}:
                 status.update({
                     "state": JobState.failed.value,
                     "finishedAt": utc_now(),
@@ -466,7 +477,7 @@ class JobManager:
         self._refresh_progress(job_id)
         exit_code = process.returncode
         status = self.get_status(job_id)
-        if status.get("state") != JobState.cancelled.value:
+        if status.get("state") not in {JobState.cancelled.value, JobState.cancelling.value}:
             status["exitCode"] = exit_code
             status["finishedAt"] = utc_now()
             status["state"] = JobState.completed.value if exit_code == 0 else JobState.failed.value
@@ -516,7 +527,7 @@ class JobManager:
         while not self._stop.is_set():
             self._refresh_progress(job_id)
             status = self.get_status(job_id)
-            if status.get("state") == JobState.cancelled.value:
+            if status.get("state") in {JobState.cancelled.value, JobState.cancelling.value}:
                 return
             exit_code = self._read_slurm_exit_code(job_id)
             if exit_code is not None:
@@ -561,7 +572,7 @@ class JobManager:
     def _finish_slurm_job(self, job_id: str, exit_code: int) -> None:
         self._refresh_progress(job_id)
         status = self.get_status(job_id)
-        if status.get("state") == JobState.cancelled.value:
+        if status.get("state") in {JobState.cancelled.value, JobState.cancelling.value}:
             return
         status["exitCode"] = exit_code
         status["finishedAt"] = utc_now()
