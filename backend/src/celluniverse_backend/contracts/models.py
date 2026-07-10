@@ -30,6 +30,7 @@ class SlurmJobOptions(BaseModel):
     partition: str | None = None
     account: str | None = None
     qos: str | None = None
+    nodelist: str | None = None
     timeLimit: str = "24:00:00"
     cpusPerTask: int = Field(default=32, ge=1, le=100)
     memory: str = "64G"

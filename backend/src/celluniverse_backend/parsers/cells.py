@@ -60,6 +60,12 @@ def build_lineage(frames: dict[int, list[dict[str, Any]]]) -> dict[str, Any]:
     observed_frames: dict[str, set[int]] = defaultdict(set)
     latest_cell: dict[str, dict[str, Any]] = {}
     nodes: dict[str, dict[str, Any]] = {}
+    observed_names = {
+        str(cell.get("name") or "")
+        for cells in frames.values()
+        for cell in cells
+        if cell.get("name") and not cell.get("isTrash")
+    }
 
     for frame, cells in sorted(frames.items()):
         for cell in cells:
@@ -69,13 +75,13 @@ def build_lineage(frames: dict[int, list[dict[str, Any]]]) -> dict[str, Any]:
             active_by_frame[frame].add(name)
             observed_frames[name].add(frame)
             latest_cell[name] = cell
-            for ancestor in lineage_chain(name):
-                node = _ensure_lineage_node(nodes, ancestor)
+            for ancestor in lineage_chain(name, observed_names):
+                node = _ensure_lineage_node(nodes, ancestor, observed_names)
                 node["firstFrame"] = min(node["firstFrame"], frame)
                 node["lastFrame"] = max(node["lastFrame"], frame)
 
     for name, frame_set in observed_frames.items():
-        node = _ensure_lineage_node(nodes, name)
+        node = _ensure_lineage_node(nodes, name, observed_names)
         node["observedFrames"] = sorted(frame_set)
         node["lastCell"] = _lineage_cell_payload(latest_cell.get(name, {}))
 
@@ -241,25 +247,37 @@ def lineage_parts(name: str) -> tuple[str, str]:
     return name[:match.start()], match.group(0)
 
 
-def parent_name(name: str) -> str | None:
+def parent_name(name: str, known_names: set[str] | None = None) -> str | None:
+    if name and name[-1] in {"0", "1"} and known_names:
+        direct_parent = name[:-1]
+        if direct_parent in known_names:
+            return direct_parent
     prefix, code = lineage_parts(name)
     if not code or code[-1] not in {"0", "1"} or len(code) <= 1:
         return None
     return f"{prefix}{code[:-1]}"
 
 
-def root_name(name: str) -> str:
+def root_name(name: str, known_names: set[str] | None = None) -> str:
+    current = name
+    seen: set[str] = set()
+    while current not in seen:
+        seen.add(current)
+        parent = parent_name(current, known_names)
+        if not parent:
+            return current
+        current = parent
     prefix, code = lineage_parts(name)
     if not code:
         return name
     return f"{prefix}{code[0]}"
 
 
-def lineage_chain(name: str) -> list[str]:
+def lineage_chain(name: str, known_names: set[str] | None = None) -> list[str]:
     chain = [name]
     current = name
     while True:
-        parent = parent_name(current)
+        parent = parent_name(current, known_names)
         if not parent:
             break
         chain.append(parent)
@@ -299,17 +317,21 @@ def assign_root_colors(roots: list[str], background: str = "#070a0f") -> dict[st
     return colors
 
 
-def _ensure_lineage_node(nodes: dict[str, dict[str, Any]], name: str) -> dict[str, Any]:
+def _ensure_lineage_node(
+    nodes: dict[str, dict[str, Any]],
+    name: str,
+    known_names: set[str] | None = None,
+) -> dict[str, Any]:
     existing = nodes.get(name)
     if existing:
         return existing
     prefix, code = lineage_parts(name)
-    parent = parent_name(name)
+    parent = parent_name(name, known_names)
     node = {
         "id": name,
         "name": name,
         "parentId": parent,
-        "rootId": root_name(name),
+        "rootId": root_name(name, known_names),
         "prefix": prefix,
         "code": code or name,
         "depth": len(code),
@@ -321,7 +343,7 @@ def _ensure_lineage_node(nodes: dict[str, dict[str, Any]], name: str) -> dict[st
     }
     nodes[name] = node
     if parent:
-        _ensure_lineage_node(nodes, parent)
+        _ensure_lineage_node(nodes, parent, known_names)
     return node
 
 

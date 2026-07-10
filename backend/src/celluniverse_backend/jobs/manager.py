@@ -23,7 +23,7 @@ from celluniverse_backend.datasets.service import DatasetService
 from celluniverse_backend.jobs.output_scan import scan_output
 from celluniverse_backend.preview.manifest import build_preview_artifacts
 from celluniverse_backend.runners.celluniverse import build_tracking_argv, start_celluniverse_process
-from celluniverse_backend.runners.slurm import cancel_slurm_job, inspect_slurm, slurm_job_state, submit_slurm_job, write_slurm_script
+from celluniverse_backend.runners.slurm import cancel_slurm_job, inspect_slurm, normalize_slurm_options, slurm_job_state, submit_slurm_job, write_slurm_script
 from celluniverse_backend.security.paths import ensure_inside_roots, validate_input_reference
 from celluniverse_backend.storage.json_store import append_ndjson, read_json, write_json_atomic
 
@@ -501,7 +501,7 @@ class JobManager:
         job_dir = self.job_dir(job_id)
         exit_path = job_dir / "slurm-exit-code.txt"
         exit_path.unlink(missing_ok=True)
-        options = request.slurm.model_copy(update={"enabled": True, "jobName": request.slurm.jobName or request.label or job_id})
+        options = normalize_slurm_options(request.slurm.model_copy(update={"enabled": True, "jobName": request.slurm.jobName or request.label or job_id}))
         script_path = write_slurm_script(
             self.config,
             argv,
@@ -519,46 +519,72 @@ class JobManager:
             "runner": "slurm",
             "slurmJobId": slurm_job_id,
             "pid": None,
+            "state": JobState.queued.value,
+            "startedAt": None,
         })
         self._write_status_dict(job_id, status)
         self._event(job_id, "slurm.submitted", {"jobId": job_id, "slurmJobId": slurm_job_id, "script": str(script_path)})
 
-        missing_from_queue_checks = 0
-        while not self._stop.is_set():
-            self._refresh_progress(job_id)
-            status = self.get_status(job_id)
-            if status.get("state") in {JobState.cancelled.value, JobState.cancelling.value}:
-                return
-            exit_code = self._read_slurm_exit_code(job_id)
-            if exit_code is not None:
-                self._finish_slurm_job(job_id, exit_code)
-                return
-            current_state = slurm_job_state(slurm_job_id)
-            if current_state:
-                missing_from_queue_checks = 0
-                if status.get("slurmState") != current_state:
-                    status["slurmState"] = current_state
-                    self._write_status_dict(job_id, status)
-            else:
-                missing_from_queue_checks += 1
-                if missing_from_queue_checks >= 6:
-                    self._refresh_progress(job_id)
-                    status = self.get_status(job_id)
-                    if status.get("state") == JobState.running.value:
-                        completed = int(status.get("completedFrames") or 0)
-                        total = int(status.get("totalFrames") or 0)
-                        status["finishedAt"] = utc_now()
-                        status["exitCode"] = None
-                        if total > 0 and completed >= total:
-                            status["state"] = JobState.completed.value
-                            status["error"] = None
-                        else:
-                            status["state"] = JobState.interrupted.value
-                            status["error"] = "Slurm job left the queue before writing an exit marker"
-                        self._write_status_dict(job_id, status)
-                        self._event(job_id, "job.finished", {"jobId": job_id, "state": status["state"], "exitCode": None})
+        stop_logs = threading.Event()
+        stdout_thread = threading.Thread(target=self._tail_slurm_log_file, args=(job_id, stdout_path, "stdout", stop_logs, 0), daemon=True)
+        stderr_thread = threading.Thread(target=self._tail_slurm_log_file, args=(job_id, stderr_path, "stderr", stop_logs, 0), daemon=True)
+        stdout_thread.start()
+        stderr_thread.start()
+        try:
+            missing_from_queue_checks = 0
+            while not self._stop.is_set():
+                self._refresh_progress(job_id)
+                status = self.get_status(job_id)
+                if status.get("state") in {JobState.cancelled.value, JobState.cancelling.value}:
                     return
-            time.sleep(5)
+                exit_code = self._read_slurm_exit_code(job_id)
+                if exit_code is not None:
+                    self._finish_slurm_job(job_id, exit_code)
+                    return
+                current_state = slurm_job_state(slurm_job_id)
+                if current_state:
+                    missing_from_queue_checks = 0
+                    next_state = self._state_for_slurm_state(current_state, status)
+                    changed = status.get("slurmState") != current_state or status.get("state") != next_state
+                    if changed:
+                        status["slurmState"] = current_state
+                        status["state"] = next_state
+                        if next_state == JobState.running.value and not status.get("startedAt"):
+                            status["startedAt"] = utc_now()
+                        self._write_status_dict(job_id, status)
+                        self._event(job_id, "job.updated", status)
+                else:
+                    missing_from_queue_checks += 1
+                    if missing_from_queue_checks >= 6:
+                        self._refresh_progress(job_id)
+                        status = self.get_status(job_id)
+                        if status.get("state") == JobState.running.value:
+                            completed = int(status.get("completedFrames") or 0)
+                            total = int(status.get("totalFrames") or 0)
+                            status["finishedAt"] = utc_now()
+                            status["exitCode"] = None
+                            if total > 0 and completed >= total:
+                                status["state"] = JobState.completed.value
+                                status["error"] = None
+                            else:
+                                status["state"] = JobState.interrupted.value
+                                status["error"] = "Slurm job left the queue before writing an exit marker"
+                            self._write_status_dict(job_id, status)
+                            self._event(job_id, "job.finished", {"jobId": job_id, "state": status["state"], "exitCode": None})
+                        return
+                time.sleep(5)
+        finally:
+            stop_logs.set()
+            stdout_thread.join(timeout=2)
+            stderr_thread.join(timeout=2)
+
+    def _state_for_slurm_state(self, slurm_state: str, status: dict[str, Any]) -> str:
+        normalized = slurm_state.upper()
+        if normalized in {"PENDING", "CONFIGURING", "COMPLETING", "SUSPENDED"}:
+            return JobState.queued.value
+        if normalized in {"RUNNING", "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "PREEMPTED"}:
+            return JobState.running.value
+        return str(status.get("state") or JobState.queued.value)
 
     def _read_slurm_exit_code(self, job_id: str) -> int | None:
         path = self.job_dir(job_id) / "slurm-exit-code.txt"
@@ -586,19 +612,34 @@ class JobManager:
 
     def _monitor_existing_slurm(self, job_id: str, slurm_job_id: str) -> None:
         self._event(job_id, "slurm.recovered", {"jobId": job_id, "slurmJobId": slurm_job_id})
+        job_dir = self.job_dir(job_id)
+        stop_logs = threading.Event()
+        stdout_thread = threading.Thread(target=self._tail_slurm_log_file, args=(job_id, job_dir / "stdout.log", "stdout", stop_logs, -65536), daemon=True)
+        stderr_thread = threading.Thread(target=self._tail_slurm_log_file, args=(job_id, job_dir / "stderr.log", "stderr", stop_logs, -65536), daemon=True)
+        stdout_thread.start()
+        stderr_thread.start()
         try:
             missing_from_queue_checks = 0
             while not self._stop.is_set():
                 self._refresh_progress(job_id)
                 status = self.get_status(job_id)
-                if status.get("state") != JobState.running.value:
+                if status.get("state") not in {JobState.running.value, JobState.queued.value}:
                     return
                 exit_code = self._read_slurm_exit_code(job_id)
                 if exit_code is not None:
                     self._finish_slurm_job(job_id, exit_code)
                     return
-                if slurm_job_state(slurm_job_id):
+                current_state = slurm_job_state(slurm_job_id)
+                if current_state:
                     missing_from_queue_checks = 0
+                    next_state = self._state_for_slurm_state(current_state, status)
+                    if status.get("slurmState") != current_state or status.get("state") != next_state:
+                        status["slurmState"] = current_state
+                        status["state"] = next_state
+                        if next_state == JobState.running.value and not status.get("startedAt"):
+                            status["startedAt"] = utc_now()
+                        self._write_status_dict(job_id, status)
+                        self._event(job_id, "job.updated", status)
                 else:
                     missing_from_queue_checks += 1
                     if missing_from_queue_checks >= 6:
@@ -610,6 +651,9 @@ class JobManager:
                         return
                 time.sleep(5)
         finally:
+            stop_logs.set()
+            stdout_thread.join(timeout=2)
+            stderr_thread.join(timeout=2)
             with self._status_lock:
                 self._active_jobs.discard(job_id)
                 self._job_threads.pop(job_id, None)
@@ -805,6 +849,32 @@ class JobManager:
         except OSError:
             return False
         return required.issubset(seen) and has_cell
+
+    def _tail_slurm_log_file(self, job_id: str, log_path: Path, stream: str, stop_event: threading.Event, initial_offset: int = 0) -> None:
+        while not stop_event.is_set() and not log_path.exists():
+            time.sleep(0.25)
+        if not log_path.exists():
+            return
+        with log_path.open("r", encoding="utf-8", errors="replace") as handle:
+            if initial_offset < 0:
+                handle.seek(0, os.SEEK_END)
+                start = max(0, handle.tell() + initial_offset)
+                handle.seek(start)
+                if start > 0:
+                    handle.readline()
+            elif initial_offset > 0:
+                handle.seek(initial_offset)
+            while not stop_event.is_set():
+                line = handle.readline()
+                if line:
+                    self._handle_log_line(job_id, stream, line.rstrip("\n"))
+                    continue
+                if self._read_slurm_exit_code(job_id) is not None:
+                    break
+                status = self.get_status(job_id)
+                if status.get("state") not in {JobState.running.value, JobState.queued.value}:
+                    break
+                time.sleep(0.25)
 
     def _tail_log_file(self, job_id: str, log_path: Path, stream: str, process: subprocess.Popen[Any], initial_offset: int = 0) -> None:
         with log_path.open("r", encoding="utf-8", errors="replace") as handle:

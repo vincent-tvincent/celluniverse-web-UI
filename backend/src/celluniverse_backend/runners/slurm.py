@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import getpass
 import re
 import shlex
 import shutil
@@ -14,20 +15,52 @@ from celluniverse_backend.runners.celluniverse import THREAD_ENV_KEYS, resolve_t
 SLURM_ID_RE = re.compile(r"^(\d+)")
 
 
+SLURM_CONF_PATH = Path("/etc/slurm/slurm.conf")
+
+
+def _slurm_bin_dir_from_config() -> Path | None:
+    try:
+        lines = SLURM_CONF_PATH.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        if key.strip() != "PluginDir":
+            continue
+        plugin_dir = Path(value.strip())
+        candidate = plugin_dir.parent.parent / "bin"
+        return candidate if candidate.exists() else None
+    return None
+
+
+def _resolve_slurm_command(name: str, preferred_bin_dir: Path | None) -> str | None:
+    if preferred_bin_dir:
+        candidate = preferred_bin_dir / name
+        if candidate.exists() and candidate.is_file():
+            return str(candidate)
+    return shutil.which(name)
+
+
 def inspect_slurm() -> SlurmStatus:
-    sbatch = shutil.which("sbatch")
-    squeue = shutil.which("squeue")
-    scancel = shutil.which("scancel")
-    sacct = shutil.which("sacct")
+    preferred_bin_dir = _slurm_bin_dir_from_config()
+    sbatch = _resolve_slurm_command("sbatch", preferred_bin_dir)
+    squeue = _resolve_slurm_command("squeue", preferred_bin_dir)
+    scancel = _resolve_slurm_command("scancel", preferred_bin_dir)
+    sacct = _resolve_slurm_command("sacct", preferred_bin_dir)
     diagnostics: list[str] = []
+    if preferred_bin_dir:
+        diagnostics.append(f"using Slurm client directory from PluginDir: {preferred_bin_dir}")
     if not sbatch:
-        diagnostics.append("sbatch was not found on PATH")
+        diagnostics.append("sbatch was not found on PATH or in the configured Slurm client directory")
     if not squeue:
-        diagnostics.append("squeue was not found on PATH")
+        diagnostics.append("squeue was not found on PATH or in the configured Slurm client directory")
     if not scancel:
-        diagnostics.append("scancel was not found on PATH")
+        diagnostics.append("scancel was not found on PATH or in the configured Slurm client directory")
     if not sacct:
-        diagnostics.append("sacct was not found on PATH; completed Slurm state will use the job exit marker")
+        diagnostics.append("sacct was not found; completed Slurm state will use the job exit marker")
     return SlurmStatus(
         available=bool(sbatch and squeue and scancel),
         sbatch=sbatch,
@@ -36,6 +69,44 @@ def inspect_slurm() -> SlurmStatus:
         sacct=sacct,
         diagnostics=diagnostics,
     )
+
+
+def normalize_slurm_options(options: SlurmJobOptions) -> SlurmJobOptions:
+    account = _valid_account_for_user(options.account)
+    if account == options.account:
+        return options
+    return options.model_copy(update={"account": account})
+
+
+def _valid_account_for_user(requested: str | None) -> str | None:
+    associations = _slurm_accounts_for_user()
+    if not associations:
+        return requested
+    cleaned = requested.strip() if requested else None
+    if cleaned and cleaned in associations:
+        return cleaned
+    return associations[0]
+
+
+def _slurm_accounts_for_user() -> list[str]:
+    preferred_bin_dir = _slurm_bin_dir_from_config()
+    sacctmgr = _resolve_slurm_command("sacctmgr", preferred_bin_dir)
+    if not sacctmgr:
+        return []
+    result = subprocess.run(
+        [sacctmgr, "-n", "-P", "show", "assoc", f"user={getpass.getuser()}", "format=Account"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return []
+    accounts: list[str] = []
+    for line in result.stdout.splitlines():
+        account = line.strip().split("|", 1)[0].strip()
+        if account and account not in accounts:
+            accounts.append(account)
+    return accounts
 
 
 def write_slurm_script(
@@ -66,6 +137,7 @@ def write_slurm_script(
         ("partition", options.partition),
         ("account", options.account),
         ("qos", options.qos),
+        ("nodelist", options.nodelist),
     ]:
         if value:
             lines.append(f"#SBATCH --{key}={value}")
