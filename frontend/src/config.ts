@@ -22,6 +22,9 @@ export type ViewerRuntimeConfig = {
   };
 };
 
+export const POINT_SIZE_MIN = 0.25;
+export const POINT_SIZE_MAX = 16;
+
 export const defaultViewerConfig: ViewerRuntimeConfig = {
   preview: {
     maxXY: 512,
@@ -100,7 +103,12 @@ function normalizeConfig(raw: Partial<ViewerRuntimeConfig>): ViewerRuntimeConfig
         99.5,
         defaultViewerConfig.pointCloud.intensityPercentile,
       ),
-      pointSize: clampFloat(raw.pointCloud?.pointSize, 0.25, 8, defaultViewerConfig.pointCloud.pointSize),
+      pointSize: clampFloat(
+        raw.pointCloud?.pointSize,
+        POINT_SIZE_MIN,
+        POINT_SIZE_MAX,
+        defaultViewerConfig.pointCloud.pointSize,
+      ),
       realOpacity: clampFloat(raw.pointCloud?.realOpacity, 0.05, 1, defaultViewerConfig.pointCloud.realOpacity),
       synthOpacityScale: clampFloat(
         raw.pointCloud?.synthOpacityScale,

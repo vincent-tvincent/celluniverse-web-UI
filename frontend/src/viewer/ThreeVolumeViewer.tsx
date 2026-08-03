@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { Moon, Sun } from "lucide-react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { defaultViewerConfig, type ViewerRuntimeConfig } from "../config";
+import { defaultViewerConfig, POINT_SIZE_MAX, POINT_SIZE_MIN, type ViewerRuntimeConfig } from "../config";
 import { uiPalette } from "../theme/palette";
 import type { CellRecord } from "../types";
 import { getColorMap, type ColorMapId } from "./colorMaps";
@@ -168,7 +168,10 @@ export default function ThreeVolumeViewer({
     scene.add(group);
 
     const cloudConfig = pointCloudConfig ?? defaultViewerConfig.pointCloud;
-    const effectivePointSize = Math.max(0.25, Math.min(8, pointSize ?? cloudConfig.pointSize));
+    const effectivePointSize = Math.max(
+      POINT_SIZE_MIN,
+      Math.min(POINT_SIZE_MAX, pointSize ?? cloudConfig.pointSize),
+    );
     const worldWidth = 2.4;
     const worldHeight = worldWidth * (base.height / base.width);
     const worldDepth = getRawScaleWorldDepth(base, worldWidth, worldHeight) * cloudConfig.zCompression;

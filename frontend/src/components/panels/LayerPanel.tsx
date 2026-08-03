@@ -1,5 +1,6 @@
 import { useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Check, ChevronDown, Crosshair, Eye, EyeOff, Palette, Route } from "lucide-react";
+import { Check, ChevronDown, Crosshair, Eye, EyeOff, Route } from "lucide-react";
+import { POINT_SIZE_MAX, POINT_SIZE_MIN } from "../../config";
 import { colorMaps, getColorMap, type ColorMap, type ColorMapId } from "../../viewer/colorMaps";
 import { clampContrastLimits, type ContrastLimits } from "../../viewer/contrast";
 import PanelHeading from "./PanelHeading";
@@ -72,97 +73,86 @@ export default function LayerPanel({
   return (
     <section className="tool-panel">
       <PanelHeading title="Layers" icon={<Eye size={17} />} onHide={onHide} />
-      {showCells || setPointAlphaByBrightness ? (
-        <div className="layer-toggle-stack">
-          {showCells ? (
+      {showCells ? (
+        <fieldset className="layer-control-group cell-display-group">
+          <legend>Cell display</legend>
+          <div className="layer-toggle-stack cell-display-toggle-stack">
+            <button
+              type="button"
+              className={`toggle-button ${cellCentersEnabled ? "active" : ""}`}
+              onClick={() => setLayer("cellCentersEnabled", !cellCentersEnabled)}
+            >
+              {cellCentersEnabled ? <Crosshair size={16} /> : <EyeOff size={16} />}
+              Cell centers
+            </button>
+            <button
+              type="button"
+              className={`toggle-button ${cellsEnabled ? "active" : ""}`}
+              onClick={() => setLayer("cellsEnabled", !cellsEnabled)}
+            >
+              {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
+              Cell outlines
+            </button>
+            {setCellTrajectoriesEnabled ? (
+              <button
+                type="button"
+                className={`toggle-button ${cellTrajectoriesEnabled ? "active" : ""}`}
+                onClick={() => setCellTrajectoriesEnabled(!cellTrajectoriesEnabled)}
+                title="Display cell center trajectories in the 3D viewer"
+              >
+                {cellTrajectoriesEnabled ? <Route size={16} /> : <EyeOff size={16} />}
+                Cell trajectories
+              </button>
+            ) : null}
+          </div>
+          {setLineageOutlineColorsEnabled ? (
+            <LayerSwitch
+              label="Lineage colors"
+              description="Match outlines to the lineage tree."
+              checked={lineageOutlineColorsEnabled}
+              onChange={setLineageOutlineColorsEnabled}
+              ariaLabel="Match cell outline colors to the lineage tree"
+            />
+          ) : null}
+        </fieldset>
+      ) : null}
+      {(pointSize !== undefined && setPointSize && setPointSizeByBrightness) || setPointAlphaByBrightness ? (
+        <fieldset className="layer-control-group point-cloud-display-group">
+          <legend>Point cloud display</legend>
+          {pointSize !== undefined && setPointSize && setPointSizeByBrightness ? (
             <>
-              <button
-                type="button"
-                className={`toggle-button ${cellCentersEnabled ? "active" : ""}`}
-                onClick={() => setLayer("cellCentersEnabled", !cellCentersEnabled)}
-              >
-                {cellCentersEnabled ? <Crosshair size={16} /> : <EyeOff size={16} />}
-                Cell centers
-              </button>
-              <button
-                type="button"
-                className={`toggle-button ${cellsEnabled ? "active" : ""}`}
-                onClick={() => setLayer("cellsEnabled", !cellsEnabled)}
-              >
-                {cellsEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
-                Cell outlines
-              </button>
-              {setCellTrajectoriesEnabled ? (
-                <button
-                  type="button"
-                  className={`toggle-button ${cellTrajectoriesEnabled ? "active" : ""}`}
-                  onClick={() => setCellTrajectoriesEnabled(!cellTrajectoriesEnabled)}
-                  title="Display cell center trajectories in the 3D viewer"
-                >
-                  {cellTrajectoriesEnabled ? <Route size={16} /> : <EyeOff size={16} />}
-                  Cell trajectories
-                </button>
-              ) : null}
-              {setLineageOutlineColorsEnabled ? (
-                <button
-                  type="button"
-                  className={`toggle-button ${lineageOutlineColorsEnabled ? "active" : ""}`}
-                  onClick={() => setLineageOutlineColorsEnabled(!lineageOutlineColorsEnabled)}
-                  title="Match cell outline colors to the lineage tree"
-                >
-                  {lineageOutlineColorsEnabled ? <Palette size={16} /> : <EyeOff size={16} />}
-                  Lineage colors
-                </button>
-              ) : null}
+              <label className="slider-row point-size-row">
+                <span>Dot size</span>
+                <output>{formatPointSize(pointSize)} px</output>
+                <input
+                  type="range"
+                  min={POINT_SIZE_MIN}
+                  max={POINT_SIZE_MAX}
+                  step={0.25}
+                  value={pointSize}
+                  style={{ "--slider-fill": `${pointSizeFillPercent(pointSize)}%` } as CSSProperties}
+                  onChange={(event) => setPointSize(Number(event.target.value))}
+                  aria-label="Point cloud dot size"
+                />
+              </label>
+              <LayerSwitch
+                label="Size by brightness"
+                description="Brighter points render larger."
+                checked={pointSizeByBrightness}
+                onChange={setPointSizeByBrightness}
+                ariaLabel="Make point cloud dot size proportional to brightness"
+              />
             </>
           ) : null}
           {setPointAlphaByBrightness ? (
-            <button
-              type="button"
-              className={`toggle-button layer-brightness-toggle ${pointAlphaByBrightness ? "active" : ""}`}
-              onClick={() => setPointAlphaByBrightness(!pointAlphaByBrightness)}
-              title="Make point opacity proportional to brightness"
-            >
-              {pointAlphaByBrightness ? <Eye size={16} /> : <EyeOff size={16} />}
-              Brightness alpha
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-      {pointSize !== undefined && setPointSize && setPointSizeByBrightness ? (
-        <fieldset className="layer-control-group point-cloud-display-group">
-          <legend>Point cloud display</legend>
-          <label className="slider-row point-size-row">
-            <span>Dot size</span>
-            <output>{formatPointSize(pointSize)} px</output>
-            <input
-              type="range"
-              min={0.25}
-              max={8}
-              step={0.25}
-              value={pointSize}
-              style={{ "--slider-fill": `${((pointSize - 0.25) / 7.75) * 100}%` } as CSSProperties}
-              onChange={(event) => setPointSize(Number(event.target.value))}
-              aria-label="Point cloud dot size"
+            <LayerSwitch
+              label="Brightness alpha"
+              description="Brighter points render less transparent."
+              checked={pointAlphaByBrightness}
+              onChange={setPointAlphaByBrightness}
+              ariaLabel="Make point opacity proportional to brightness"
             />
-          </label>
-          <div className="point-cloud-switch-row">
-            <div className="point-cloud-switch-copy">
-              <span>Size by brightness</span>
-              <small>Brighter points render larger.</small>
-            </div>
-            <button
-              type="button"
-              className="point-cloud-switch"
-              role="switch"
-              aria-checked={pointSizeByBrightness}
-              aria-label="Make point cloud dot size proportional to brightness"
-              title="Make point cloud dot size proportional to brightness"
-              onClick={() => setPointSizeByBrightness(!pointSizeByBrightness)}
-            >
-              <span className="point-cloud-switch-thumb" />
-            </button>
-          </div>
+          ) : null}
         </fieldset>
       ) : null}
       <LayerControlGroup
@@ -191,6 +181,45 @@ export default function LayerPanel({
       ) : null}
     </section>
   );
+}
+
+function LayerSwitch({
+  label,
+  description,
+  checked,
+  onChange,
+  ariaLabel,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (enabled: boolean) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="layer-switch-row">
+      <div className="layer-switch-copy">
+        <span>{label}</span>
+        <small>{description}</small>
+      </div>
+      <button
+        type="button"
+        className="layer-switch"
+        role="switch"
+        aria-checked={checked}
+        aria-label={ariaLabel}
+        title={ariaLabel}
+        onClick={() => onChange(!checked)}
+      >
+        <span className="layer-switch-thumb" />
+      </button>
+    </div>
+  );
+}
+
+function pointSizeFillPercent(pointSize: number): number {
+  const fraction = (pointSize - POINT_SIZE_MIN) / (POINT_SIZE_MAX - POINT_SIZE_MIN);
+  return Math.max(0, Math.min(100, fraction * 100));
 }
 
 function formatPointSize(pointSize: number): string {

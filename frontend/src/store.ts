@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { POINT_SIZE_MAX, POINT_SIZE_MIN } from "./config";
 import type { ColorMapId } from "./viewer/colorMaps";
 import { clampContrastLimits, DEFAULT_CLEAN_CONTRAST_LIMITS, DEFAULT_CONTRAST_LIMITS, type ContrastLimits } from "./viewer/contrast";
 
@@ -249,7 +250,7 @@ function clampPointSize(size: number): number {
   if (!Number.isFinite(size)) {
     return 1;
   }
-  return Math.max(0.25, Math.min(8, Math.round(size * 4) / 4));
+  return Math.max(POINT_SIZE_MIN, Math.min(POINT_SIZE_MAX, Math.round(size * 4) / 4));
 }
 
 function areContrastLimitsEqual(a: ContrastLimits, b: ContrastLimits): boolean {
