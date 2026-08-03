@@ -24,6 +24,10 @@ type LayerPanelProps = {
   setSynthContrastLimits: (limits: ContrastLimits) => void;
   pointAlphaByBrightness?: boolean;
   setPointAlphaByBrightness?: (enabled: boolean) => void;
+  pointSize?: number;
+  setPointSize?: (size: number) => void;
+  pointSizeByBrightness?: boolean;
+  setPointSizeByBrightness?: (enabled: boolean) => void;
   lineageOutlineColorsEnabled?: boolean;
   setLineageOutlineColorsEnabled?: (enabled: boolean) => void;
   cellTrajectoriesEnabled?: boolean;
@@ -53,6 +57,10 @@ export default function LayerPanel({
   setSynthContrastLimits,
   pointAlphaByBrightness = false,
   setPointAlphaByBrightness,
+  pointSize,
+  setPointSize,
+  pointSizeByBrightness = false,
+  setPointSizeByBrightness,
   lineageOutlineColorsEnabled = false,
   setLineageOutlineColorsEnabled,
   cellTrajectoriesEnabled = false,
@@ -121,6 +129,42 @@ export default function LayerPanel({
           ) : null}
         </div>
       ) : null}
+      {pointSize !== undefined && setPointSize && setPointSizeByBrightness ? (
+        <fieldset className="layer-control-group point-cloud-display-group">
+          <legend>Point cloud display</legend>
+          <label className="slider-row point-size-row">
+            <span>Dot size</span>
+            <output>{formatPointSize(pointSize)} px</output>
+            <input
+              type="range"
+              min={0.25}
+              max={8}
+              step={0.25}
+              value={pointSize}
+              style={{ "--slider-fill": `${((pointSize - 0.25) / 7.75) * 100}%` } as CSSProperties}
+              onChange={(event) => setPointSize(Number(event.target.value))}
+              aria-label="Point cloud dot size"
+            />
+          </label>
+          <div className="point-cloud-switch-row">
+            <div className="point-cloud-switch-copy">
+              <span>Size by brightness</span>
+              <small>Brighter points render larger.</small>
+            </div>
+            <button
+              type="button"
+              className="point-cloud-switch"
+              role="switch"
+              aria-checked={pointSizeByBrightness}
+              aria-label="Make point cloud dot size proportional to brightness"
+              title="Make point cloud dot size proportional to brightness"
+              onClick={() => setPointSizeByBrightness(!pointSizeByBrightness)}
+            >
+              <span className="point-cloud-switch-thumb" />
+            </button>
+          </div>
+        </fieldset>
+      ) : null}
       <LayerControlGroup
         label="Real"
         enabled={realEnabled}
@@ -147,6 +191,10 @@ export default function LayerPanel({
       ) : null}
     </section>
   );
+}
+
+function formatPointSize(pointSize: number): string {
+  return pointSize.toFixed(2).replace(/\.00$/, "").replace(/0$/, "");
 }
 
 function LayerControlGroup({

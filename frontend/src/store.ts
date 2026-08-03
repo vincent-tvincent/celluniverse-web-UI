@@ -31,6 +31,8 @@ type ViewerState = {
   realContrastLimits: ContrastLimits;
   synthContrastLimits: ContrastLimits;
   pointAlphaByBrightness: boolean;
+  pointSize: number | null;
+  pointSizeByBrightness: boolean;
   lineageOutlineColorsEnabled: boolean;
   default3dBackgroundMode: ViewerBackgroundMode;
   defaultRealEnabled: boolean;
@@ -53,6 +55,8 @@ type ViewerState = {
   setRealContrastLimits: (limits: ContrastLimits) => void;
   setSynthContrastLimits: (limits: ContrastLimits) => void;
   setPointAlphaByBrightness: (enabled: boolean) => void;
+  setPointSize: (size: number) => void;
+  setPointSizeByBrightness: (enabled: boolean) => void;
   setLineageOutlineColorsEnabled: (enabled: boolean) => void;
   setDefault3dBackgroundMode: (mode: ViewerBackgroundMode) => void;
   setDefaultRealEnabled: (enabled: boolean) => void;
@@ -93,6 +97,8 @@ export const useViewerStore = create<ViewerState>((set) => ({
   realContrastLimits: DEFAULT_CLEAN_CONTRAST_LIMITS,
   synthContrastLimits: DEFAULT_CLEAN_CONTRAST_LIMITS,
   pointAlphaByBrightness: false,
+  pointSize: null,
+  pointSizeByBrightness: false,
   lineageOutlineColorsEnabled: true,
   default3dBackgroundMode: storedViewerDefaults.default3dBackgroundMode,
   defaultRealEnabled: storedViewerDefaults.defaultRealEnabled,
@@ -128,6 +134,13 @@ export const useViewerStore = create<ViewerState>((set) => ({
   }),
   setPointAlphaByBrightness: (pointAlphaByBrightness) => (
     set((state) => (state.pointAlphaByBrightness === pointAlphaByBrightness ? state : { pointAlphaByBrightness }))
+  ),
+  setPointSize: (pointSize) => set((state) => {
+    const size = clampPointSize(pointSize);
+    return state.pointSize === size ? state : { pointSize: size };
+  }),
+  setPointSizeByBrightness: (pointSizeByBrightness) => (
+    set((state) => (state.pointSizeByBrightness === pointSizeByBrightness ? state : { pointSizeByBrightness }))
   ),
   setLineageOutlineColorsEnabled: (lineageOutlineColorsEnabled) => (
     set((state) => (state.lineageOutlineColorsEnabled === lineageOutlineColorsEnabled ? state : { lineageOutlineColorsEnabled }))
@@ -230,6 +243,13 @@ function clampOpacity(opacity: number): number {
     return 1;
   }
   return Math.max(0, Math.min(1, opacity));
+}
+
+function clampPointSize(size: number): number {
+  if (!Number.isFinite(size)) {
+    return 1;
+  }
+  return Math.max(0.25, Math.min(8, Math.round(size * 4) / 4));
 }
 
 function areContrastLimitsEqual(a: ContrastLimits, b: ContrastLimits): boolean {

@@ -47,7 +47,7 @@ import LogPanel from "./components/panels/LogPanel";
 import SchedulePanel from "./components/panels/SchedulePanel";
 import StatusPanel from "./components/panels/StatusPanel";
 import ViewModePanel from "./components/panels/ViewModePanel";
-import { previewConfigSignature, useViewerConfig, type PreviewConfig } from "./config";
+import { defaultViewerConfig, previewConfigSignature, useViewerConfig, type PreviewConfig } from "./config";
 import { useJobEvents } from "./hooks";
 import { useViewerStore } from "./store";
 import type { CellRecord, JobManifest, JobStatus, LayerEntry, LineageLayout, LineageNode } from "./types";
@@ -171,6 +171,10 @@ function LiveMonitor({
     setSynthContrastLimits,
     pointAlphaByBrightness,
     setPointAlphaByBrightness,
+    pointSize,
+    setPointSize,
+    pointSizeByBrightness,
+    setPointSizeByBrightness,
     lineageOutlineColorsEnabled,
     setLineageOutlineColorsEnabled,
     default3dBackgroundMode,
@@ -185,6 +189,9 @@ function LiveMonitor({
     setAutoRefreshUnit,
   } = useViewerStore();
   const configQuery = useViewerConfig();
+  const effectivePointSize = pointSize
+    ?? configQuery.data?.pointCloud.pointSize
+    ?? defaultViewerConfig.pointCloud.pointSize;
   const [frameSelectionJobId, setFrameSelectionJobId] = useState(selectedJobId);
   useEffect(() => {
     if (routeJobId && routeJobId !== selectedJobId) {
@@ -573,6 +580,8 @@ function LiveMonitor({
       realContrastLimits,
       synthContrastLimits,
       pointAlphaByBrightness,
+      effectivePointSize,
+      pointSizeByBrightness,
       lineageOutlineColorsEnabled,
       configQuery.data?.rendering.maxPixelRatio ?? 1,
       JSON.stringify(configQuery.data?.pointCloud ?? {}),
@@ -590,6 +599,8 @@ function LiveMonitor({
     realContrastLimits,
     realUrl,
     pointAlphaByBrightness,
+    effectivePointSize,
+    pointSizeByBrightness,
     lineageOutlineColorsEnabled,
     realVolume,
     realPointCloudQuery.data,
@@ -1144,6 +1155,10 @@ function LiveMonitor({
                   setSynthContrastLimits={setSynthContrastLimits}
                   pointAlphaByBrightness={pointAlphaByBrightness}
                   setPointAlphaByBrightness={setPointAlphaByBrightness}
+                  pointSize={effectivePointSize}
+                  setPointSize={setPointSize}
+                  pointSizeByBrightness={pointSizeByBrightness}
+                  setPointSizeByBrightness={setPointSizeByBrightness}
                   lineageOutlineColorsEnabled={lineageOutlineColorsEnabled}
                   setLineageOutlineColorsEnabled={setLineageOutlineColorsEnabled}
                   cellTrajectoriesEnabled={cellTrajectoriesEnabled}
@@ -1221,6 +1236,8 @@ function LiveMonitor({
                 realContrastLimits={realContrastLimits}
                 synthContrastLimits={synthContrastLimits}
                 pointAlphaByBrightness={pointAlphaByBrightness}
+                pointSize={effectivePointSize}
+                pointSizeByBrightness={pointSizeByBrightness}
                 maxPixelRatio={configQuery.data?.rendering.maxPixelRatio ?? 1}
                 pointCloudConfig={configQuery.data?.pointCloud}
                 focusCellIds={cellFocusRequest?.cellIds ?? EMPTY_FOCUS_IDS}
