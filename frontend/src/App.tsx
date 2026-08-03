@@ -185,9 +185,11 @@ function LiveMonitor({
     setAutoRefreshUnit,
   } = useViewerStore();
   const configQuery = useViewerConfig();
+  const [frameSelectionJobId, setFrameSelectionJobId] = useState(selectedJobId);
   useEffect(() => {
     if (routeJobId && routeJobId !== selectedJobId) {
       setSelectedJobId(routeJobId);
+      setFrameSelectionJobId("");
     }
   }, [routeJobId, selectedJobId, setSelectedJobId]);
 
@@ -255,7 +257,12 @@ function LiveMonitor({
       return;
     }
     setSelectedJobId(sortedJobs[0].id);
+    setFrameSelectionJobId("");
   }, [sortedJobs, selectedJobId, setSelectedJobId]);
+
+  useEffect(() => {
+    autoFollowLatestFrameRef.current = true;
+  }, [selectedJobId]);
 
   useJobEvents(selectedJobId);
 
@@ -290,8 +297,21 @@ function LiveMonitor({
       const latestFrame = availableFrameNumbers.at(-1);
       autoFollowLatestFrameRef.current = latestFrame == null || nextFrame >= latestFrame;
     }
+    setFrameSelectionJobId(selectedJobId);
     setFrame(nextFrame);
-  }, [availableFrameNumbers, setFrame]);
+  }, [availableFrameNumbers, selectedJobId, setFrame]);
+
+  const selectJob = useCallback((nextJobId: string) => {
+    const nextJob = sortedJobs.find((job) => job.id === nextJobId);
+    autoFollowLatestFrameRef.current = true;
+    setSelectedJobId(nextJobId);
+    if (nextJob) {
+      setFrame(nextJob.lastCompletedFrame ?? nextJob.currentFrame ?? nextJob.firstFrame);
+      setFrameSelectionJobId(nextJobId);
+    } else {
+      setFrameSelectionJobId("");
+    }
+  }, [setFrame, setSelectedJobId, sortedJobs]);
 
   useEffect(() => {
     if (!selectedJobId) {
@@ -347,16 +367,23 @@ function LiveMonitor({
     const target = statusFrame != null && availableFrameNumbers.includes(statusFrame)
       ? statusFrame
       : availableFrameNumbers[availableFrameNumbers.length - 1];
+    if (frameSelectionJobId !== selectedJobId) {
+      setFrame(target);
+      setFrameSelectionJobId(selectedJobId);
+      return;
+    }
     if (!availableFrameNumbers.includes(frame)) {
       setFrame(target);
       return;
     }
-    if (jobQuery.data?.state === "running" && frame !== target && !availableFrameNumbers.includes(frame)) {
+    if (jobQuery.data?.state === "running" && autoFollowLatestFrameRef.current && frame !== target) {
       setFrame(target);
     }
-  }, [availableFrameNumbers, frame, jobQuery.data, setFrame]);
+  }, [availableFrameNumbers, frame, frameSelectionJobId, jobQuery.data, selectedJobId, setFrame]);
 
-  const activeFrame = frames.find((item) => item.t === frame) ?? frames.at(-1);
+  const activeFrame = frameSelectionJobId === selectedJobId
+    ? frames.find((item) => item.t === frame) ?? frames.at(-1)
+    : undefined;
   const activeFrameNumber = activeFrame?.t;
   const realUrl = getLayerUrl(activeFrame?.layers.realTiff);
   const synthUrl = getLayerUrl(activeFrame?.layers.synthTiff);
@@ -365,8 +392,22 @@ function LiveMonitor({
   const usePointCloudPreview = mode === "volume" && Boolean(realPointCloudUrl || synthPointCloudUrl);
   useEffect(() => setRealPointCloudProgress(null), [realPointCloudUrl]);
   useEffect(() => setSynthPointCloudProgress(null), [synthPointCloudUrl]);
-  const realSliceUrl = getSlicePreviewUrl(selectedJobId, activeFrameNumber, "real", slice, previewConfig, realUrl);
-  const synthSliceUrl = getSlicePreviewUrl(selectedJobId, activeFrameNumber, "synth", slice, previewConfig, synthUrl);
+  const realSliceUrl = getSlicePreviewUrl(
+    selectedJobId,
+    activeFrameNumber,
+    "real",
+    slice,
+    previewConfig,
+    realUrl ?? realPointCloudUrl,
+  );
+  const synthSliceUrl = getSlicePreviewUrl(
+    selectedJobId,
+    activeFrameNumber,
+    "synth",
+    slice,
+    previewConfig,
+    synthUrl ?? synthPointCloudUrl,
+  );
   const preloadTargets = useMemo(() => {
     if (!previewConfig || mode === "slice" || usePointCloudPreview) {
       return [];
@@ -379,8 +420,12 @@ function LiveMonitor({
     [realPointCloudUrl, synthPointCloudUrl],
   );
   const pointCloudPreloadTargets = useMemo(
-    () => buildPointCloudPreloadTargets(frames, activeFrameNumber, activePointCloudUrls),
-    [activeFrameNumber, activePointCloudUrls, frames],
+    () => (
+      quickPreview || isRunningCompactPointCloudJob(jobQuery.data, frames)
+        ? []
+        : buildPointCloudPreloadTargets(frames, activeFrameNumber, activePointCloudUrls)
+    ),
+    [activeFrameNumber, activePointCloudUrls, frames, jobQuery.data, quickPreview],
   );
   const realVolume = realUrl && previewConfig
     ? preload.volumes[getPreloadKey(realUrl, previewSignature)]
@@ -390,13 +435,21 @@ function LiveMonitor({
     : undefined;
   const realPointCloudQuery = useQuery({
     queryKey: ["point-cloud", realPointCloudUrl],
-    queryFn: () => loadPointCloudPreview(toApiUrl(realPointCloudUrl!), setRealPointCloudProgress),
+    queryFn: ({ signal }) => loadPointCloudPreview(
+      toApiUrl(realPointCloudUrl!),
+      setRealPointCloudProgress,
+      signal,
+    ),
     enabled: usePointCloudPreview && realEnabled && Boolean(realPointCloudUrl),
     staleTime: Number.POSITIVE_INFINITY,
   });
   const synthPointCloudQuery = useQuery({
     queryKey: ["point-cloud", synthPointCloudUrl],
-    queryFn: () => loadPointCloudPreview(toApiUrl(synthPointCloudUrl!), setSynthPointCloudProgress),
+    queryFn: ({ signal }) => loadPointCloudPreview(
+      toApiUrl(synthPointCloudUrl!),
+      setSynthPointCloudProgress,
+      signal,
+    ),
     enabled: usePointCloudPreview && synthEnabled && Boolean(synthPointCloudUrl),
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -427,10 +480,23 @@ function LiveMonitor({
   const activePointCloudPreload = pointCloudLoading
     ? progressAsPreloadState(pointCloudProgress, activeFrameNumber, "active point cloud")
     : null;
+  const activePointCloudReady = (
+    (!realEnabled || !realPointCloudUrl || Boolean(realPointCloudQuery.data)) &&
+    (!synthEnabled || !synthPointCloudUrl || Boolean(synthPointCloudQuery.data))
+  );
+  const protectedPointCloudUrls = useMemo(
+    () => new Set(
+      [realPointCloudUrl, synthPointCloudUrl]
+        .filter((url): url is string => Boolean(url))
+        .map(toApiUrl),
+    ),
+    [realPointCloudUrl, synthPointCloudUrl],
+  );
   const pointCloudPreload = usePointCloudPreload(
     pointCloudPreloadTargets,
     previewConfig?.preloadConcurrency ?? 1,
-    Boolean(activePointCloudPreload),
+    usePointCloudPreview && !activePointCloudReady,
+    protectedPointCloudUrls,
   );
   const isFrameReadyForImmediatePreview = useCallback((frameNumber: number) => {
     const targetFrame = frames.find((item) => item.t === frameNumber);
@@ -782,8 +848,8 @@ function LiveMonitor({
     configQuery.error ??
     realSliceQuery.error ??
     synthSliceQuery.error ??
-    (!realVolume ? realPointCloudQuery.error : null) ??
-    (!synthVolume ? synthPointCloudQuery.error : null) ??
+    (!realPointCloudQuery.data && !realVolume ? realPointCloudQuery.error : null) ??
+    (!synthPointCloudQuery.data && !synthVolume ? synthPointCloudQuery.error : null) ??
     firstPreloadError(preload.errors),
   );
   const realPreloadError = realUrl ? Boolean(preload.errors[getPreloadKey(realUrl, previewSignature)]) : false;
@@ -1000,7 +1066,7 @@ function LiveMonitor({
       <TopBar
         jobs={sortedJobs}
         selectedJobId={selectedJobId}
-        onSelect={setSelectedJobId}
+        onSelect={selectJob}
         onRefresh={refreshAll}
         onBack={onBack}
       />
@@ -1528,6 +1594,27 @@ function mergeStatusReadyFrames(
     framesByTime.set(frameNumber, frame);
   }
 
+  const compactFrames = job.outputReady?.compactFrames ?? [];
+  const readyCompactFrames = checkpointFrames.size
+    ? compactFrames.filter((frameNumber) => checkpointFrames.has(frameNumber))
+    : compactFrames;
+  for (const frameNumber of readyCompactFrames) {
+    const frame = framesByTime.get(frameNumber) ?? { t: frameNumber, layers: {} };
+    if (!frame.layers.realPointCloud) {
+      frame.layers.realPointCloud = {
+        format: "point-cloud-v1",
+        url: `/api/jobs/${jobId}/pointcloud/real/${frameNumber}.cupc`,
+      };
+    }
+    if (!frame.layers.synthPointCloud) {
+      frame.layers.synthPointCloud = {
+        format: "point-cloud-v1",
+        url: `/api/jobs/${jobId}/pointcloud/synth/${frameNumber}.cupc`,
+      };
+    }
+    framesByTime.set(frameNumber, frame);
+  }
+
   return [...framesByTime.values()].sort((a, b) => a.t - b.t);
 }
 
@@ -1744,6 +1831,20 @@ function buildPointCloudPreloadTargets(
     }
     return a.order - b.order;
   });
+}
+
+function isRunningCompactPointCloudJob(
+  job: JobStatus | undefined,
+  frames: JobManifest["frames"],
+): boolean {
+  if (job?.state !== "running") {
+    return false;
+  }
+  return frames.some((frame) => (
+    Boolean(frame.layers.realPointCloud || frame.layers.synthPointCloud) &&
+    !frame.layers.realTiff &&
+    !frame.layers.synthTiff
+  ));
 }
 
 function addPointCloudPreloadTarget(

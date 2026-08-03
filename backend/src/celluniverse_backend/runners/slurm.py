@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import getpass
+import json
 import re
 import shlex
 import shutil
@@ -8,7 +9,12 @@ import subprocess
 from pathlib import Path
 
 from celluniverse_backend.config.models import BackendConfig
-from celluniverse_backend.contracts.models import SlurmJobOptions, SlurmStatus
+from celluniverse_backend.contracts.models import (
+    SlurmJobOptions,
+    SlurmNode,
+    SlurmNodesResponse,
+    SlurmStatus,
+)
 from celluniverse_backend.runners.celluniverse import THREAD_ENV_KEYS, resolve_threads
 
 
@@ -71,11 +77,287 @@ def inspect_slurm() -> SlurmStatus:
     )
 
 
+def inspect_slurm_nodes() -> SlurmNodesResponse:
+    preferred_bin_dir = _slurm_bin_dir_from_config()
+    sinfo = _resolve_slurm_command("sinfo", preferred_bin_dir)
+    if not sinfo:
+        return SlurmNodesResponse(
+            available=False,
+            diagnostics=["sinfo was not found on PATH or in the configured Slurm client directory"],
+        )
+    try:
+        json_result = subprocess.run(
+            [sinfo, "--json"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        return SlurmNodesResponse(
+            available=False,
+            sinfo=sinfo,
+            diagnostics=["sinfo timed out while reading the Slurm machine inventory"],
+        )
+    except OSError:
+        return SlurmNodesResponse(
+            available=False,
+            sinfo=sinfo,
+            diagnostics=["sinfo could not read the Slurm machine inventory"],
+        )
+    if json_result.returncode == 0:
+        try:
+            nodes, diagnostics = _parse_slurm_nodes_json(json_result.stdout)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+        else:
+            return SlurmNodesResponse(
+                available=True,
+                sinfo=sinfo,
+                nodes=nodes,
+                diagnostics=diagnostics,
+            )
+    try:
+        text_result = subprocess.run(
+            [
+                sinfo,
+                "-h",
+                "-N",
+                "-o",
+                "%N|%P|%T|%c|%C|%m|%G|%E",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        return SlurmNodesResponse(
+            available=False,
+            sinfo=sinfo,
+            diagnostics=["sinfo timed out while reading the Slurm machine inventory"],
+        )
+    except OSError:
+        return SlurmNodesResponse(
+            available=False,
+            sinfo=sinfo,
+            diagnostics=["sinfo could not read the Slurm machine inventory"],
+        )
+    if text_result.returncode != 0:
+        return SlurmNodesResponse(
+            available=False,
+            sinfo=sinfo,
+            diagnostics=["sinfo failed to return a readable Slurm machine inventory"],
+        )
+    return SlurmNodesResponse(
+        available=True,
+        sinfo=sinfo,
+        nodes=_parse_slurm_nodes(text_result.stdout),
+    )
+
+
+def _parse_slurm_nodes_json(output: str) -> tuple[list[SlurmNode], list[str]]:
+    payload = json.loads(output)
+    if not isinstance(payload, dict):
+        raise ValueError("sinfo JSON response must be an object")
+    raw_nodes = payload.get("nodes")
+    if not isinstance(raw_nodes, list):
+        raise ValueError("sinfo JSON response is missing nodes")
+    nodes_by_name: dict[str, SlurmNode] = {}
+    for raw_node in raw_nodes[:10_000]:
+        if not isinstance(raw_node, dict):
+            continue
+        name = str(raw_node.get("name") or "").strip()
+        if not name:
+            continue
+        raw_partitions = raw_node.get("partitions")
+        partitions = (
+            [str(partition).strip().rstrip("*") for partition in raw_partitions if str(partition).strip()]
+            if isinstance(raw_partitions, list)
+            else []
+        )
+        state = str(raw_node.get("state") or "unknown").strip().lower()
+        raw_flags = raw_node.get("state_flags")
+        flags = (
+            [str(flag).strip().lower() for flag in raw_flags if str(flag).strip()]
+            if isinstance(raw_flags, list)
+            else []
+        )
+        cpus_total = _parse_int(raw_node.get("cpus"))
+        cpus_allocated = _parse_int(raw_node.get("alloc_cpus"))
+        cpus_idle = _parse_int(raw_node.get("idle_cpus"))
+        cpus_other = None
+        if cpus_total is not None and cpus_allocated is not None and cpus_idle is not None:
+            cpus_other = max(0, cpus_total - cpus_allocated - cpus_idle)
+        node = SlurmNode(
+            name=name,
+            partitions=list(dict.fromkeys(partitions)),
+            state=state,
+            cpusTotal=cpus_total,
+            cpusAllocated=cpus_allocated,
+            cpusIdle=cpus_idle,
+            cpusOther=cpus_other,
+            memoryMb=_parse_int(raw_node.get("real_memory")),
+            gres=_nullish_slurm_value(raw_node.get("gres")),
+            reason=_nullish_slurm_value(raw_node.get("reason")),
+            selectable=_is_node_selectable(state, flags),
+        )
+        nodes_by_name[name] = node
+    raw_errors = payload.get("errors")
+    diagnostics = (
+        [f"sinfo reported {len(raw_errors)} machine inventory error(s)"]
+        if isinstance(raw_errors, list) and raw_errors
+        else []
+    )
+    return (
+        sorted(nodes_by_name.values(), key=lambda node: _natural_node_key(node.name)),
+        diagnostics,
+    )
+
+
+def _parse_slurm_nodes(output: str) -> list[SlurmNode]:
+    nodes_by_name: dict[str, SlurmNode] = {}
+    for line in output.splitlines():
+        parts = [part.strip() for part in line.split("|", 7)]
+        if len(parts) != 8:
+            continue
+        name, partition, raw_state, raw_cpus, raw_breakdown, raw_memory, raw_gres, raw_reason = parts
+        if not name:
+            continue
+        state = re.sub(r"[^A-Za-z_-].*$", "", raw_state).lower() or "unknown"
+        state_is_decorated = raw_state.lower() != state
+        cpus_allocated, cpus_idle, cpus_other, breakdown_total = _parse_cpu_breakdown(raw_breakdown)
+        node = SlurmNode(
+            name=name,
+            partitions=[partition.rstrip("*")] if partition else [],
+            state=state,
+            cpusTotal=_parse_int(raw_cpus) or breakdown_total,
+            cpusAllocated=cpus_allocated,
+            cpusIdle=cpus_idle,
+            cpusOther=cpus_other,
+            memoryMb=_parse_int(raw_memory),
+            gres=_nullish_slurm_value(raw_gres),
+            reason=_nullish_slurm_value(raw_reason),
+            selectable=_is_node_selectable(state) and not state_is_decorated,
+        )
+        existing = nodes_by_name.get(name)
+        if existing is None:
+            nodes_by_name[name] = node
+            continue
+        for node_partition in node.partitions:
+            if node_partition not in existing.partitions:
+                existing.partitions.append(node_partition)
+        if node.selectable and not existing.selectable:
+            node.partitions = existing.partitions
+            nodes_by_name[name] = node
+    return sorted(nodes_by_name.values(), key=lambda node: _natural_node_key(node.name))
+
+
+def _parse_cpu_breakdown(value: str) -> tuple[int | None, int | None, int | None, int | None]:
+    parts = value.split("/")
+    if len(parts) != 4:
+        return None, None, None, None
+    parsed = tuple(_parse_int(part) for part in parts)
+    return parsed[0], parsed[1], parsed[2], parsed[3]
+
+
+def _parse_int(value: object) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _nullish_slurm_value(value: object) -> str | None:
+    normalized = str(value or "").strip()
+    return None if normalized.lower() in {"", "none", "(null)", "n/a"} else normalized
+
+
+def _is_node_selectable(state: str, flags: list[str] | None = None) -> bool:
+    blocking_flags = {
+        "drain",
+        "fail",
+        "invalid",
+        "maint",
+        "not_responding",
+        "power_down",
+        "reboot_requested",
+    }
+    return (
+        state in {"allocated", "completing", "idle", "mixed"}
+        and not blocking_flags.intersection(flags or [])
+    )
+
+
+def _natural_node_key(value: str) -> tuple[tuple[int, str | int], ...]:
+    return tuple(
+        (1, int(part)) if part.isdigit() else (0, part.lower())
+        for part in re.split(r"(\d+)", value)
+        if part
+    )
+
+
 def normalize_slurm_options(options: SlurmJobOptions) -> SlurmJobOptions:
     account = _valid_account_for_user(options.account)
     if account == options.account:
         return options
     return options.model_copy(update={"account": account})
+
+
+def validate_slurm_machine(options: SlurmJobOptions) -> SlurmJobOptions:
+    machine = options.nodelist
+    if not machine:
+        return options
+    if options.nodes != 1:
+        raise ValueError("A specific Slurm machine requires a node count of 1")
+    inventory = inspect_slurm_nodes()
+    if not inventory.available:
+        detail = "; ".join(inventory.diagnostics) or "machine inventory is unavailable"
+        raise ValueError(f"Cannot validate Slurm machine {machine!r}: {detail}")
+    node = next((candidate for candidate in inventory.nodes if candidate.name == machine), None)
+    if node is None:
+        raise ValueError(f"Unknown Slurm machine: {machine}")
+    if not node.selectable:
+        raise ValueError(f"Slurm machine {machine} is currently unavailable ({node.state})")
+    if node.cpusTotal is not None and options.cpusPerTask > node.cpusTotal:
+        raise ValueError(
+            f"Slurm machine {machine} has {node.cpusTotal} CPUs, "
+            f"but {options.cpusPerTask} CPUs per task were requested"
+        )
+    requested_memory_mb = _parse_memory_mb(options.memory)
+    if (
+        node.memoryMb is not None
+        and requested_memory_mb is not None
+        and requested_memory_mb > node.memoryMb
+    ):
+        raise ValueError(
+            f"Slurm machine {machine} has {node.memoryMb} MB of memory, "
+            f"but {options.memory} was requested"
+        )
+    if options.partition and node.partitions and options.partition not in node.partitions:
+        raise ValueError(
+            f"Slurm machine {machine} is not in partition {options.partition}; "
+            f"available partitions: {', '.join(node.partitions)}"
+        )
+    if not options.partition and len(node.partitions) == 1:
+        return options.model_copy(update={"partition": node.partitions[0]})
+    return options
+
+
+def _parse_memory_mb(value: str) -> int | None:
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)([KMGTP]?)", value.upper())
+    if not match:
+        return None
+    amount = float(match.group(1))
+    factor = {
+        "": 1,
+        "K": 1 / 1024,
+        "M": 1,
+        "G": 1024,
+        "T": 1024 * 1024,
+        "P": 1024 * 1024 * 1024,
+    }[match.group(2)]
+    return int(amount * factor + 0.999999)
 
 
 def _valid_account_for_user(requested: str | None) -> str | None:
@@ -185,27 +467,115 @@ def submit_slurm_job(script_path: Path) -> str:
     return match.group(1)
 
 
-def slurm_job_state(slurm_job_id: str) -> str | None:
+def slurm_job_state(slurm_job_id: str, *, strict: bool = False) -> str | None:
     status = inspect_slurm()
     if not status.squeue:
+        if strict:
+            raise RuntimeError("Slurm state query failed: squeue was not found")
         return None
-    result = subprocess.run(
-        [status.squeue, "-h", "-j", slurm_job_id, "-o", "%T"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [status.squeue, "-h", "-j", slurm_job_id, "-o", "%T"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired as exc:
+        if strict:
+            raise RuntimeError(f"Slurm state query timed out for job {slurm_job_id}") from exc
+        return None
+    except OSError as exc:
+        if strict:
+            raise RuntimeError(
+                f"Slurm state query could not start for job {slurm_job_id}: {exc}"
+            ) from exc
+        return None
     if result.returncode != 0:
+        if strict:
+            detail = " ".join((result.stderr or result.stdout or "").split())
+            suffix = detail or f"squeue exited with code {result.returncode}"
+            raise RuntimeError(f"Slurm state query failed for job {slurm_job_id}: {suffix}")
         return None
     states = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     return states[0] if states else None
+
+
+def slurm_job_accounting_state(
+    slurm_job_id: str,
+    *,
+    strict: bool = False,
+) -> str | None:
+    status = inspect_slurm()
+    if not status.sacct:
+        if strict:
+            raise RuntimeError("Slurm accounting query failed: sacct was not found")
+        return None
+    try:
+        result = subprocess.run(
+            [
+                status.sacct,
+                "-n",
+                "-j",
+                slurm_job_id,
+                "--format=JobIDRaw,State",
+                "--parsable2",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired as exc:
+        if strict:
+            raise RuntimeError(
+                f"Slurm accounting query timed out for job {slurm_job_id}"
+            ) from exc
+        return None
+    except OSError as exc:
+        if strict:
+            raise RuntimeError(
+                f"Slurm accounting query could not start for job {slurm_job_id}: {exc}"
+            ) from exc
+        return None
+    if result.returncode != 0:
+        if strict:
+            detail = " ".join((result.stderr or result.stdout or "").split())
+            suffix = detail or f"sacct exited with code {result.returncode}"
+            raise RuntimeError(
+                f"Slurm accounting query failed for job {slurm_job_id}: {suffix}"
+            )
+        return None
+    for line in result.stdout.splitlines():
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) < 2 or parts[0] != slurm_job_id or not parts[1]:
+            continue
+        return re.split(r"[\s+]", parts[1], maxsplit=1)[0].upper()
+    return None
 
 
 def cancel_slurm_job(slurm_job_id: str) -> None:
     status = inspect_slurm()
     if not status.scancel:
         raise RuntimeError("Slurm cancel failed: scancel was not found on PATH")
-    subprocess.run([status.scancel, slurm_job_id], check=False, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            [status.scancel, slurm_job_id],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Slurm cancel timed out for job {slurm_job_id}") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Slurm cancel could not start for job {slurm_job_id}: {exc}") from exc
+    if result.returncode != 0:
+        detail = " ".join((result.stderr or result.stdout or "").split())
+        if len(detail) > 500:
+            detail = detail[:497] + "..."
+        suffix = detail or f"scancel exited with code {result.returncode}"
+        raise RuntimeError(f"Slurm cancel failed for job {slurm_job_id}: {suffix}")
 
 
 def _clean_job_name(value: str) -> str:

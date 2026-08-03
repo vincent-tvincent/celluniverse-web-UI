@@ -9,9 +9,10 @@ from celluniverse_backend.parsers.cells import (
     build_lineage_snapshot,
     parse_cells_csv,
 )
+from celluniverse_backend.preview.compact import merge_compact_cell_frames
 from celluniverse_backend.storage.json_store import read_json, write_json_atomic
 
-LINEAGE_DERIVATION_VERSION = 5
+LINEAGE_DERIVATION_VERSION = 6
 
 
 def ensure_lineage_artifacts(job_dir: Path, job_id: str, background: str = "#070a0f") -> dict[str, Any]:
@@ -35,13 +36,15 @@ def ensure_lineage_artifacts(job_dir: Path, job_id: str, background: str = "#070
         if cached:
             return cached
 
-    cell_frames = _lineage_cell_frames(output_csv, resume_context)
+    cell_frames = _lineage_cell_frames(job_dir, output_csv, resume_context)
     lineage = build_lineage(cell_frames)
     lineage.update({
         "jobId": job_id,
         "updatedAt": source_meta.get("mtime"),
         "sourceSize": source_meta.get("size"),
     })
+    if (output_csv.parent / "compact" / "manifest.json").exists():
+        lineage["source"] = "compact-frames+cells.csv"
     if resume_context:
         lineage.update({
             "source": "resume-merged-cells.csv",
@@ -57,7 +60,9 @@ def ensure_lineage_artifacts(job_dir: Path, job_id: str, background: str = "#070
     write_json_atomic(lineage_path, lineage)
     write_json_atomic(layout_path, layout)
     frames_dir.mkdir(parents=True, exist_ok=True)
-    for frame in lineage.get("frames", []):
+    lineage_frames = {int(frame) for frame in lineage.get("frames", [])}
+    _remove_stale_lineage_snapshots(frames_dir, lineage_frames)
+    for frame in sorted(lineage_frames):
         snapshot = build_lineage_snapshot(lineage, int(frame))
         snapshot["jobId"] = job_id
         write_json_atomic(frames_dir / f"{int(frame)}.json", snapshot)
@@ -87,13 +92,20 @@ def read_lineage_snapshot(job_dir: Path, job_id: str, frame: int, background: st
     return snapshot
 
 
-def _lineage_cell_frames(output_csv: Path, resume_context: dict[str, Any] | None) -> dict[int, list[dict[str, Any]]]:
-    current_frames = parse_cells_csv(output_csv)
+def _lineage_cell_frames(
+    job_dir: Path,
+    output_csv: Path,
+    resume_context: dict[str, Any] | None,
+) -> dict[int, list[dict[str, Any]]]:
+    current_frames = _merge_compact_or_csv(job_dir, parse_cells_csv(output_csv))
     if not resume_context:
         return current_frames
 
     resume_from = int(resume_context["resumeFromFrame"])
-    source_frames = parse_cells_csv(Path(resume_context["sourceCellsCsv"]))
+    source_frames = _merge_compact_or_csv(
+        Path(resume_context["sourceJobDir"]),
+        parse_cells_csv(Path(resume_context["sourceCellsCsv"])),
+    )
     merged = {
         frame: cells
         for frame, cells in source_frames.items()
@@ -124,6 +136,7 @@ def _resume_lineage_context(job_dir: Path) -> dict[str, Any] | None:
         return None
     return {
         "sourceJobId": str(source_job_id),
+        "sourceJobDir": str(source_job_dir),
         "resumeFromFrame": resume_from_int,
         "sourceCellsCsv": str(source_cells_csv),
     }
@@ -141,11 +154,39 @@ def _source_meta(path: Path, background: str, resume_context: dict[str, Any] | N
         **_file_meta(path),
         "background": background,
         "derivationVersion": LINEAGE_DERIVATION_VERSION,
+        "compactManifest": _file_meta(path.parent / "compact" / "manifest.json"),
     }
     if resume_context:
         meta["resume"] = {
             "sourceJobId": resume_context["sourceJobId"],
             "resumeFromFrame": resume_context["resumeFromFrame"],
             "sourceCells": _file_meta(Path(resume_context["sourceCellsCsv"])),
+            "sourceCompactManifest": _file_meta(
+                Path(resume_context["sourceJobDir"]) / "output" / "compact" / "manifest.json"
+            ),
         }
     return meta
+
+
+def _merge_compact_or_csv(
+    job_dir: Path,
+    csv_frames: dict[int, list[dict[str, Any]]],
+) -> dict[int, list[dict[str, Any]]]:
+    try:
+        return merge_compact_cell_frames(job_dir, csv_frames)
+    except (OSError, ValueError):
+        return csv_frames
+
+
+def _remove_stale_lineage_snapshots(frames_dir: Path, active_frames: set[int]) -> None:
+    try:
+        paths = list(frames_dir.glob("*.json"))
+    except OSError:
+        return
+    for path in paths:
+        if not path.stem.lstrip("-").isdigit() or int(path.stem) in active_frames:
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            continue

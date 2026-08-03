@@ -23,7 +23,16 @@ from celluniverse_backend.datasets.service import DatasetService
 from celluniverse_backend.jobs.output_scan import scan_output
 from celluniverse_backend.preview.manifest import build_preview_artifacts
 from celluniverse_backend.runners.celluniverse import build_tracking_argv, start_celluniverse_process
-from celluniverse_backend.runners.slurm import cancel_slurm_job, inspect_slurm, normalize_slurm_options, slurm_job_state, submit_slurm_job, write_slurm_script
+from celluniverse_backend.runners.slurm import (
+    cancel_slurm_job,
+    inspect_slurm,
+    normalize_slurm_options,
+    slurm_job_accounting_state,
+    slurm_job_state,
+    submit_slurm_job,
+    validate_slurm_machine,
+    write_slurm_script,
+)
 from celluniverse_backend.security.paths import ensure_inside_roots, validate_input_reference
 from celluniverse_backend.storage.json_store import append_ndjson, read_json, write_json_atomic
 
@@ -46,6 +55,7 @@ class JobManager:
         self._processes: dict[str, subprocess.Popen[Any]] = {}
         self._active_jobs: set[str] = set()
         self._job_threads: dict[str, threading.Thread] = {}
+        self._cancel_threads: dict[str, threading.Thread] = {}
         self._status_lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -305,56 +315,260 @@ class JobManager:
         return {"jobId": job_id, "deleted": True}
 
     def cancel_job(self, job_id: str) -> dict[str, Any]:
-        status = self.get_status(job_id)
-        if not status:
-            raise KeyError(job_id)
-        if status.get("state") in {JobState.prepared.value, JobState.queued.value}:
-            status["state"] = JobState.cancelled.value
-            status["finishedAt"] = utc_now()
-            status["error"] = "Cancelled by user"
-            status["partialOutputsAvailable"] = True
-            self._write_status_dict(job_id, status)
-            self._event(job_id, "job.cancelled", {"jobId": job_id})
-            return status
-        if status.get("state") == JobState.cancelling.value:
-            return status
-        if status.get("state") != JobState.running.value:
-            return status
-
-        status["state"] = JobState.cancelling.value
-        status["error"] = "Cancellation requested"
-        status["partialOutputsAvailable"] = True
-        self._write_status_dict(job_id, status)
-        self._event(job_id, "job.cancelling", {"jobId": job_id})
-        threading.Thread(target=self._finish_cancel_job, args=(job_id,), name=f"cancel-{job_id}", daemon=True).start()
+        start_cancel = False
+        with self._status_lock:
+            status = self.get_status(job_id)
+            if not status:
+                raise KeyError(job_id)
+            state = status.get("state")
+            slurm_job_id = status.get("slurmJobId")
+            submitted_slurm = (
+                status.get("runner") == "slurm"
+                and isinstance(slurm_job_id, str)
+                and bool(slurm_job_id)
+            )
+            awaiting_slurm_submission = (
+                status.get("runner") == "slurm"
+                and state in {JobState.running.value, JobState.cancelling.value}
+                and not submitted_slurm
+            )
+            if state in {JobState.prepared.value, JobState.queued.value} and not submitted_slurm:
+                status["state"] = JobState.cancelled.value
+                status["finishedAt"] = utc_now()
+                status["error"] = "Cancelled by user"
+                status["partialOutputsAvailable"] = True
+                self._write_status_dict(job_id, status)
+                self._event(job_id, "job.cancelled", {"jobId": job_id})
+                return status
+            if state == JobState.cancelling.value:
+                start_cancel = not awaiting_slurm_submission
+            elif state not in {
+                JobState.prepared.value,
+                JobState.queued.value,
+                JobState.running.value,
+            }:
+                return status
+            else:
+                status["state"] = JobState.cancelling.value
+                status["error"] = "Cancellation requested"
+                status["partialOutputsAvailable"] = True
+                self._write_status_dict(job_id, status)
+                self._event(job_id, "job.cancelling", {"jobId": job_id})
+                start_cancel = not awaiting_slurm_submission
+        if start_cancel:
+            self._start_cancel_thread(job_id)
         return status
 
-    def _finish_cancel_job(self, job_id: str) -> None:
-        status = self.get_status(job_id)
-        slurm_job_id = status.get("slurmJobId")
-        if status.get("runner") == "slurm" and isinstance(slurm_job_id, str) and slurm_job_id:
-            try:
-                cancel_slurm_job(slurm_job_id)
-            except RuntimeError as exc:
-                status["error"] = str(exc)
-                self._write_status_dict(job_id, status)
-        process = self._processes.get(job_id)
-        if process and process.poll() is None:
-            self._terminate_process(process)
-        else:
-            pid = status.get("pid")
-            if isinstance(pid, int):
-                self._terminate_process_group(pid)
+    def _start_cancel_thread(self, job_id: str) -> None:
+        with self._status_lock:
+            existing = self._cancel_threads.get(job_id)
+            if existing is not None:
+                return
+            thread = threading.Thread(
+                target=self._finish_cancel_job,
+                args=(job_id,),
+                name=f"cancel-{job_id}",
+                daemon=True,
+            )
+            self._cancel_threads[job_id] = thread
+            thread.start()
 
-        latest = self.get_status(job_id)
-        if latest.get("state") not in {JobState.cancelling.value, JobState.running.value}:
-            return
-        latest["state"] = JobState.cancelled.value
-        latest["finishedAt"] = utc_now()
-        latest["error"] = "Cancelled by user"
-        latest["partialOutputsAvailable"] = True
-        self._write_status_dict(job_id, latest)
-        self._event(job_id, "job.cancelled", {"jobId": job_id})
+    def _finish_cancel_job(self, job_id: str) -> None:
+        current_thread = threading.current_thread()
+        try:
+            with self._status_lock:
+                status = self.get_status(job_id)
+                slurm_job_id = status.get("slurmJobId")
+            if status.get("runner") == "slurm" and isinstance(slurm_job_id, str) and slurm_job_id:
+                try:
+                    cancel_slurm_job(slurm_job_id)
+                except RuntimeError as exc:
+                    exit_code = self._read_slurm_exit_code(job_id)
+                    current_state = None
+                    accounting_state = None
+                    query_error: RuntimeError | None = None
+                    if exit_code is None:
+                        try:
+                            current_state = slurm_job_state(slurm_job_id, strict=True)
+                            if current_state is None:
+                                accounting_state = slurm_job_accounting_state(
+                                    slurm_job_id,
+                                    strict=True,
+                                )
+                        except RuntimeError as state_exc:
+                            query_error = state_exc
+                    with self._status_lock:
+                        latest = self.get_status(job_id)
+                        if latest.get("state") not in {
+                            JobState.queued.value,
+                            JobState.cancelling.value,
+                            JobState.running.value,
+                        }:
+                            return
+                        prior_slurm_state = str(latest.get("slurmState") or "").upper()
+                        if exit_code is not None:
+                            latest["exitCode"] = exit_code
+                            latest["finishedAt"] = utc_now()
+                            latest["state"] = (
+                                JobState.completed.value
+                                if exit_code == 0
+                                else JobState.failed.value
+                            )
+                            latest["slurmState"] = (
+                                "COMPLETED" if exit_code == 0 else "FAILED"
+                            )
+                            latest["error"] = (
+                                None
+                                if exit_code == 0
+                                else f"CellUniverse Slurm job exited with code {exit_code}"
+                            )
+                            self._write_status_dict(job_id, latest)
+                            self._event(
+                                job_id,
+                                "job.finished",
+                                {
+                                    "jobId": job_id,
+                                    "state": latest["state"],
+                                    "exitCode": exit_code,
+                                },
+                            )
+                        elif (
+                            str(current_state or "").upper() == "CANCELLED"
+                            or str(accounting_state or "").upper() == "CANCELLED"
+                            or (
+                                current_state is None
+                                and accounting_state is None
+                                and query_error is None
+                                and prior_slurm_state == "CANCELLED"
+                            )
+                        ):
+                            latest["state"] = JobState.cancelled.value
+                            latest["slurmState"] = "CANCELLED"
+                            latest["finishedAt"] = utc_now()
+                            latest["error"] = "Cancelled by user"
+                            latest["partialOutputsAvailable"] = True
+                            self._write_status_dict(job_id, latest)
+                            self._event(job_id, "job.cancelled", {"jobId": job_id})
+                        elif str(accounting_state or "").upper() == "COMPLETED":
+                            latest["state"] = JobState.completed.value
+                            latest["slurmState"] = "COMPLETED"
+                            latest["finishedAt"] = utc_now()
+                            latest["exitCode"] = 0
+                            latest["error"] = None
+                            self._write_status_dict(job_id, latest)
+                            self._event(
+                                job_id,
+                                "job.finished",
+                                {
+                                    "jobId": job_id,
+                                    "state": latest["state"],
+                                    "exitCode": 0,
+                                },
+                            )
+                        elif accounting_state and accounting_state not in {
+                            "PENDING",
+                            "CONFIGURING",
+                            "COMPLETING",
+                            "RUNNING",
+                            "SUSPENDED",
+                        }:
+                            latest["state"] = JobState.failed.value
+                            latest["slurmState"] = accounting_state
+                            latest["finishedAt"] = utc_now()
+                            latest["exitCode"] = None
+                            latest["error"] = (
+                                "Slurm job ended with state "
+                                f"{accounting_state} while cancellation was requested"
+                            )
+                            self._write_status_dict(job_id, latest)
+                            self._event(
+                                job_id,
+                                "job.finished",
+                                {
+                                    "jobId": job_id,
+                                    "state": latest["state"],
+                                    "exitCode": None,
+                                },
+                            )
+                        elif (
+                            current_state is None
+                            and accounting_state is None
+                            and query_error is None
+                        ):
+                            latest["state"] = JobState.interrupted.value
+                            latest["finishedAt"] = utc_now()
+                            latest["exitCode"] = None
+                            latest["error"] = (
+                                f"{exc}; Slurm job is absent from the queue and "
+                                "has no accounting record"
+                            )
+                            self._write_status_dict(job_id, latest)
+                            self._event(
+                                job_id,
+                                "job.finished",
+                                {
+                                    "jobId": job_id,
+                                    "state": latest["state"],
+                                    "exitCode": None,
+                                },
+                            )
+                        else:
+                            live_state = current_state or accounting_state
+                            if live_state:
+                                latest["slurmState"] = live_state
+                                latest["state"] = self._state_for_slurm_state(
+                                    live_state,
+                                    latest,
+                                )
+                            else:
+                                latest["state"] = (
+                                    JobState.queued.value
+                                    if prior_slurm_state
+                                    in {"PENDING", "CONFIGURING", "SUSPENDED"}
+                                    or not latest.get("startedAt")
+                                    else JobState.running.value
+                                )
+                            latest["error"] = (
+                                f"{exc}; {query_error}"
+                                if query_error is not None
+                                else str(exc)
+                            )
+                            self._write_status_dict(job_id, latest)
+                            self._event(
+                                job_id,
+                                "job.cancel_failed",
+                                {"jobId": job_id, "error": str(exc)},
+                            )
+                    return
+            process = self._processes.get(job_id)
+            if process and process.poll() is None:
+                self._terminate_process(process)
+            else:
+                pid = status.get("pid")
+                if isinstance(pid, int):
+                    self._terminate_process_group(pid)
+
+            with self._status_lock:
+                latest = self.get_status(job_id)
+                if latest.get("state") not in {
+                    JobState.prepared.value,
+                    JobState.queued.value,
+                    JobState.cancelling.value,
+                    JobState.running.value,
+                }:
+                    return
+                latest["state"] = JobState.cancelled.value
+                latest["finishedAt"] = utc_now()
+                latest["error"] = "Cancelled by user"
+                latest["partialOutputsAvailable"] = True
+                if status.get("runner") == "slurm" and isinstance(slurm_job_id, str) and slurm_job_id:
+                    latest["slurmState"] = "CANCELLED"
+                self._write_status_dict(job_id, latest)
+                self._event(job_id, "job.cancelled", {"jobId": job_id})
+        finally:
+            with self._status_lock:
+                if self._cancel_threads.get(job_id) is current_thread:
+                    self._cancel_threads.pop(job_id, None)
 
     def job_dir(self, job_id: str, create: bool = False) -> Path:
         if "/" in job_id or "\\" in job_id or not job_id.startswith("job_"):
@@ -403,15 +617,33 @@ class JobManager:
             process = self._processes.get(job_id)
             if process:
                 self._terminate_process(process)
-            status = self.get_status(job_id)
-            if status and status.get("state") not in {JobState.cancelled.value, JobState.cancelling.value}:
-                status.update({
-                    "state": JobState.failed.value,
-                    "finishedAt": utc_now(),
-                    "error": str(exc),
-                })
-                self._write_status_dict(job_id, status)
-                self._event(job_id, "job.failed", {"jobId": job_id, "error": str(exc)})
+            with self._status_lock:
+                status = self.get_status(job_id)
+                if (
+                    status
+                    and status.get("state") == JobState.cancelling.value
+                    and status.get("runner") == "slurm"
+                    and not status.get("slurmJobId")
+                ):
+                    status.update({
+                        "state": JobState.cancelled.value,
+                        "finishedAt": utc_now(),
+                        "error": "Cancelled by user",
+                        "partialOutputsAvailable": True,
+                    })
+                    self._write_status_dict(job_id, status)
+                    self._event(job_id, "job.cancelled", {"jobId": job_id})
+                elif status and status.get("state") not in {
+                    JobState.cancelled.value,
+                    JobState.cancelling.value,
+                }:
+                    status.update({
+                        "state": JobState.failed.value,
+                        "finishedAt": utc_now(),
+                        "error": str(exc),
+                    })
+                    self._write_status_dict(job_id, status)
+                    self._event(job_id, "job.failed", {"jobId": job_id, "error": str(exc)})
         finally:
             with self._status_lock:
                 self._active_jobs.discard(job_id)
@@ -421,12 +653,13 @@ class JobManager:
     def _run_job(self, job_id: str) -> None:
         job_dir = self.job_dir(job_id)
         request = CreateJobRequest.model_validate(read_json(job_dir / "request.json"))
-        status = self.get_status(job_id)
-        if status.get("state") != JobState.queued.value:
-            return
-        status.update({"state": JobState.running.value, "startedAt": utc_now()})
-        self._write_status_dict(job_id, status)
-        self._event(job_id, "job.started", {"jobId": job_id})
+        with self._status_lock:
+            status = self.get_status(job_id)
+            if status.get("state") != JobState.queued.value:
+                return
+            status.update({"state": JobState.running.value, "startedAt": utc_now()})
+            self._write_status_dict(job_id, status)
+            self._event(job_id, "job.started", {"jobId": job_id})
 
         argv = read_json(job_dir / "argv.json")
         stdout_path = job_dir / "stdout.log"
@@ -502,6 +735,7 @@ class JobManager:
         exit_path = job_dir / "slurm-exit-code.txt"
         exit_path.unlink(missing_ok=True)
         options = normalize_slurm_options(request.slurm.model_copy(update={"enabled": True, "jobName": request.slurm.jobName or request.label or job_id}))
+        options = validate_slurm_machine(options)
         script_path = write_slurm_script(
             self.config,
             argv,
@@ -511,67 +745,74 @@ class JobManager:
             options=options,
         )
         slurm_job_id = submit_slurm_job(script_path)
-        status = self.get_status(job_id)
-        if status.get("state") != JobState.running.value:
-            cancel_slurm_job(slurm_job_id)
-            return
-        status.update({
-            "runner": "slurm",
-            "slurmJobId": slurm_job_id,
-            "pid": None,
-            "state": JobState.queued.value,
-            "startedAt": None,
-        })
-        self._write_status_dict(job_id, status)
-        self._event(job_id, "slurm.submitted", {"jobId": job_id, "slurmJobId": slurm_job_id, "script": str(script_path)})
-
+        start_cancel = False
+        with self._status_lock:
+            status = self.get_status(job_id)
+            status.update({
+                "runner": "slurm",
+                "slurmJobId": slurm_job_id,
+                "pid": None,
+            })
+            if status.get("state") == JobState.running.value:
+                status.update({
+                    "state": JobState.queued.value,
+                    "startedAt": None,
+                })
+            else:
+                status.update({
+                    "state": JobState.cancelling.value,
+                    "finishedAt": None,
+                    "error": "Cancellation requested",
+                })
+                start_cancel = True
+            self._write_status_dict(job_id, status)
+            self._event(
+                job_id,
+                "slurm.submitted",
+                {
+                    "jobId": job_id,
+                    "slurmJobId": slurm_job_id,
+                    "script": str(script_path),
+                },
+            )
         stop_logs = threading.Event()
         stdout_thread = threading.Thread(target=self._tail_slurm_log_file, args=(job_id, stdout_path, "stdout", stop_logs, 0), daemon=True)
         stderr_thread = threading.Thread(target=self._tail_slurm_log_file, args=(job_id, stderr_path, "stderr", stop_logs, 0), daemon=True)
         stdout_thread.start()
         stderr_thread.start()
+        if start_cancel:
+            self._start_cancel_thread(job_id)
         try:
             missing_from_queue_checks = 0
             while not self._stop.is_set():
                 self._refresh_progress(job_id)
-                status = self.get_status(job_id)
-                if status.get("state") in {JobState.cancelled.value, JobState.cancelling.value}:
-                    return
+                with self._status_lock:
+                    status = self.get_status(job_id)
+                    if status.get("state") not in {
+                        JobState.running.value,
+                        JobState.queued.value,
+                        JobState.cancelling.value,
+                    }:
+                        return
                 exit_code = self._read_slurm_exit_code(job_id)
                 if exit_code is not None:
-                    self._finish_slurm_job(job_id, exit_code)
-                    return
+                    if self._finish_slurm_job(job_id, exit_code):
+                        return
+                    time.sleep(0.25)
+                    continue
                 current_state = slurm_job_state(slurm_job_id)
                 if current_state:
                     missing_from_queue_checks = 0
-                    next_state = self._state_for_slurm_state(current_state, status)
-                    changed = status.get("slurmState") != current_state or status.get("state") != next_state
-                    if changed:
-                        status["slurmState"] = current_state
-                        status["state"] = next_state
-                        if next_state == JobState.running.value and not status.get("startedAt"):
-                            status["startedAt"] = utc_now()
-                        self._write_status_dict(job_id, status)
-                        self._event(job_id, "job.updated", status)
+                    if not self._record_slurm_state(job_id, current_state):
+                        return
                 else:
                     missing_from_queue_checks += 1
                     if missing_from_queue_checks >= 6:
-                        self._refresh_progress(job_id)
-                        status = self.get_status(job_id)
-                        if status.get("state") == JobState.running.value:
-                            completed = int(status.get("completedFrames") or 0)
-                            total = int(status.get("totalFrames") or 0)
-                            status["finishedAt"] = utc_now()
-                            status["exitCode"] = None
-                            if total > 0 and completed >= total:
-                                status["state"] = JobState.completed.value
-                                status["error"] = None
-                            else:
-                                status["state"] = JobState.interrupted.value
-                                status["error"] = "Slurm job left the queue before writing an exit marker"
-                            self._write_status_dict(job_id, status)
-                            self._event(job_id, "job.finished", {"jobId": job_id, "state": status["state"], "exitCode": None})
-                        return
+                        if self._finish_missing_slurm_job(
+                            job_id,
+                            "Slurm job left the queue before writing an exit marker",
+                        ):
+                            return
                 time.sleep(5)
         finally:
             stop_logs.set()
@@ -586,6 +827,29 @@ class JobManager:
             return JobState.running.value
         return str(status.get("state") or JobState.queued.value)
 
+    def _record_slurm_state(self, job_id: str, slurm_state: str) -> bool:
+        with self._status_lock:
+            status = self.get_status(job_id)
+            if status.get("state") not in {
+                JobState.running.value,
+                JobState.queued.value,
+                JobState.cancelling.value,
+            }:
+                return False
+            next_state = (
+                JobState.cancelling.value
+                if status.get("state") == JobState.cancelling.value
+                else self._state_for_slurm_state(slurm_state, status)
+            )
+            if status.get("slurmState") != slurm_state or status.get("state") != next_state:
+                status["slurmState"] = slurm_state
+                status["state"] = next_state
+                if next_state == JobState.running.value and not status.get("startedAt"):
+                    status["startedAt"] = utc_now()
+                self._write_status_dict(job_id, status)
+                self._event(job_id, "job.updated", status)
+            return True
+
     def _read_slurm_exit_code(self, job_id: str) -> int | None:
         path = self.job_dir(job_id) / "slurm-exit-code.txt"
         if not path.exists():
@@ -595,20 +859,62 @@ class JobManager:
         except (OSError, ValueError):
             return None
 
-    def _finish_slurm_job(self, job_id: str, exit_code: int) -> None:
+    def _finish_slurm_job(self, job_id: str, exit_code: int) -> bool:
         self._refresh_progress(job_id)
-        status = self.get_status(job_id)
-        if status.get("state") in {JobState.cancelled.value, JobState.cancelling.value}:
-            return
-        status["exitCode"] = exit_code
-        status["finishedAt"] = utc_now()
-        status["state"] = JobState.completed.value if exit_code == 0 else JobState.failed.value
-        if exit_code != 0:
-            status["error"] = f"CellUniverse Slurm job exited with code {exit_code}"
-        else:
-            status["error"] = None
-        self._write_status_dict(job_id, status)
-        self._event(job_id, "job.finished", {"jobId": job_id, "state": status["state"], "exitCode": exit_code})
+        with self._status_lock:
+            status = self.get_status(job_id)
+            if status.get("state") == JobState.cancelling.value:
+                return False
+            if status.get("state") not in {
+                JobState.running.value,
+                JobState.queued.value,
+            }:
+                return True
+            status["exitCode"] = exit_code
+            status["finishedAt"] = utc_now()
+            status["state"] = JobState.completed.value if exit_code == 0 else JobState.failed.value
+            status["slurmState"] = "COMPLETED" if exit_code == 0 else "FAILED"
+            if exit_code != 0:
+                status["error"] = f"CellUniverse Slurm job exited with code {exit_code}"
+            else:
+                status["error"] = None
+            self._write_status_dict(job_id, status)
+            self._event(
+                job_id,
+                "job.finished",
+                {"jobId": job_id, "state": status["state"], "exitCode": exit_code},
+            )
+            return True
+
+    def _finish_missing_slurm_job(self, job_id: str, error: str) -> bool:
+        self._refresh_progress(job_id)
+        with self._status_lock:
+            status = self.get_status(job_id)
+            if status.get("state") == JobState.cancelling.value:
+                return False
+            if status.get("state") not in {
+                JobState.running.value,
+                JobState.queued.value,
+            }:
+                return True
+            completed = int(status.get("completedFrames") or 0)
+            total = int(status.get("totalFrames") or 0)
+            status["finishedAt"] = utc_now()
+            status["exitCode"] = None
+            if total > 0 and completed >= total:
+                status["state"] = JobState.completed.value
+                status["slurmState"] = "COMPLETED"
+                status["error"] = None
+            else:
+                status["state"] = JobState.interrupted.value
+                status["error"] = error
+            self._write_status_dict(job_id, status)
+            self._event(
+                job_id,
+                "job.finished",
+                {"jobId": job_id, "state": status["state"], "exitCode": None},
+            )
+            return True
 
     def _monitor_existing_slurm(self, job_id: str, slurm_job_id: str) -> None:
         self._event(job_id, "slurm.recovered", {"jobId": job_id, "slurmJobId": slurm_job_id})
@@ -622,33 +928,33 @@ class JobManager:
             missing_from_queue_checks = 0
             while not self._stop.is_set():
                 self._refresh_progress(job_id)
-                status = self.get_status(job_id)
-                if status.get("state") not in {JobState.running.value, JobState.queued.value}:
-                    return
+                with self._status_lock:
+                    status = self.get_status(job_id)
+                    if status.get("state") not in {
+                        JobState.running.value,
+                        JobState.queued.value,
+                        JobState.cancelling.value,
+                    }:
+                        return
                 exit_code = self._read_slurm_exit_code(job_id)
                 if exit_code is not None:
-                    self._finish_slurm_job(job_id, exit_code)
-                    return
+                    if self._finish_slurm_job(job_id, exit_code):
+                        return
+                    time.sleep(0.25)
+                    continue
                 current_state = slurm_job_state(slurm_job_id)
                 if current_state:
                     missing_from_queue_checks = 0
-                    next_state = self._state_for_slurm_state(current_state, status)
-                    if status.get("slurmState") != current_state or status.get("state") != next_state:
-                        status["slurmState"] = current_state
-                        status["state"] = next_state
-                        if next_state == JobState.running.value and not status.get("startedAt"):
-                            status["startedAt"] = utc_now()
-                        self._write_status_dict(job_id, status)
-                        self._event(job_id, "job.updated", status)
+                    if not self._record_slurm_state(job_id, current_state):
+                        return
                 else:
                     missing_from_queue_checks += 1
                     if missing_from_queue_checks >= 6:
-                        status["state"] = JobState.interrupted.value
-                        status["finishedAt"] = utc_now()
-                        status["error"] = "Backend restarted after Slurm job left the queue"
-                        self._write_status_dict(job_id, status)
-                        self._event(job_id, "job.finished", {"jobId": job_id, "state": status["state"], "exitCode": None})
-                        return
+                        if self._finish_missing_slurm_job(
+                            job_id,
+                            "Backend restarted after Slurm job left the queue",
+                        ):
+                            return
                 time.sleep(5)
         finally:
             stop_logs.set()
@@ -694,6 +1000,7 @@ class JobManager:
             request.overrides,
             config_search_dir=self.config.celluniverse.config_dir,
             use_pipeline_base_config=not has_user_config,
+            fixed_overrides={"simulation.export_mode": request.exportMode},
         )
 
         if requested_resume:
@@ -1005,7 +1312,8 @@ class JobManager:
         self._write_status_dict(status.id, status.model_dump(mode="json"))
 
     def _write_status_dict(self, job_id: str, status: dict[str, Any]) -> None:
-        write_json_atomic(self.job_dir(job_id) / "status.json", status)
+        with self._status_lock:
+            write_json_atomic(self.job_dir(job_id) / "status.json", status)
 
     def _event(self, job_id: str, event_type: str, payload: dict[str, Any]) -> None:
         event = {"time": utc_now(), "type": event_type, "jobId": job_id, "payload": payload}
@@ -1015,21 +1323,35 @@ class JobManager:
         for path in self.jobs_root.glob("job_*/status.json"):
             status = read_json(path, {})
             job_id = path.parent.name
-            if status.get("state") == JobState.running.value:
-                slurm_job_id = status.get("slurmJobId")
-                if status.get("runner") == "slurm" and isinstance(slurm_job_id, str) and slurm_job_id:
-                    if self._read_slurm_exit_code(job_id) is not None or slurm_job_state(slurm_job_id):
-                        with self._status_lock:
-                            self._active_jobs.add(job_id)
-                            thread = threading.Thread(
-                                target=self._monitor_existing_slurm,
-                                args=(job_id, slurm_job_id),
-                                name=f"celluniverse-recovered-slurm-{job_id}",
-                                daemon=True,
-                            )
-                            self._job_threads[job_id] = thread
-                        thread.start()
-                        continue
+            state = status.get("state")
+            slurm_job_id = status.get("slurmJobId")
+            submitted_slurm = (
+                status.get("runner") == "slurm"
+                and isinstance(slurm_job_id, str)
+                and bool(slurm_job_id)
+            )
+            if state in {
+                JobState.running.value,
+                JobState.queued.value,
+                JobState.cancelling.value,
+            } and submitted_slurm:
+                with self._status_lock:
+                    self._active_jobs.add(job_id)
+                    thread = threading.Thread(
+                        target=self._monitor_existing_slurm,
+                        args=(job_id, slurm_job_id),
+                        name=f"celluniverse-recovered-slurm-{job_id}",
+                        daemon=True,
+                    )
+                    self._job_threads[job_id] = thread
+                thread.start()
+                if state == JobState.cancelling.value:
+                    self._start_cancel_thread(job_id)
+                continue
+            if state == JobState.cancelling.value:
+                self._start_cancel_thread(job_id)
+                continue
+            if state == JobState.running.value:
                 pid = status.get("pid")
                 if isinstance(pid, int) and self._pid_is_running(pid):
                     with self._status_lock:
@@ -1056,7 +1378,7 @@ class JobManager:
                     status["state"] = JobState.interrupted.value
                     status["error"] = "Backend restarted after worker stopped"
                 write_json_atomic(path, status)
-            elif status.get("state") == JobState.queued.value:
+            elif state == JobState.queued.value:
                 status["state"] = JobState.prepared.value
                 status["error"] = "Backend restarted before queued job started"
                 write_json_atomic(path, status)

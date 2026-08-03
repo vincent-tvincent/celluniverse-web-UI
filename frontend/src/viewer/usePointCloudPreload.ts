@@ -44,11 +44,26 @@ const initialState: PointCloudPreloadState = {
   isLoading: false,
 };
 
-export function usePointCloudPreload(targets: PointCloudPreloadTarget[], preloadConcurrency: number, paused = false): PointCloudPreloadState {
+const EMPTY_PROTECTED_URLS: ReadonlySet<string> = new Set();
+
+export function usePointCloudPreload(
+  targets: PointCloudPreloadTarget[],
+  preloadConcurrency: number,
+  paused = false,
+  protectedUrls: ReadonlySet<string> = EMPTY_PROTECTED_URLS,
+): PointCloudPreloadState {
   const uniqueTargets = useMemo(() => dedupeTargets(targets), [targets]);
   const signature = useMemo(
     () => uniqueTargets.map((target) => `${target.key}\u0000${target.url}`).join("\u0001"),
     [uniqueTargets],
+  );
+  const protectedSignature = useMemo(
+    () => Array.from(protectedUrls, canonicalPointCloudUrl).sort().join("\u0001"),
+    [protectedUrls],
+  );
+  const protectedResources = useMemo(
+    () => new Set(protectedSignature ? protectedSignature.split("\u0001") : []),
+    [protectedSignature],
   );
 
   const [state, setState] = useState<PointCloudPreloadState>(initialState);
@@ -58,6 +73,8 @@ export function usePointCloudPreload(targets: PointCloudPreloadTarget[], preload
   const progressByKeyRef = useRef(new Map<string, PointCloudLoadProgress>());
   const finishedRef = useRef(new Set<string>());
   const loadingRef = useRef(new Set<string>());
+  const loadingTargetsRef = useRef(new Map<string, PointCloudPreloadTarget>());
+  const controllersRef = useRef(new Map<string, AbortController>());
   const queueRef = useRef<PointCloudPreloadTarget[]>([]);
   const activeRef = useRef(0);
   const currentRef = useRef<{ label: string; phase: "download" | "decode" } | undefined>(undefined);
@@ -91,8 +108,11 @@ export function usePointCloudPreload(targets: PointCloudPreloadTarget[], preload
   const pumpRef = useRef<() => void>(() => undefined);
 
   const startLoad = useCallback((target: PointCloudPreloadTarget) => {
+    const controller = new AbortController();
     activeRef.current += 1;
     loadingRef.current.add(target.key);
+    loadingTargetsRef.current.set(target.key, target);
+    controllersRef.current.set(target.key, controller);
     currentRef.current = { label: target.label, phase: "download" };
     publish();
 
@@ -103,7 +123,7 @@ export function usePointCloudPreload(targets: PointCloudPreloadTarget[], preload
       progressByKeyRef.current.set(target.key, progress);
       currentRef.current = { label: target.label, phase: "download" };
       publish();
-    })
+    }, controller.signal)
       .then((volume) => {
         if (targetMapRef.current.has(target.key)) {
           volumesRef.current[target.key] = volume;
@@ -116,9 +136,18 @@ export function usePointCloudPreload(targets: PointCloudPreloadTarget[], preload
         }
       })
       .finally(() => {
+        if (controllersRef.current.get(target.key) === controller) {
+          controllersRef.current.delete(target.key);
+          loadingTargetsRef.current.delete(target.key);
+        }
         activeRef.current = Math.max(0, activeRef.current - 1);
         loadingRef.current.delete(target.key);
-        finishedRef.current.add(target.key);
+        if (controller.signal.aborted) {
+          finishedRef.current.delete(target.key);
+          progressByKeyRef.current.delete(target.key);
+        } else {
+          finishedRef.current.add(target.key);
+        }
         currentRef.current = undefined;
         publish();
         pumpRef.current();
@@ -152,6 +181,17 @@ export function usePointCloudPreload(targets: PointCloudPreloadTarget[], preload
   pumpRef.current = pump;
 
   useEffect(() => {
+    const nextKeys = new Set(uniqueTargets.map((target) => target.key));
+    for (const [key, controller] of controllersRef.current) {
+      const loadingTarget = loadingTargetsRef.current.get(key);
+      const protectedResource = loadingTarget
+        ? protectedResources.has(canonicalPointCloudUrl(loadingTarget.url))
+        : false;
+      if ((paused || !nextKeys.has(key)) && !protectedResource) {
+        controller.abort();
+      }
+    }
+
     if (!uniqueTargets.length) {
       targetMapRef.current = new Map();
       volumesRef.current = {};
@@ -170,7 +210,6 @@ export function usePointCloudPreload(targets: PointCloudPreloadTarget[], preload
     if (!startedAtRef.current) {
       startedAtRef.current = Date.now();
     }
-    const nextKeys = new Set(uniqueTargets.map((target) => target.key));
     targetMapRef.current = new Map(uniqueTargets.map((target) => [target.key, target]));
     volumesRef.current = pickKnown(volumesRef.current, nextKeys);
     errorsRef.current = pickKnown(errorsRef.current, nextKeys);
@@ -187,9 +226,22 @@ export function usePointCloudPreload(targets: PointCloudPreloadTarget[], preload
     }
 
     return undefined;
-  }, [paused, pump, publish, signature, uniqueTargets]);
+  }, [paused, protectedResources, pump, publish, signature, uniqueTargets]);
+
+  useEffect(() => () => {
+    controllersRef.current.forEach((controller) => controller.abort());
+  }, []);
 
   return state;
+}
+
+function canonicalPointCloudUrl(url: string): string {
+  const queryIndex = url.indexOf("?");
+  const hashIndex = url.indexOf("#");
+  const end = [queryIndex, hashIndex]
+    .filter((index) => index >= 0)
+    .reduce((lowest, index) => Math.min(lowest, index), url.length);
+  return url.slice(0, end);
 }
 
 function dedupeTargets(targets: PointCloudPreloadTarget[]): PointCloudPreloadTarget[] {

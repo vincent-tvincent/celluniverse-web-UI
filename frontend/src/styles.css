@@ -2995,6 +2995,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 
 .simple-config-panel,
 .startup-panel,
+.export-panel,
 .runner-panel,
 .advanced-yaml-panel {
   padding: 12px;
@@ -3006,6 +3007,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 
 .simple-config-panel,
 .startup-panel,
+.export-panel,
 .runner-panel {
   display: grid;
   gap: 10px;
@@ -3013,6 +3015,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 
 .simple-config-panel legend,
 .startup-panel legend,
+.export-panel legend,
 .runner-panel legend {
   color: var(--color-heading);
   font-size: 12px;
@@ -3021,6 +3024,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 }
 
 .start-mode-toggle,
+.export-mode-toggle,
 .runner-mode-toggle {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3028,6 +3032,7 @@ input[type="range"]:not(.color-map-range)::-moz-range-thumb {
 }
 
 .start-mode-toggle button,
+.export-mode-toggle button,
 .runner-mode-toggle button {
   justify-content: center;
 }

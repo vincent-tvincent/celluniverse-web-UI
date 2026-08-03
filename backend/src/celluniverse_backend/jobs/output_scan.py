@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from celluniverse_backend.parsers.cells import parse_cells_csv
+from celluniverse_backend.preview.compact import compact_frame_paths
 
 
 CHECKPOINT_RE = re.compile(r"frame_(\d+)\.txt$")
@@ -23,9 +24,15 @@ def scan_output(job_dir: Path, first_frame: int, last_frame: int) -> dict[str, A
     cells_frames = sorted(parse_cells_csv(output_dir / "cells.csv").keys())
     png_frames = _scan_png_frames(output_dir)
     tiff_frames = _scan_tiff_frames(output_dir)
+    try:
+        compact_frames = set(compact_frame_paths(output_dir))
+    except (OSError, ValueError):
+        compact_frames = set()
 
     completed_candidates = checkpoints or [
-        frame for frame in cells_frames if frame in png_frames or frame in tiff_frames
+        frame
+        for frame in sorted(set(cells_frames) | compact_frames)
+        if frame in compact_frames or frame in png_frames or frame in tiff_frames
     ]
     last_completed = max(completed_candidates) if completed_candidates else None
     if last_completed is None:
@@ -43,6 +50,7 @@ def scan_output(job_dir: Path, first_frame: int, last_frame: int) -> dict[str, A
             "cellsCsv": (output_dir / "cells.csv").exists(),
             "pngFrames": sorted(png_frames),
             "tiffFrames": sorted(tiff_frames),
+            "compactFrames": sorted(compact_frames),
             "checkpointFrames": sorted(checkpoints),
         },
         "partialOutputsAvailable": output_dir.exists() and any(output_dir.iterdir()) if output_dir.exists() else False,

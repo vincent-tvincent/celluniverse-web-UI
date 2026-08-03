@@ -12,6 +12,7 @@ import type {
   JobStatus,
   LocalDataset,
   ParameterModule,
+  SlurmNodesResponse,
   SlurmStatus,
   LineageFrameSnapshot,
   LineageGraph,
@@ -237,6 +238,10 @@ export function getSlurmStatus(): Promise<SlurmStatus> {
 
 export function rescanSlurmStatus(): Promise<SlurmStatus> {
   return requestJson<SlurmStatus>("/slurm/rescan", { method: "POST" });
+}
+
+export function getSlurmNodes(): Promise<SlurmNodesResponse> {
+  return requestJson<SlurmNodesResponse>("/slurm/nodes");
 }
 
 export async function uploadDataset(

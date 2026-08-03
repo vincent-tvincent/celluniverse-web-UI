@@ -25,6 +25,16 @@ def ensure_slice_preview(source_tiff: Path, preview_path: Path, *, slice_index: 
     return preview_path
 
 
+def resolve_tiff_slice_index(source_tiff: Path, slice_index: int) -> int:
+    """Clamp a requested slice using TIFF metadata without decoding image pixels."""
+    with source_tiff.open("rb") as handle:
+        _, pages = _read_tiff_pages(handle)
+        if not pages:
+            raise ValueError("TIFF file has no image pages")
+        _validate_supported_pages(pages)
+    return max(0, min(len(pages) - 1, round(slice_index)))
+
+
 def build_slice_preview(source_tiff: Path, preview_path: Path, *, slice_index: int, max_xy: int) -> None:
     with source_tiff.open("rb") as handle:
         _, pages = _read_tiff_pages(handle)

@@ -158,6 +158,7 @@ def materialize_effective_config(
     *,
     config_search_dir: Path | None = None,
     use_pipeline_base_config: bool = True,
+    fixed_overrides: dict[str, Any] | None = None,
 ) -> None:
     base_config = _select_base_config(base_config, overrides, config_search_dir, use_pipeline_base_config)
     if not base_config.exists():
@@ -178,6 +179,9 @@ def materialize_effective_config(
             raise ConfigValidationError(f"unsupported virtual field: {path}")
         else:
             _set_nested(data, path, value)
+
+    for path, value in (fixed_overrides or {}).items():
+        _set_nested(data, path, value)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     _copy_base_config_chain(base_config, destination.parent, config_search_dir)

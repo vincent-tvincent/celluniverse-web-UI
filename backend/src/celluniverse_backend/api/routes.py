@@ -23,14 +23,53 @@ from celluniverse_backend.contracts.models import (
 from celluniverse_backend.datasets.service import DatasetService, DatasetValidationError
 from celluniverse_backend.datasets.sources import DataSourceMutation, DataSourceRegistry
 from celluniverse_backend.jobs.manager import JobManager
+from celluniverse_backend.preview.compact import (
+    compact_frame_path,
+    compact_slice_cache_target,
+    ensure_compact_pointcloud_preview,
+    ensure_compact_slice_preview,
+)
 from celluniverse_backend.preview.lineage import ensure_lineage_artifacts, read_lineage_layout, read_lineage_snapshot
-from celluniverse_backend.preview.manifest import build_preview_artifacts
+from celluniverse_backend.preview.manifest import (
+    CELL_FRAME_DERIVATION_VERSION,
+    build_preview_artifacts,
+)
 from celluniverse_backend.preview.pointcloud import ensure_pointcloud_preview
-from celluniverse_backend.preview.slice import ensure_slice_preview
+from celluniverse_backend.preview.slice import ensure_slice_preview, resolve_tiff_slice_index
 from celluniverse_backend.runners.engine import inspect_engine
-from celluniverse_backend.runners.slurm import inspect_slurm
+from celluniverse_backend.runners.slurm import inspect_slurm, inspect_slurm_nodes
 from celluniverse_backend.security.paths import PathSecurityError, safe_child_path, validate_input_reference
 from celluniverse_backend.storage.json_store import read_json
+
+
+def _stream_job_events(
+    event_path: Path,
+    start_offset: int,
+    *,
+    poll_interval: float = 1.0,
+) -> Iterable[str]:
+    offset = max(0, start_offset)
+    while True:
+        try:
+            event_size = event_path.stat().st_size
+        except FileNotFoundError:
+            time.sleep(poll_interval)
+            continue
+        if event_size < offset:
+            offset = 0
+        try:
+            with event_path.open("r", encoding="utf-8") as handle:
+                handle.seek(offset)
+                while True:
+                    line = handle.readline()
+                    if not line:
+                        break
+                    offset = handle.tell()
+                    event = json.loads(line)
+                    yield f"event: {event.get('type', 'message')}\ndata: {json.dumps(event)}\n\n"
+        except FileNotFoundError:
+            pass
+        time.sleep(poll_interval)
 
 
 def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, exposed: ExposedParameterRegistry) -> None:
@@ -90,8 +129,9 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
 
     def dataset_slice_response(kind: str, dataset_id: str, frame_index: int, slice_index: int, max_xy: int) -> FileResponse:
         source_tiff = dataset_frame_path_or_404(kind, dataset_id, frame_index)
-        preview_path = dataset_preview_cache_dir(kind, dataset_id) / "slices" / str(frame_index) / f"z{slice_index}_xy{max_xy}.cusl"
         try:
+            source_index = resolve_tiff_slice_index(source_tiff, slice_index)
+            preview_path = dataset_preview_cache_dir(kind, dataset_id) / "slices" / str(frame_index) / f"z{source_index}_xy{max_xy}.cusl"
             ensure_slice_preview(source_tiff, preview_path, slice_index=slice_index, max_xy=max_xy)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -128,6 +168,10 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
     @router.post("/slurm/rescan")
     def slurm_rescan(_: None = Depends(require_auth)) -> dict[str, Any]:
         return inspect_slurm().model_dump()
+
+    @router.get("/slurm/nodes")
+    def slurm_nodes(_: None = Depends(require_auth)) -> dict[str, Any]:
+        return inspect_slurm_nodes().model_dump()
 
     @router.get("/config/exposed-parameter-modules")
     def list_parameter_modules(_: None = Depends(require_auth)) -> list[dict[str, str]]:
@@ -524,23 +568,14 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
     @router.get("/jobs/{job_id}/events")
     def job_events(job_id: str, _: None = Depends(require_auth)) -> StreamingResponse:
         event_path = job_dir_or_404(job_id) / "events.ndjson"
-
-        def gen() -> Iterable[str]:
-            offset = 0
-            while True:
-                if event_path.exists():
-                    with event_path.open("r", encoding="utf-8") as handle:
-                        handle.seek(offset)
-                        while True:
-                            line = handle.readline()
-                            if not line:
-                                break
-                            offset = handle.tell()
-                            event = json.loads(line)
-                            yield f"event: {event.get('type', 'message')}\ndata: {json.dumps(event)}\n\n"
-                time.sleep(1)
-
-        return StreamingResponse(gen(), media_type="text/event-stream")
+        try:
+            start_offset = event_path.stat().st_size
+        except FileNotFoundError:
+            start_offset = 0
+        return StreamingResponse(
+            _stream_job_events(event_path, start_offset),
+            media_type="text/event-stream",
+        )
 
     @router.get("/jobs/{job_id}/manifest")
     def get_manifest(job_id: str, _: None = Depends(require_auth)) -> dict[str, Any]:
@@ -549,7 +584,10 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         if not manifest_path.exists():
             return build_preview_artifacts(job_dir, job_id)
         manifest = read_json(manifest_path, {})
-        if not _manifest_has_pointcloud_layers(manifest):
+        if (
+            manifest.get("cellFrameDerivationVersion") != CELL_FRAME_DERIVATION_VERSION
+            or not _manifest_has_pointcloud_layers(manifest)
+        ):
             return build_preview_artifacts(job_dir, job_id)
         return manifest
 
@@ -557,7 +595,11 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
     def get_frame_cells(job_id: str, frame: int, _: None = Depends(require_auth)) -> list[dict[str, Any]]:
         job_dir = job_dir_or_404(job_id)
         cells_path = job_dir / "preview" / "frames" / f"t{frame:03d}" / "cells.json"
-        if not cells_path.exists():
+        preview_manifest = read_json(job_dir / "preview" / "manifest.json", {})
+        if (
+            preview_manifest.get("cellFrameDerivationVersion") != CELL_FRAME_DERIVATION_VERSION
+            or not cells_path.exists()
+        ):
             build_preview_artifacts(job_dir, job_id)
         return read_json(cells_path, [])
 
@@ -587,8 +629,6 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
         job_dir = job_dir_or_404(job_id)
         preview_path = job_dir / "preview" / "pointcloud" / layer / f"{frame}.cupc"
         source_tiff = job_dir / "output" / "tiff" / layer / f"{frame}.tif"
-        if not source_tiff.exists() or not source_tiff.is_file():
-            raise HTTPException(status_code=404, detail="source TIFF not found")
         point_cloud_config = config.preview.pointCloud
         intensity_percentile = (
             point_cloud_config.synthIntensityPercentile
@@ -596,14 +636,27 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
             else point_cloud_config.realIntensityPercentile
         )
         try:
-            ensure_pointcloud_preview(
-                source_tiff,
-                preview_path,
-                max_points=point_cloud_config.maxPoints,
-                max_slices=point_cloud_config.maxSlices,
-                intensity_percentile=intensity_percentile,
-            )
-        except ValueError as exc:
+            if source_tiff.is_file():
+                ensure_pointcloud_preview(
+                    source_tiff,
+                    preview_path,
+                    max_points=point_cloud_config.maxPoints,
+                    max_slices=point_cloud_config.maxSlices,
+                    intensity_percentile=intensity_percentile,
+                )
+            elif compact_frame_path(job_dir, frame) is not None:
+                ensure_compact_pointcloud_preview(
+                    job_dir,
+                    frame,
+                    layer,
+                    preview_path,
+                    max_points=point_cloud_config.maxPoints,
+                    max_slices=point_cloud_config.maxSlices,
+                    intensity_percentile=intensity_percentile,
+                )
+            else:
+                raise HTTPException(status_code=404, detail="point-cloud source not found")
+        except (OSError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return FileResponse(preview_path, media_type="application/octet-stream")
 
@@ -620,12 +673,30 @@ def install_routes(app: FastAPI, config: BackendConfig, jobs: JobManager, expose
             raise HTTPException(status_code=404, detail="slice layer not found")
         job_dir = job_dir_or_404(job_id)
         source_tiff = job_dir / "output" / "tiff" / layer / f"{frame}.tif"
-        if not source_tiff.exists() or not source_tiff.is_file():
-            raise HTTPException(status_code=404, detail="source TIFF not found")
-        preview_path = job_dir / "preview" / "slices" / layer / str(frame) / f"z{slice_index}_xy{max_xy}.cusl"
         try:
-            ensure_slice_preview(source_tiff, preview_path, slice_index=slice_index, max_xy=max_xy)
-        except ValueError as exc:
+            if source_tiff.is_file():
+                source_index = resolve_tiff_slice_index(source_tiff, slice_index)
+                preview_path = job_dir / "preview" / "slices" / layer / str(frame) / f"z{source_index}_xy{max_xy}.cusl"
+                ensure_slice_preview(source_tiff, preview_path, slice_index=slice_index, max_xy=max_xy)
+            elif compact_frame_path(job_dir, frame) is not None:
+                preview_path, source_index = compact_slice_cache_target(
+                    job_dir,
+                    frame,
+                    layer,
+                    slice_index,
+                    max_xy,
+                )
+                ensure_compact_slice_preview(
+                    job_dir,
+                    frame,
+                    layer,
+                    preview_path,
+                    slice_index=source_index,
+                    max_xy=max_xy,
+                )
+            else:
+                raise HTTPException(status_code=404, detail="slice source not found")
+        except (OSError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return FileResponse(preview_path, media_type="application/octet-stream")
 

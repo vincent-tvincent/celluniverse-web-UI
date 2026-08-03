@@ -19,7 +19,7 @@ type PointCloudCacheEntry = {
 };
 
 const cache = new Map<string, PointCloudCacheEntry>();
-const POINT_CLOUD_FETCH_TIMEOUT_MS = 60000;
+const POINT_CLOUD_FETCH_TIMEOUT_MS = 5 * 60 * 1000;
 
 export type PointCloudLoadProgress = {
   loaded: number;
@@ -29,6 +29,7 @@ export type PointCloudLoadProgress = {
 export function loadPointCloudPreview(
   url: string,
   onProgress?: (progress: PointCloudLoadProgress) => void,
+  signal?: AbortSignal,
 ): Promise<PointCloudPreviewData> {
   const cached = cache.get(url);
   if (cached) {
@@ -43,7 +44,7 @@ export function loadPointCloudPreview(
   const promise = fetchPointCloudPreview(url, (progress) => {
     entry.lastProgress = progress;
     entry.listeners.forEach((listener) => listener(progress));
-  }).catch((error: Error) => {
+  }, signal).catch((error: Error) => {
     cache.delete(url);
     throw error;
   });
@@ -71,10 +72,19 @@ function attachProgressListener(
 async function fetchPointCloudPreview(
   url: string,
   onProgress?: (progress: PointCloudLoadProgress) => void,
+  signal?: AbortSignal,
 ): Promise<PointCloudPreviewData> {
   const controller = new AbortController();
+  const abortFromCaller = () => {
+    controller.abort(signal?.reason);
+  };
+  if (signal?.aborted) {
+    abortFromCaller();
+  } else {
+    signal?.addEventListener("abort", abortFromCaller, { once: true });
+  }
   const timeout = window.setTimeout(() => {
-    controller.abort(new Error("point cloud preview timed out"));
+    controller.abort(new Error("point cloud preview timed out after 5 minutes"));
   }, POINT_CLOUD_FETCH_TIMEOUT_MS);
   try {
     const response = await fetch(url, { cache: "no-store", signal: controller.signal });
@@ -88,6 +98,7 @@ async function fetchPointCloudPreview(
     }
     throw error;
   } finally {
+    signal?.removeEventListener("abort", abortFromCaller);
     window.clearTimeout(timeout);
   }
 }

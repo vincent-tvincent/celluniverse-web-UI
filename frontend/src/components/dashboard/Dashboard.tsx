@@ -47,6 +47,7 @@ import {
   getJobEffectiveConfig,
   getJobRequest,
   getParameterModule,
+  getSlurmNodes,
   getSlurmStatus,
   listDatasetRoots,
   listDatasetUploads,
@@ -73,6 +74,7 @@ import type {
   JobStatus,
   LocalDataset,
   ParameterField,
+  SlurmNode,
 } from "../../types";
 import { useViewerStore } from "../../store";
 
@@ -153,6 +155,7 @@ export default function Dashboard({
   const [archivedJobView, setArchivedJobView] = useStoredDisplayMode(ARCHIVED_JOB_VIEW_KEY, "block");
   const [seedDatasetId, setSeedDatasetId] = useState<string>(initialDatasetId);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [newJobFormRevision, setNewJobFormRevision] = useState(0);
   const [confirmIntent, setConfirmIntent] = useState<ConfirmIntent | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
@@ -380,6 +383,14 @@ export default function Dashboard({
   const openCreateForDataset = (datasetId: string) => {
     setEditingJobId(null);
     setSeedDatasetId(datasetId);
+    setNewJobFormRevision((revision) => revision + 1);
+    onChangeTab("new");
+  };
+
+  const openNewJob = () => {
+    setEditingJobId(null);
+    setSeedDatasetId("");
+    setNewJobFormRevision((revision) => revision + 1);
     onChangeTab("new");
   };
 
@@ -411,7 +422,7 @@ export default function Dashboard({
           <div><h1>CellUniverse Dashboard</h1></div>
         </div>
         <div className="dashboard-top-actions">
-          <button className="action-button" type="button" onClick={() => onChangeTab("new")}>
+          <button className="action-button" type="button" onClick={openNewJob}>
             <FileCog size={16} /> New Job
           </button>
           <button className="icon-button" type="button" onClick={() => void queryClient.invalidateQueries()} title="Refresh">
@@ -435,7 +446,7 @@ export default function Dashboard({
               key={item.id}
               type="button"
               className={`dashboard-tab ${tab === item.id ? "active" : ""}`}
-              onClick={() => onChangeTab(item.id)}
+              onClick={() => item.id === "new" ? openNewJob() : onChangeTab(item.id)}
               title={item.label}
             >
               {item.icon}
@@ -482,6 +493,7 @@ export default function Dashboard({
           {tab === "new" ? (
             <DashboardSection title={editingJobId ? "Edit Job" : "New Job"}>
               <NewJobPanel
+                key={editingJobId ?? `new-${newJobFormRevision}`}
                 datasetSources={datasetSources}
                 csvPresets={initialCsvQuery.data ?? []}
                 jobs={jobs}
@@ -1077,6 +1089,7 @@ function NewJobPanel({
   const [label, setLabel] = useState("");
   const [firstFrame, setFirstFrame] = useState(0);
   const [lastFrame, setLastFrame] = useState(0);
+  const [exportMode, setExportMode] = useState<"full" | "compact">("full");
   const [initialCsvPath, setInitialCsvPath] = useState("");
   const [initialCsvFile, setInitialCsvFile] = useState<File | null>(null);
   const [startMode, setStartMode] = useState<"initial" | "resume">("initial");
@@ -1090,6 +1103,7 @@ function NewJobPanel({
   const [runner, setRunner] = useState<"local" | "slurm">("local");
   const [slurmJobName, setSlurmJobName] = useState("");
   const [slurmPartition, setSlurmPartition] = useState("");
+  const [slurmNodelist, setSlurmNodelist] = useState("");
   const [slurmAccount, setSlurmAccount] = useState("");
   const [slurmQos, setSlurmQos] = useState("");
   const [slurmTimeLimit, setSlurmTimeLimit] = useState("24:00:00");
@@ -1122,6 +1136,14 @@ function NewJobPanel({
     enabled: resumeMode && Boolean(resumeSourceJobId) && !editingJobId,
   });
   const slurmQuery = useQuery({ queryKey: ["slurm-status"], queryFn: getSlurmStatus, staleTime: 30_000 });
+  const slurmNodesQuery = useQuery({
+    queryKey: ["slurm-nodes"],
+    queryFn: getSlurmNodes,
+    enabled: slurmMode && Boolean(slurmQuery.data?.available),
+    staleTime: 30_000,
+  });
+  const selectedSlurmNode = slurmNodesQuery.data?.nodes.find((node) => node.name === slurmNodelist);
+  const slurmCpuLimit = Math.max(1, Math.min(100, selectedSlurmNode?.cpusTotal ?? 100));
   const slurmRescanMutation = useMutation({ mutationFn: rescanSlurmStatus });
   const createMutation = useMutation({ mutationFn: createJob });
   const updateMutation = useMutation({ mutationFn: ({ jobId, payload }: { jobId: string; payload: CreateJobPayload }) => updatePreparedJob(jobId, payload) });
@@ -1175,6 +1197,7 @@ function NewJobPanel({
     setLabel(request.label ?? "");
     setFirstFrame(request.firstFrame ?? 0);
     setLastFrame(request.lastFrame ?? 0);
+    setExportMode(request.exportMode ?? "full");
     setInitialCsvPath(request.initialCsvPath ?? "");
     setInitialCsvFile(null);
     setStartMode(request.resumeSourceJobId ? "resume" : "initial");
@@ -1184,6 +1207,7 @@ function NewJobPanel({
     setRunner(request.runner === "slurm" || request.slurm?.enabled ? "slurm" : "local");
     setSlurmJobName(request.slurm?.jobName ?? "");
     setSlurmPartition(request.slurm?.partition ?? "");
+    setSlurmNodelist(request.slurm?.nodelist ?? "");
     setSlurmAccount(request.slurm?.account ?? "");
     setSlurmQos(request.slurm?.qos ?? "");
     setSlurmTimeLimit(request.slurm?.timeLimit ?? "24:00:00");
@@ -1286,6 +1310,24 @@ function NewJobPanel({
       setFormError("Slurm is not available on this machine yet. Rescan after installing or loading Slurm.");
       return;
     }
+    if (slurmMode && slurmNodelist) {
+      if (!slurmNodesQuery.data?.available || !selectedSlurmNode) {
+        setFormError("The selected Slurm machine is not in the current machine inventory. Rescan or use Automatic scheduler.");
+        return;
+      }
+      if (!selectedSlurmNode.selectable) {
+        setFormError(`Slurm machine ${selectedSlurmNode.name} is currently unavailable.`);
+        return;
+      }
+      if (
+        slurmPartition.trim()
+        && selectedSlurmNode.partitions.length
+        && !selectedSlurmNode.partitions.includes(slurmPartition.trim())
+      ) {
+        setFormError(`Slurm machine ${selectedSlurmNode.name} is not in partition ${slurmPartition.trim()}.`);
+        return;
+      }
+    }
     const yamlError = validateYamlSanity(yamlText);
     if (yamlError) {
       setFormError(yamlError);
@@ -1309,6 +1351,7 @@ function NewJobPanel({
       const payload: CreateJobPayload = {
         label: label.trim() || null,
         type: "tracking",
+        exportMode,
         firstFrame,
         lastFrame,
         initialCsvPath: resumeMode ? null : (initialUpload ? null : initialCsvPath),
@@ -1323,12 +1366,13 @@ function NewJobPanel({
           enabled: slurmMode,
           jobName: slurmJobName.trim() || label.trim() || null,
           partition: slurmPartition.trim() || null,
+          nodelist: slurmNodelist.trim() || null,
           account: slurmAccount.trim() || null,
           qos: slurmQos.trim() || null,
           timeLimit: slurmTimeLimit.trim() || "24:00:00",
-          cpusPerTask: Math.max(1, Math.min(100, Math.floor(slurmCpus || 1))),
+          cpusPerTask: Math.max(1, Math.min(slurmCpuLimit, Math.floor(slurmCpus || 1))),
           memory: slurmMemory.trim() || "64G",
-          nodes: Math.max(1, Math.floor(slurmNodes || 1)),
+          nodes: slurmNodelist.trim() ? 1 : Math.max(1, Math.floor(slurmNodes || 1)),
         },
         autoStart: false,
       };
@@ -1456,6 +1500,31 @@ function NewJobPanel({
         )}
       </fieldset>
 
+      <fieldset className="export-panel">
+        <legend>Output</legend>
+        <div className="segmented-control export-mode-toggle" role="group" aria-label="Job export mode">
+          <button
+            type="button"
+            className={exportMode === "full" ? "active" : undefined}
+            onClick={() => setExportMode("full")}
+          >
+            Full Export
+          </button>
+          <button
+            type="button"
+            className={exportMode === "compact" ? "active" : undefined}
+            onClick={() => setExportMode("compact")}
+          >
+            Compact Export
+          </button>
+        </div>
+        <p className="dashboard-muted">
+          {exportMode === "compact"
+            ? "Stores compact frame records and renders real and synthetic previews on demand without reconstructing TIFF stacks."
+            : "Stores the complete image export, including real and synthetic TIFF stacks."}
+        </p>
+      </fieldset>
+
       <fieldset className="runner-panel">
         <legend>Runner</legend>
         <div className="segmented-control runner-mode-toggle" role="group" aria-label="Job runner">
@@ -1486,7 +1555,10 @@ function NewJobPanel({
                 type="button"
                 disabled={slurmQuery.isFetching || slurmRescanMutation.isPending}
                 onClick={() => {
-                  void slurmRescanMutation.mutateAsync().then(() => slurmQuery.refetch());
+                  void slurmRescanMutation.mutateAsync().then(async () => {
+                    await slurmQuery.refetch();
+                    await slurmNodesQuery.refetch();
+                  });
                 }}
               >
                 <RefreshCcw size={15} /> Rescan
@@ -1499,6 +1571,38 @@ function NewJobPanel({
               <label>
                 <span>Slurm Job Name</span>
                 <input value={slurmJobName} onChange={(event) => setSlurmJobName(event.target.value)} placeholder="defaults to job name" />
+              </label>
+              <label>
+                <span>Machine (Optional)</span>
+                <select
+                  value={slurmNodelist}
+                  onChange={(event) => {
+                    const machine = event.target.value;
+                    setSlurmNodelist(machine);
+                    if (!machine) return;
+                    setSlurmNodes(1);
+                    const selectedNode = slurmNodesQuery.data?.nodes.find((node) => node.name === machine);
+                    if (selectedNode?.cpusTotal) {
+                      setSlurmCpus((current) => Math.min(current, selectedNode.cpusTotal!));
+                    }
+                    if (
+                      selectedNode?.partitions.length
+                      && !selectedNode.partitions.includes(slurmPartition.trim())
+                    ) {
+                      setSlurmPartition(selectedNode.partitions[0]);
+                    }
+                  }}
+                >
+                  <option value="">Automatic scheduler</option>
+                  {slurmNodelist && !slurmNodesQuery.data?.nodes.some((node) => node.name === slurmNodelist) ? (
+                    <option value={slurmNodelist}>{slurmNodelist} (saved selection)</option>
+                  ) : null}
+                  {slurmNodesQuery.data?.nodes.map((node) => (
+                    <option key={node.name} value={node.name} disabled={!node.selectable}>
+                      {formatSlurmNodeOption(node)}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 <span>Partition</span>
@@ -1522,17 +1626,34 @@ function NewJobPanel({
               </label>
               <label>
                 <span>CPUs Per Task</span>
-                <input type="number" min={1} max={100} value={slurmCpus} onChange={(event) => setSlurmCpus(Number(event.target.value))} />
+                <input
+                  type="number"
+                  min={1}
+                  max={slurmCpuLimit}
+                  value={slurmCpus}
+                  onChange={(event) => setSlurmCpus(Math.min(slurmCpuLimit, Number(event.target.value)))}
+                />
               </label>
               <label>
-                <span>Nodes</span>
-                <input type="number" min={1} max={4} value={slurmNodes} onChange={(event) => setSlurmNodes(Number(event.target.value))} />
-              </label>
-              <label>
-                <span>Submitter</span>
-                <input value="sbatch" readOnly />
+                <span>Node Count</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={4}
+                  value={slurmNodelist ? 1 : slurmNodes}
+                  disabled={Boolean(slurmNodelist)}
+                  onChange={(event) => setSlurmNodes(Number(event.target.value))}
+                />
               </label>
             </div>
+            {slurmNodesQuery.data && !slurmNodesQuery.data.available ? (
+              <p className="dashboard-error">
+                {slurmNodesQuery.data.diagnostics.join("; ") || "Slurm machines could not be listed. Leave Machine set to Automatic scheduler."}
+              </p>
+            ) : null}
+            {slurmNodesQuery.isError ? (
+              <p className="dashboard-error">Slurm machines could not be listed. Leave Machine set to Automatic scheduler or rescan.</p>
+            ) : null}
           </div>
         ) : (
           <div className="parameter-group parameter-group-runtime">
@@ -1608,6 +1729,13 @@ function formatResumeJobOption(job: JobStatus): string {
   return frame === null
     ? `${label} (${job.id})`
     : `${label} (${job.id}) - resume ${frame}`;
+}
+
+function formatSlurmNodeOption(node: SlurmNode): string {
+  const partition = node.partitions.length ? node.partitions.join(", ") : "no partition";
+  const state = node.selectable ? node.state : `${node.state} - unavailable`;
+  const cpus = node.cpusTotal ? ` - ${node.cpusTotal} CPUs` : "";
+  return `${node.name} - ${partition} - ${state}${cpus}`;
 }
 
 function isRuntimeGroup(group: { id: string; label: string }): boolean {

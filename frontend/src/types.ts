@@ -15,6 +15,7 @@ export type JobStatus = {
   outputReady: {
     cellsCsv: boolean;
     checkpointFrames: number[];
+    compactFrames?: number[];
     pngFrames: number[];
     tiffFrames: number[];
   };
@@ -195,6 +196,7 @@ export type SlurmJobOptions = {
   partition?: string | null;
   account?: string | null;
   qos?: string | null;
+  nodelist?: string | null;
   timeLimit: string;
   cpusPerTask: number;
   memory: string;
@@ -210,9 +212,31 @@ export type SlurmStatus = {
   diagnostics: string[];
 };
 
+export type SlurmNode = {
+  name: string;
+  partitions: string[];
+  state: string;
+  cpusTotal?: number | null;
+  cpusAllocated?: number | null;
+  cpusIdle?: number | null;
+  cpusOther?: number | null;
+  memoryMb?: number | null;
+  gres?: string | null;
+  reason?: string | null;
+  selectable: boolean;
+};
+
+export type SlurmNodesResponse = {
+  available: boolean;
+  sinfo?: string | null;
+  nodes: SlurmNode[];
+  diagnostics: string[];
+};
+
 export type CreateJobPayload = {
   label?: string | null;
   type?: string;
+  exportMode?: "full" | "compact";
   inputPath?: string | null;
   datasetId?: string | null;
   firstFrame: number;

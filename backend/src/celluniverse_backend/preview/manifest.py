@@ -4,8 +4,11 @@ from pathlib import Path
 from typing import Any
 
 from celluniverse_backend.parsers.cells import parse_cells_csv
+from celluniverse_backend.preview.compact import compact_frame_paths, merge_compact_cell_frames
 from celluniverse_backend.preview.lineage import ensure_lineage_artifacts
 from celluniverse_backend.storage.json_store import write_json_atomic
+
+CELL_FRAME_DERIVATION_VERSION = 2
 
 
 def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
@@ -14,7 +17,18 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
     frames_dir = preview_dir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
 
-    cell_frames = parse_cells_csv(output_dir / "cells.csv")
+    csv_cell_frames = parse_cells_csv(output_dir / "cells.csv")
+    try:
+        compact_frames = compact_frame_paths(output_dir)
+        cell_frames = merge_compact_cell_frames(
+            job_dir,
+            csv_cell_frames,
+            frame_paths=compact_frames,
+        )
+    except (OSError, ValueError):
+        compact_frames = {}
+        cell_frames = csv_cell_frames
+    _remove_stale_cell_previews(frames_dir, set(cell_frames))
     for frame, cells in cell_frames.items():
         frame_dir = frames_dir / f"t{frame:03d}"
         frame_dir.mkdir(parents=True, exist_ok=True)
@@ -27,6 +41,7 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
         | set(_png_frames(output_dir, "synth"))
         | set(_tiff_frames(output_dir, "real"))
         | set(_tiff_frames(output_dir, "synth"))
+        | set(compact_frames)
         | set(cell_frames)
     )
     manifest_frames = []
@@ -62,6 +77,22 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
                 "format": "point-cloud-v1",
                 "url": _versioned_url(f"/api/jobs/{job_id}/pointcloud/synth/{frame}.cupc", synth_tiff),
             }
+        compact_frame = compact_frames.get(frame)
+        if compact_frame is not None:
+            layers.setdefault("realPointCloud", {
+                "format": "point-cloud-v1",
+                "url": _versioned_url(
+                    f"/api/jobs/{job_id}/pointcloud/real/{frame}.cupc",
+                    compact_frame,
+                ),
+            })
+            layers.setdefault("synthPointCloud", {
+                "format": "point-cloud-v1",
+                "url": _versioned_url(
+                    f"/api/jobs/{job_id}/pointcloud/synth/{frame}.cupc",
+                    compact_frame,
+                ),
+            })
         if frame in cell_frames:
             layers["cells"] = {
                 "format": "ellipsoid-json",
@@ -72,6 +103,7 @@ def build_preview_artifacts(job_dir: Path, job_id: str) -> dict[str, Any]:
     manifest = {
         "jobId": job_id,
         "axes": ["t", "z", "y", "x"],
+        "cellFrameDerivationVersion": CELL_FRAME_DERIVATION_VERSION,
         "frames": manifest_frames,
         "lineage": f"/api/jobs/{job_id}/lineage",
     }
@@ -99,6 +131,12 @@ def build_artifact_registry(job_dir: Path) -> dict[str, Any]:
         ("stdout_log", "Standard Output Log", "stdout.log", "log"),
         ("stderr_log", "Standard Error Log", "stderr.log", "log"),
         ("cells_csv", "Cells CSV", "output/cells.csv", "table"),
+        (
+            "compact_manifest",
+            "Compact Export Manifest",
+            "output/compact/manifest.json",
+            "metadata",
+        ),
         ("manifest", "Preview Manifest", "preview/manifest.json", "preview"),
         ("lineage", "Lineage Graph", "preview/lineage.json", "lineage"),
     ]
@@ -134,3 +172,20 @@ def _tiff_frames(output_dir: Path, layer: str) -> list[int]:
         if child.suffix.lower() in {".tif", ".tiff"} and child.stem.isdigit():
             frames.append(int(child.stem))
     return frames
+
+
+def _remove_stale_cell_previews(frames_dir: Path, active_frames: set[int]) -> None:
+    try:
+        children = list(frames_dir.iterdir())
+    except OSError:
+        return
+    for child in children:
+        if child.is_symlink() or not child.is_dir() or not child.name.startswith("t") or not child.name[1:].isdigit():
+            continue
+        if int(child.name[1:]) in active_frames:
+            continue
+        try:
+            (child / "cells.json").unlink(missing_ok=True)
+            child.rmdir()
+        except OSError:
+            continue

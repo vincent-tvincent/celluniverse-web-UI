@@ -261,6 +261,9 @@ If `ok` is false, build the C++ engine separately or update
 GET  /api/health
 GET  /api/client-config
 GET  /api/engine/status
+GET  /api/slurm/status
+GET  /api/slurm/nodes
+POST /api/slurm/rescan
 
 GET  /api/config/exposed-parameter-modules
 GET  /api/config/exposed-parameter-modules/{moduleId}
@@ -343,6 +346,33 @@ cell_lumen_fusion
 preprocess_only
 ```
 
+Each tracking job also accepts `exportMode`:
+
+```text
+full     existing configured PNG/TIFF frame export (default)
+compact  versioned reconstruction records without full frame image stacks
+```
+
+The backend applies this choice as the final
+`simulation.export_mode` override after merging the selected or uploaded YAML,
+so a job cannot silently use a conflicting value from that YAML.
+
+For Slurm jobs, `slurm.nodelist` optionally targets a specific machine. Leave
+it unset to let the scheduler choose a machine. The Start Job page obtains its
+machine choices from `GET /api/slurm/nodes` and disables machines that Slurm
+currently reports as unavailable. The backend revalidates the selected machine
+when the prepared job starts:
+
+```json
+{
+  "runner": "slurm",
+  "slurm": {
+    "enabled": true,
+    "nodelist": "vulcan"
+  }
+}
+```
+
 ## Job Runtime Layout
 
 Jobs are stored under:
@@ -378,8 +408,23 @@ artifacts.json
 
 The frontend should use the manifest and API URLs instead of scraping folders.
 
+Compact jobs additionally write:
+
+```text
+output/compact/manifest.json
+output/compact/frames/frame_NNNNNN.json
+output/compact/masks/*.cubm
+```
+
+For those jobs, real point clouds and slices are sampled from the original
+source TIFF with the frame record's effective Z-interpolation ratio. Synthetic
+point clouds and slices are sampled directly from compact background/cell
+records. This happens in memory; the backend does not reconstruct full TIFF or
+PNG stacks. `cells.csv` remains the source for cell outlines, lineage, and
+trajectory layers.
+
 ## Notes
 
-This backend intentionally starts with PNG/TIFF URL manifests and parsed
-`cells.csv` overlays. OME-Zarr and 3D volume rendering remain planned next
-steps, not first-version blockers.
+The backend supports full PNG/TIFF URL manifests, compact on-demand frame
+sampling, and parsed `cells.csv` overlays. OME-Zarr remains a possible future
+preview representation rather than a requirement for compact export.

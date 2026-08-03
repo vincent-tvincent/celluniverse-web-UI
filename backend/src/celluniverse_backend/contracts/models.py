@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class JobState(str, Enum):
@@ -36,10 +37,41 @@ class SlurmJobOptions(BaseModel):
     memory: str = "64G"
     nodes: int = Field(default=1, ge=1, le=4)
 
+    @field_validator("jobName", "partition", "account", "qos", "nodelist", mode="before")
+    @classmethod
+    def normalize_optional_directive_value(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator(
+        "jobName",
+        "partition",
+        "account",
+        "qos",
+        "nodelist",
+        "timeLimit",
+        "memory",
+    )
+    @classmethod
+    def require_single_line_directive_value(cls, value: str | None) -> str | None:
+        if value is not None and any(ord(character) < 32 or ord(character) == 127 for character in value):
+            raise ValueError("Slurm option values cannot contain control characters")
+        return value
+
+    @field_validator("partition", "account", "qos", "nodelist", "timeLimit", "memory")
+    @classmethod
+    def require_single_directive_token(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"[A-Za-z0-9_.:@,+\-\[\]]+", value):
+            raise ValueError("Slurm option values must be a single token")
+        return value
+
 
 class CreateJobRequest(BaseModel):
     label: str | None = None
     type: JobType = JobType.tracking
+    exportMode: Literal["full", "compact"] = "full"
     inputPath: str | None = None
     datasetId: str | None = None
     firstFrame: int
@@ -123,4 +155,25 @@ class SlurmStatus(BaseModel):
     squeue: str | None = None
     scancel: str | None = None
     sacct: str | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+
+
+class SlurmNode(BaseModel):
+    name: str
+    partitions: list[str] = Field(default_factory=list)
+    state: str
+    cpusTotal: int | None = None
+    cpusAllocated: int | None = None
+    cpusIdle: int | None = None
+    cpusOther: int | None = None
+    memoryMb: int | None = None
+    gres: str | None = None
+    reason: str | None = None
+    selectable: bool = True
+
+
+class SlurmNodesResponse(BaseModel):
+    available: bool
+    sinfo: str | None = None
+    nodes: list[SlurmNode] = Field(default_factory=list)
     diagnostics: list[str] = Field(default_factory=list)

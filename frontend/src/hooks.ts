@@ -19,9 +19,6 @@ export function useJobEvents(jobId: string) {
       void queryClient.invalidateQueries({ queryKey: ["manifest", jobId] });
       void queryClient.invalidateQueries({ queryKey: ["logs", jobId] });
     };
-    const refreshLogs = () => {
-      void queryClient.invalidateQueries({ queryKey: ["logs", jobId] });
-    };
 
     source.onmessage = (event) => {
       try {
@@ -30,8 +27,6 @@ export function useJobEvents(jobId: string) {
           refreshTerminalState();
         } else if (payload.type === "job.updated" || payload.type === "job.cancelling") {
           refreshStatus();
-        } else if (payload.type === "log.line") {
-          refreshLogs();
         }
       } catch {
         refreshStatus();
@@ -41,7 +36,6 @@ export function useJobEvents(jobId: string) {
     source.addEventListener("job.finished", refreshTerminalState);
     source.addEventListener("job.cancelling", refreshStatus);
     source.addEventListener("job.cancelled", refreshTerminalState);
-    source.addEventListener("log.line", refreshLogs);
 
     return () => {
       source.close();

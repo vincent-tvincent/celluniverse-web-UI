@@ -34,6 +34,9 @@ docs/template/celluniverse-backend.postman_collection.json
 GET /api/health
 GET /api/client-config
 GET /api/engine/status
+GET /api/slurm/status
+GET /api/slurm/nodes
+POST /api/slurm/rescan
 ```
 
 ## Exposed Parameter Config
@@ -182,6 +185,7 @@ Using local paths:
 {
   "label": "debug fluo 0-1",
   "type": "tracking",
+  "exportMode": "compact",
   "inputPath": "/home/blue-lobster/p2/UCI/CS295p/images/Fluo-N3DH-CE/01/t%03d.tif",
   "firstFrame": 0,
   "lastFrame": 1,
@@ -195,12 +199,37 @@ Using local paths:
 }
 ```
 
+`exportMode` is optional and defaults to `full`. Use `compact` to suppress
+full real/synthetic frame stacks and serve reconstructed previews from the
+compact frame records plus the original source TIFF.
+
+To target a specific Slurm machine, set `runner` to `slurm` and send its node
+name through `slurm.nodelist`. The Start Job page lists current nodes from
+`GET /api/slurm/nodes`. Omit `nodelist` or set it to `null` to let the scheduler
+choose. A selected machine requires `nodes: 1` and is revalidated when the
+prepared job starts:
+
+```json
+{
+  "runner": "slurm",
+  "slurm": {
+    "enabled": true,
+    "nodelist": "vulcan",
+    "nodes": 1,
+    "cpusPerTask": 32,
+    "memory": "64G",
+    "timeLimit": "24:00:00"
+  }
+}
+```
+
 Using uploaded dataset/config files:
 
 ```json
 {
   "label": "uploaded debug run",
   "type": "tracking",
+  "exportMode": "compact",
   "datasetId": "upload_abc123",
   "firstFrame": 0,
   "lastFrame": 1,
